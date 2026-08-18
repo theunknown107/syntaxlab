@@ -1,0 +1,76 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-bg);
+
+  /* The header's bottom border is one of the four sanctioned gradient
+     placements (09_DESIGN_SYSTEM.md §4.2). border-image keeps it a 1px
+     hairline rather than a decorative band. */
+  border-bottom: 1px solid transparent;
+  border-image: var(--gradient-primary) 1;
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--header-height);
+  max-width: var(--layout-max-width);
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.wordmark {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+}
+
+.wordmarkAccent {
+  color: var(--color-accent);
+}
+
+.tagline {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Tablet and below: the tagline is redundant next to a visible product and
+   costs horizontal space the mode selector needs. */
+@media (width <= 900px) {
+  .tagline {
+    display: none;
+  }
+}
+
+@media (width <= 560px) {
+  .inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    padding-block: var(--space-3);
+  }
+
+  .nav {
+    justify-content: stretch;
+  }
+}

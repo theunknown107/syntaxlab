@@ -1,0 +1,13 @@
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The skip link targets <main>, which needs tabindex="-1" to be focusable.
+   Suppress the ring there: the user asked to move here, they did not focus a
+   control, so a ring around the whole page is noise. */
+.main:focus {
+  outline: none;
+}

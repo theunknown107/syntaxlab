@@ -1,0 +1,58 @@
+.group {
+  display: flex;
+  gap: var(--space-1);
+  padding: 3px;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.segment {
+  position: relative;
+  height: var(--control-height-sm);
+  padding-inline: var(--space-4);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.segment:hover {
+  color: var(--color-text-secondary);
+}
+
+.segment[aria-checked='true'] {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+/**
+ * The active-mode gradient underline — one of the four places the gradient is
+ * permitted at default intensity (09_DESIGN_SYSTEM.md §4.2).
+ *
+ * Selection is also conveyed by background and text colour, so this is
+ * reinforcement, never the sole signal (WCAG 1.4.1).
+ */
+.segment[aria-checked='true']::after {
+  content: '';
+  position: absolute;
+  inset-inline: var(--space-3);
+  bottom: 2px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-primary);
+}
+
+@media (forced-colors: active) {
+  .segment[aria-checked='true'] {
+    forced-color-adjust: none;
+    background: highlight;
+    color: highlighttext;
+  }
+}
