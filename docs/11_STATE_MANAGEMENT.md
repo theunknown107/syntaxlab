@@ -177,6 +177,13 @@ sequenceDiagram
 
 ### 5.1 Race handling
 
+> **Built at M4, with two guards rather than one.** The client supersedes an
+> in-flight request sharing a key, *and* every response is re-checked against
+> the input that is current when it arrives. Supersession alone is not enough:
+> a response can already be sitting in the message queue when the newer request
+> is issued, so it is never superseded and would otherwise be applied. Both
+> guards are asserted in `tests/unit/regex/regexWorkspace.test.ts`.
+
 Every worker request carries a monotonically increasing id. When a response arrives whose id is not the newest for that operation, **it is discarded**. Without this, fast typing produces out-of-order responses and the pane flickers between stale and current results — a bug that is trivially avoided at design time and miserable to diagnose later.
 
 ---

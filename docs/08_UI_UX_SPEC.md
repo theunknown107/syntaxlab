@@ -168,6 +168,21 @@ Mobile is deliberately a different interface, not a squeezed desktop one — per
 
 ### 7.1 Regex
 
+> **Built at M4.** What shipped differs from this specification in four places,
+> each recorded here rather than left as a silent divergence:
+>
+> | Spec | Built | Why |
+> |---|---|---|
+> | Flag row of **seven** chips | **Eight** — `d g i m s u v y` | The spec's list predates `v`; the domain has supported all eight since M3, and omitting one from the UI would make it unreachable. `u` and `v` are mutually exclusive, and the toggle enforces that rather than letting the user build a combination the engine rejects. |
+> | Matches highlighted inline with alternating tints | As specified, **except zero-length matches** | A mark decoration needs a non-empty range, and tinting one character would claim the match covered a character it did not. They appear in the match table labelled `empty match`. |
+> | Match table shows "every group value" | Numbered and **named groups listed separately** | The engine exposes `match[n]` and `match.groups.name` as two independent views with no mapping between them. Reuniting them by comparing values is ambiguous whenever two groups capture the same text, so both are shown as the engine gives them. |
+> | Truncated "at 10 000" | Three independent caps, each named when it fires | Match count alone does not bound memory: 10 000 matches of 2 000 characters would be 20 MB. Per-value clipping and a total output ceiling were added, and every truncation says which one stopped the scan. |
+>
+> The example picker, the permanent ECMAScript label, the character count, the
+> AST tree, the group table and the warning list are all as specified. The
+> resizable split (§5) and the mobile tab bar (§18) are **not** built — the
+> panels stack instead; both are queued for M11.
+
 **Input pane**
 - CodeMirror with regex-aware highlighting (metacharacters, classes, groups, quantifiers each get a distinct hue from the token palette)
 - Delimiters `/` `/` shown as static, non-editable adornments so the user knows exactly what is being parsed
@@ -175,6 +190,44 @@ Mobile is deliberately a different interface, not a squeezed desktop one — per
 - Flag row: seven toggle chips `g i m s u y d`, each with a tooltip and an `aria-pressed` state
 - Character count, turning amber at 80% of the limit
 - Example dropdown: email, URL, ISO date, IPv4, semver, UUID, hex colour, phone — each loading a pattern *and* a representative test string
+
+
+#### The regex workspace as built
+
+```mermaid
+flowchart LR
+    P["Pattern editor"] -->|"debounced"| AN["analysis.regex<br/>analysis worker"]
+    F["Flag bar"] --> AN
+    AN --> EXP["Explanation"]
+    AN --> STR["Structure tree"]
+    AN --> GRP["Groups"]
+    AN --> WRN["Warnings"]
+    AN --> TOK["Token colouring"]
+    TOK --> P
+
+    P --> EX["exec.regex<br/>execution worker"]
+    F --> EX
+    T["Test-string editor"] -->|"debounced"| EX
+    EX --> M["Match table"]
+    EX --> HL["Match highlighting"]
+    HL --> T
+
+    EXP <-->|"hover or focus"| P
+    STR -->|"select"| P
+    WRN -->|"jump"| P
+
+    classDef worker fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class AN,EX worker
+```
+
+The two-way arrow between the explanation and the pattern editor is the
+feature that makes the tool feel like it understands the pattern: hovering or
+focusing an explained construct highlights its exact span, and selecting one
+moves the cursor there. Section titles carry spans, so this is real data
+rather than a second parse.
+
+Both worker calls are debounced by input size and both discard a response that
+no longer describes what is on screen.
 
 **Analysis pane**
 - **Explanation** — one-paragraph summary, then a token table (`token · meaning · position`). Hovering a row highlights the corresponding span in the editor; hovering the editor highlights the row. This bidirectional link is the feature that makes the tool feel intelligent.

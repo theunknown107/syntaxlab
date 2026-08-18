@@ -41,8 +41,48 @@
         └── <StatusBar/>                ✅ M1  polite live region
 ```
 
-M3 added no components either — it is domain and worker work only. The regex
-feature components arrive at M4.
+### Built at M4
+
+```
+<App>
+└── <ErrorBoundary scope="app">
+    └── <AppShell>
+        ├── <Header> → <ModeSelector/>          ✅ M1
+        ├── <Workspace>                          ✅ M4  mode switch, not a router
+        │   ├── <RegexWorkspace>                 ✅ M4
+        │   │   ├── <ErrorBoundary scope="input">
+        │   │   │   ├── Panel "Pattern"
+        │   │   │   │   ├── <CodeEditor singleLine/>
+        │   │   │   │   ├── <FlagBar/>          eight toggles
+        │   │   │   │   └── <ExamplePicker/>    native select
+        │   │   │   ├── Panel "Test string" → <CodeEditor/>
+        │   │   │   └── Panel "Matches"    → <MatchResults/>
+        │   │   └── <ErrorBoundary scope="analysis">
+        │   │       ├── Panel "Explanation" → <ExplanationView/>
+        │   │       ├── Panel "Warnings"   → <WarningList/>
+        │   │       ├── Panel "Structure"  → <TreeView renderNode={AstRow}/>
+        │   │       ├── Panel "Groups"     → <GroupTable/>
+        │   │       ├── Panel "Tokens"     → <TokenTable/>
+        │   │       └── Panel "Compatibility"
+        │   └── <JsonPlaceholder/>               empty state until M6
+        └── <StatusBar/>                         ✅ M1
+```
+
+Shared components added: `<CodeEditor>`, `<TreeView>`, `<Panel>`, `<Button>`,
+`<Badge>`, `<CopyButton>`.
+
+**`<ErrorBoundary>` moved from `app/` to `components/`.** The regex feature
+wraps its own two columns, and the layer rules correctly stop a feature
+importing from `app/`. The boundary is a shared component by nature, so moving
+it was the honest fix rather than relaxing the rule.
+
+**Not built, deliberately:** `<Drawer>`, `<Dialog>`, `<Tabs>`, `<Toggle>`,
+`<Select>`, `<ColorInput>`, `<Slider>`, `<Toast>`, `<EmptyState>`,
+`<ErrorState>`. Each belongs to a feature that does not exist yet, and a
+primitive with no consumer is the wrong abstraction written early. The example
+picker uses a plain native `<select>` for the same reason.
+
+M3 added no components — it is domain and worker work only.
 
 M2 added no components. It added `src/app/devWorkerHarness.ts`, which renders
 nothing: it attaches a control surface to `window` under `import.meta.env.DEV`

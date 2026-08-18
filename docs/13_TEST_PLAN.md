@@ -132,6 +132,47 @@ regressions):
 | Golden review | multi-part lookaround body not bracketed, so its extent was ambiguous |
 | Lint (exhaustiveness) | `analysis.regex` case missing from the worker dispatch |
 
+### Implemented at M4
+
+| Suite | Count | Status |
+|---|---|---|
+| Unit — regex execution semantics | 44 | ✅ |
+| Unit — view models | 24 | ✅ |
+| Unit — application orchestration | 20 | ✅ |
+| Unit — exec protocol and result validation | 13 | ✅ |
+| Unit — components, by role and accessible name | 25 | ✅ |
+| Unit — golden corpus | 188 | ✅ |
+| **Total after M4** | **859 unit, 146 E2E (3 skipped)** | ✅ |
+
+**E2E: 24 tests × 4 targets** — Chromium, Firefox, WebKit and a mobile
+viewport — against the **production** build, so the CSP and the real chunking
+are in force. Covers the whole journey, flags, invalid patterns, foreign
+dialects, timeout and recovery, XSS payloads, paste limits, keyboard
+navigation, 360 px layout and axe.
+
+**Three tests are skipped on WebKit**, with a measurement as the reason rather
+than a shrug: JavaScriptCore bounds its own backtracking, so no pattern reaches
+the deadline there (`04_PARSER_ARCHITECTURE.md` §2.9). Termination on WebKit is
+proven at M2 against a busy loop, which is the stronger condition.
+
+**Defects found by these tests during M4** (all fixed):
+
+| Found by | Defect |
+|---|---|
+| axe (E2E) | A collapsible `<Panel>` rendered its title as a bare button, dropping the section from the document outline |
+| axe (E2E) | Hint text inside a warning row measured 3.88:1 on the amber tint — below AA. It used the muted token, which is only measured against the panel surface. |
+| Protocol unit test | `parseWorkerRequest` rebuilt the envelope field by field but passed the payload through by reference, so unknown wire keys did reach the worker |
+| Component unit test | The explanation carried no positioned reference nodes, so the documented explanation-to-source link had nothing to attach to and `spanRef` was dead code |
+| **Human review** | Four wording defects — see §below |
+
+**The human review is the part a test suite cannot do.** Forty-five patterns
+across every grammar area were read as a user would read them, and found four
+defects that every existing test passed: escapes restating their own syntax
+(`\x41` → "the character \x41"), a multi-member character class running into
+the surrounding prose with no boundary, "any of a literal ]" as a sentence, and
+`.` and `-` described two different ways in the same class. Fifteen fixtures
+now pin the corrected wordings, each naming the defect it guards against.
+
 ### Tooling
 
 | Layer | Tool | Why |

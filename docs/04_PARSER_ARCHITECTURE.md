@@ -325,6 +325,90 @@ The replacement worker is spawned **eagerly** after a termination, not lazily on
 
 ---
 
+### 2.9 Execution as built at M4
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant E as Test-string editor
+    participant A as regexWorkspace
+    participant C as WorkerClient (exec)
+    participant W as Execution worker
+
+    E->>A: setTestSubject
+    Note over A: debounced by input size
+    A->>C: request exec.regex {source, flags, subject}
+    Note over C: supersedes any in-flight request<br/>arms the 2 s deadline
+    C->>W: postMessage
+    W->>W: new RegExp, exec loop, bounded output
+    W-->>C: {id, ok, result}
+    C->>C: validateResult, by operation
+    C-->>A: Result<RegexExecResult>
+    Note over A: discarded if the input changed<br/>while this was in flight
+    A-->>E: matches, highlighted
+```
+
+`domain/regex/execute.ts` is the only place in the application that constructs
+a `RegExp` from user input, and it is imported by the execution worker and by
+nothing else. There is no fallback that runs it on the main thread: when
+workers are unavailable the tester is **disabled**, which is a security
+invariant rather than a UX preference.
+
+#### Bounding the output
+
+The deadline bounds *time*. It does nothing about a pattern that finishes
+quickly and returns an enormous result, so three independent caps bound the
+output, and every one of them is named in the UI when it fires:
+
+| Cap | Value | Why the other two do not cover it |
+|---|---|---|
+| `maxMatches` | 10 000 | Bounds the list length only |
+| `maxMatchTextChars` | 2 000 per value | `.*` over a 1 MB subject is one match carrying the whole subject. The true length travels alongside the clipped value, so the UI reports the real size. |
+| `maxOutputChars` | 2 000 000 total | 10 000 matches × 2 000 characters would be 20 MB even with both caps above |
+
+**No match is ever dropped silently.** `truncated` carries the reason, and the
+UI states which cap stopped the scan.
+
+#### Faithfulness to the engine
+
+Reported results are what the engine did, never a reconstruction:
+
+- Matches come from `RegExp.exec` in a loop, with `lastIndex` advanced by the
+  engine.
+- A zero-length match advances by a whole code point under `u` and `v` and one
+  code unit otherwise — the specification's AdvanceStringIndex. Stepping one
+  code unit under `u` would report a match position inside a surrogate pair
+  that the engine itself never produces.
+- Capture offsets are reported **only** when the user set the `d` flag. Adding
+  it silently would be running a different pattern from the one on screen.
+- Named and numbered captures are reported as two separate views. The engine
+  offers no mapping between `match[n]` and `match.groups.name`, and reuniting
+  them by comparing values is ambiguous whenever two groups capture the same
+  text.
+
+Ten of the execution tests are differential against `String.matchAll`.
+
+#### Engine divergence, measured at M4
+
+**JavaScriptCore bounds its own backtracking.** `(a+)+$` takes a flat ~420 ms
+there whether the subject is 28 characters or 40, and `^(a|a?)+$` a flat ~1.7 s
+from 40 characters to 1 000 — where V8 and SpiderMonkey are exponential across
+the same range. There is no input that makes WebKit run long enough for our
+deadline to fire.
+
+Consequences, stated rather than smoothed over:
+
+1. A Safari user may get an answer where a Chrome user gets a timeout, for the
+   same pattern. Neither is wrong; the engines differ.
+2. The pattern-driven timeout E2E tests are **skipped on WebKit**, with this
+   measurement as the reason. Termination itself is proven there at M2 against
+   a busy loop that genuinely cannot yield — a stronger condition than any
+   regex produces.
+3. It reinforces §2.8: the warning is about the *shape* of a pattern, and what
+   a given engine does with that shape is a separate question.
+
+---
+
 ## 3. JSON parser
 
 ### 3.1 Why not `JSON.parse`

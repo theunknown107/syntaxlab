@@ -315,6 +315,10 @@ Production build, `vite build`, gzipped. Measured 2026-08-18.
 
 ### 10.2 What this measurement does NOT prove
 
+> **Superseded at M4.** The gap this section describes is closed: §10.5
+> records the CodeMirror-inclusive build. Kept because the reasoning is the
+> point — a green budget check against an incomplete build is not evidence.
+
 **It does not validate the 200 KB budget.** The M1 build contains React and the shell. It does **not** contain CodeMirror, which is expected to be the single largest dependency in the project and is installed at M4 where the editor is built (`16_DEPENDENCIES.md` §1.1).
 
 Read plainly: **48 KB of the budget is spent and the largest item has not arrived.** The remaining headroom against the 170 KB target is roughly 122 KB, and the CodeMirror estimate is ~150 KB — which would exceed it.
@@ -385,12 +389,90 @@ factor in the typing path.
 **Not measured here:** regex *execution*, which is M4 and is the only unbounded
 operation in the product (§7 of `04_PARSER_ARCHITECTURE.md`).
 
-### 10.5 Measurement log
+### 10.5 M4 — the CodeMirror-inclusive build
+
+**This is the budget-critical measurement.** §10.2 recorded that the M1 number
+proved nothing about the budget because the largest dependency was absent. It
+is present now.
+
+| Asset | Raw | Gzipped |
+|---|---|---|
+| Entry chunk (`index.js`) | 467.81 KB | **148.79 KB** |
+| Analysis worker chunk | 35.44 KB | 10.89 KB |
+| Execution worker chunk | 3.94 KB | 1.61 KB |
+| Theme bootstrap | 2.7 KB | 1.24 KB |
+| CSS | 24.38 KB | 5.17 KB |
+| HTML | 2.86 KB | 1.35 KB |
+| **Counted as "initial JS"** | | **162.54 KB** |
+| **Total precache** | | **169.66 KB** |
+
+**Result: within the ≤170 KB target and 37 KB under the 200 KB hard budget.**
+No optimisation was required, and none was performed — removing something on
+the strength of an estimate is exactly what §2.3 forbids.
+
+`check-size.mjs` charges every JS asset to "initial JS", including the two
+worker chunks the browser fetches separately. That is deliberately
+conservative: what a user actually downloads before the first paint is the
+**148.79 KB** entry chunk.
+
+#### Where the bytes are
+
+Measured directly, by bundling and minifying exactly the imports each
+dependency contributes:
+
+| Contributor | Gzipped | Share of the entry chunk |
+|---|---|---|
+| **CodeMirror** (`state`, `view`, `commands`) | **88.03 KB** | 59% |
+| React + React DOM | 44.48 KB | 30% |
+| SyntaxLab application code | ~16.3 KB | 11% |
+
+**CodeMirror cost 88 KB, not the ~150 KB `16_DEPENDENCIES.md` §2.2
+estimated.** Two reasons: only three of the six anticipated packages were
+installed, and the regex colouring is driven by our own tokenizer through the
+shared decoration mechanism rather than by a CM6 language mode — so
+`@codemirror/language` and `@lezer/highlight` are not needed at all. The
+estimate was flagged at the time as "the number most likely to be wrong"; it
+was, by 62 KB, in the direction that helps.
+
+**Consequence for the budget:** the ~150 KB assumption that made R-05 a high
+risk does not hold, and the headroom is real rather than hoped for.
+
+#### Startup and first interaction
+
+Chromium, production build, local preview server, median of three runs.
+
+| Measurement | Value |
+|---|---|
+| First paint | 32–52 ms |
+| First contentful paint | 96–100 ms |
+| DOM content loaded | 46–50 ms |
+| **First analysis** — keystroke → explanation on screen | **~247 ms** |
+| Warm analysis — same, worker already running | ~217 ms |
+| **First execution** — keystroke → matches on screen | **~266 ms** |
+| Warm execution | ~217 ms |
+
+Read these correctly. The analysis figures are dominated by the **150 ms
+debounce** that is deliberately in the path (§3.2), plus up to 100 ms of
+assertion-polling granularity in the measurement harness itself. The parser
+takes 0.02–0.06 ms (§10.4) and the warm worker round trip is under 0.1 ms
+(§10.3), so the compute is a rounding error inside a delay we chose.
+
+The ~50 ms difference between first and warm execution is the disposable
+worker's cold start, which matches the 29 ms measured directly at M2 plus
+polling granularity. It is paid once per page load, and again after each
+timeout — which is why the client respawns eagerly rather than lazily.
+
+**Not measured:** a cold network load over a real connection, which is M9's
+concern once the service worker exists, and interaction latency on a
+low-powered device, which is M11.
+
+### 10.6 Measurement log
 
 | Date | Milestone | Initial JS (gz) | CSS (gz) | Total (gz) | Notes |
 |---|---|---|---|---|---|
 | 2026-08-18 | M1 | 48.30 KB | 3.30 KB | 53.55 KB | Shell only. **No CodeMirror** — see §10.2 |
 | 2026-08-18 | M2 | 49.52 KB | 3.30 KB | 54.78 KB | + worker chunks (separate, not initial) |
+| 2026-08-18 | M4 | **162.54 KB** | 5.17 KB | 169.66 KB | **CodeMirror arrives.** Entry chunk 47.05 → 148.79 KB; CodeMirror is 88.03 KB of that, measured directly. Within the 170 KB target. |
 | 2026-08-18 | M3 | 59.54 KB | 3.30 KB | 64.79 KB | Entry chunk **47.05 KB**, unchanged by M3. The +10.64 KB is the analysis-worker chunk, which now carries the regex domain (34.6 KB raw). `check-size.mjs` counts every JS asset toward "initial JS", so the worker chunks are charged to the budget even though the browser fetches them separately — deliberately conservative. |
 | — | M4 | — | — | — | First budget-meaningful measurement |
 

@@ -138,7 +138,7 @@
 
 ---
 
-### M4 — Regex UI, explanation, testing *(2–2.5 days)*
+### M4 — Regex UI, explanation, testing *(2–2.5 days)* — ✅ **COMPLETE**
 
 **Objective:** the first genuinely useful product.
 

@@ -56,6 +56,18 @@ type WorkerResponse =
   | { id: number; ok: false; error: DomainError };
 ```
 
+**`exec.regex` (added at M4)** is the only operation that runs foreign code.
+It lives on the disposable worker so its deadline can be enforced by
+destroying the thread, and its result is validated more strictly than the
+others: the offsets it carries are used to slice the subject and to place
+editor decorations, so an out-of-range value is rejected at the boundary
+rather than clamped at each of the several places that consume one.
+
+**Payload reconstruction (added at M4).** Requests were validated and their
+*envelope* rebuilt field by field, but the payload was passed through by
+reference — so the "no unknown key reaches the worker" guarantee was only half
+true. Payloads are now rebuilt too.
+
 **Result validation (added at M3).** The rules below cover requests. Responses
 are validated in both halves: `parseWorkerResponse` checks the envelope, and
 `validateResult` then checks the `result` **against the operation that produced

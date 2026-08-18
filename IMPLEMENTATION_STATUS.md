@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M3 complete → M4 next (awaiting approval)
+**Current milestone:** M4 complete → M5 next (awaiting approval)
 **Last updated:** 2026-08-18
 
 > Living document, updated at the end of every milestone. The architecture
@@ -29,8 +29,8 @@
 | M1 | Tooling, design tokens, shell | ✅ Complete |
 | M2 | Worker infrastructure | ✅ **Complete** |
 | M3 | Regex domain | ✅ **Complete** |
-| M4 | Regex UI | ⬜ Next |
-| M5 | JSON domain | ⬜ |
+| M4 | Regex UI + safe execution | ✅ **Complete** |
+| M5 | JSON domain | ⬜ Next |
 | M6 | JSON UI | ⬜ |
 | M7 | History and storage | ⬜ |
 | M8 | Theme customisation | ⬜ |
@@ -304,6 +304,149 @@ occur.
 
 ---
 
+## M4 — objective and outcome
+
+**Objective:** the first genuinely useful product — the complete regex
+experience, including the first time user regex is actually executed.
+
+**Outcome:** met. **The bundle checkpoint passed**: with CodeMirror in the
+build the counted budget is 162.54 KB against a 170 KB target, so no
+optimisation was needed and none was performed.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
+| Unit tests | ✅ **859 passed** (19 files, +18 from M3) |
+| E2E | ✅ **146 passed, 3 skipped** across 7 projects |
+| Production build | ✅ 1.54 s |
+| **Bundle budget** | ✅ **162.54 KB counted · 148.79 KB entry chunk** |
+| `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
+| Banned-API scan | ✅ none |
+| `new RegExp` on user input outside the exec worker's module | ✅ none |
+
+### Bundle checkpoint — the measurement M1 could not make
+
+| Milestone | Entry chunk (gz) | Counted JS | Note |
+|---|---|---|---|
+| M1 | 47.05 KB | 48.30 KB | No CodeMirror — proved nothing about the budget |
+| M2 | 47.05 KB | 49.52 KB | + worker chunks |
+| M3 | 47.05 KB | 59.54 KB | + regex domain, in the worker chunk |
+| **M4** | **148.79 KB** | **162.54 KB** | **+ CodeMirror + the whole regex UI** |
+| Delta M1 → M4 | **+101.74 KB** | | |
+
+**Where the bytes are**, measured by bundling exactly the imports each
+dependency contributes rather than by reading an analyser:
+
+| Contributor | Gzipped | Share |
+|---|---|---|
+| CodeMirror (`state`, `view`, `commands`) | **88.03 KB** | 59% |
+| React + React DOM | 44.48 KB | 30% |
+| SyntaxLab application code | ~16.3 KB | 11% |
+
+**CodeMirror cost 88 KB, not the ~150 KB estimated.** Three packages were
+installed rather than six, and the regex colouring is driven by our own
+tokenizer through the shared decoration mechanism — so `@codemirror/language`
+and `@lezer/highlight` are not needed at all. `16_DEPENDENCIES.md` §2.2 had
+flagged that figure as "the number most likely to be wrong". It was, by 62 KB,
+in the direction that helps. **Risk R-05 drops from 🟠 12 to 🟢 3.**
+
+### Startup and first interaction (Chromium, production build)
+
+| Measurement | Value |
+|---|---|
+| First paint | 32–52 ms |
+| First contentful paint | 96–100 ms |
+| First analysis — keystroke → explanation on screen | ~247 ms |
+| First execution — keystroke → matches on screen | ~266 ms |
+| Warm execution | ~217 ms |
+
+The analysis figures are dominated by the **150 ms debounce** deliberately in
+the path, plus up to 100 ms of assertion-polling granularity in the harness.
+The parser itself takes 0.02–0.06 ms and a warm worker round trip is under
+0.1 ms, so the compute is a rounding error inside a delay we chose.
+
+### Execution safety — evidence
+
+| Assertion | Evidence |
+|---|---|
+| User regex never runs on the main thread | `new RegExp` on user input exists only in `domain/regex/execute.ts`, imported by the execution worker alone. Asserted by a repo scan. |
+| No fallback path relocates it | Workers unavailable → the tester is **disabled** with an explanation. Asserted in `regexWorkspace.test.ts` (no request is made) and in the UI copy. |
+| A catastrophic pattern times out | E2E on Chromium, Firefox, mobile — `(a+)+$` against 40 characters |
+| The worker is terminated and respawned | E2E: the next pattern runs normally without a reload |
+| Two timeouts in a row recover | E2E |
+| The analysis worker is unaffected | The explanation for the same pattern stays on screen throughout |
+| Results are runtime-validated | 13 protocol tests; an offset outside the subject is rejected, not clamped |
+| Output cannot exhaust memory | Three independent caps, each named in the UI when it fires |
+
+**WebKit is the honest exception.** No pattern can make it time out:
+JavaScriptCore bounds its own backtracking, measured as a flat ~420 ms for
+`(a+)+$` from 28 to 40 characters and a flat ~1.7 s for `^(a|a?)+$` from 40
+characters to 1 000, where V8 and SpiderMonkey are exponential across the same
+range. The three pattern-driven timeout tests are **skipped there with that
+measurement as the reason**. Termination on WebKit was proven at M2 against a
+busy loop that genuinely cannot yield — a stronger condition than any regex
+produces — and a new test asserts what WebKit does instead.
+
+### Human explanation review — the part tests cannot do
+
+Forty-five patterns across every grammar area were read as a user would read
+them. **Four defects, all of which every existing test passed:**
+
+| Defect | Fix |
+|---|---|
+| `\x41` read "the character `\x41`" — restating the input teaches nothing | "the character A (U+0041)". Unprintable results are named by code point, because an invisible character in a sentence cannot be read. |
+| A multi-member character class ran into the surrounding prose with no boundary — in the email pattern the reader could not tell where the class ended | Bracketed, the same fix M3 applied to assertion bodies |
+| "Matches any of a literal ]" is not a sentence | A single-member class reads as its member — except a lone range, where "Matches a to z" would read as literal text |
+| `.` and `-` are both literal inside a class and were described two different ways in the same list | Both read "a literal X" |
+
+**Fifteen fixtures** now pin the corrected wordings, each naming the defect it
+guards against, bringing the golden corpus to **188 tests**.
+
+### Other defects found and fixed during M4
+
+| Found by | Defect |
+|---|---|
+| axe (E2E) | A collapsible `<Panel>` rendered its title as a bare button, dropping the section from the document outline |
+| axe (E2E) | Hint text inside a warning row measured **3.88:1** on the amber tint — below AA. It used the muted token, which is only measured against the panel surface. |
+| Protocol unit test | `parseWorkerRequest` rebuilt the envelope field by field but passed the payload through **by reference**, so unknown wire keys did reach the worker. Its comment claimed otherwise. |
+| Component unit test | The explanation carried **no** positioned reference nodes, so the documented explanation-to-source link had nothing to attach to and `spanRef` was dead code naming a consumer that did not exist |
+
+### Dependencies added at M4
+
+**Three runtime: `@codemirror/state`, `@codemirror/view`,
+`@codemirror/commands`** — pinned exactly, all MIT, `npm audit` clean.
+
+**Not installed, against the plan:** `@codemirror/language` and
+`@lezer/highlight`. The regex colouring comes from our own token list through
+the shared decoration mechanism, so a CM6 language mode buys nothing and would
+let two grammars disagree about spans the explanation already refers to.
+`@codemirror/search` remains unadopted; `@codemirror/lang-json` is M5.
+
+### Deviations at M4
+
+| # | Deviation | Reason |
+|---|---|---|
+| D6 | **Three CodeMirror packages, not six** | See above. Fewer bytes, one grammar. |
+| D7 | **`ErrorBoundary` moved from `app/` to `components/`** | The regex feature wraps its own two columns, and the layer rules correctly stop a feature importing from `app/`. The boundary is a shared component by nature, so moving it was the honest fix rather than relaxing the rule. |
+| D8 | **Eight flag toggles, not the seven in the UX spec** | The spec's list predates the `v` flag. The domain has supported all eight since M3, and omitting one from the UI would make it unreachable. |
+| D9 | **Named and numbered captures reported separately** | The engine offers no mapping between `match[n]` and `match.groups.name`. Reuniting them by comparing values is ambiguous whenever two groups capture the same text, so both views are reported as the engine gives them. |
+| D10 | **Three output caps, not the single "truncated at 10 000" in the UX spec** | Match count alone does not bound memory: 10 000 matches of 2 000 characters is 20 MB. |
+
+### Known limitations at M4
+
+- **The split is not resizable** and **mobile does not use tabs** (`08_UI_UX_SPEC.md` §5, §18). Panels stack instead. Both are queued for M11; neither blocks use at 360 px, which is asserted.
+- **Zero-length matches are not highlighted in the editor**, only listed in the match table. A mark decoration needs a non-empty range and tinting one character would claim the match covered something it did not.
+- **Capture offsets require the `d` flag**, as the engine does. The flag is never added silently, because that would run a different pattern from the one on screen.
+- **No history, theme drawer, help dialog or header actions.** M7, M8, M10.
+- **No cancel button** on a running execution (`08_UI_UX_SPEC.md` §15). The 2 s deadline arrives before a progress indicator would.
+- **JSON mode is still an empty state.** M6.
+- **Screen-reader testing is automated only** — axe plus keyboard. NVDA/VoiceOver/JAWS passes are M10.
+
+---
+
 ## Dependencies added at M1
 
 **Runtime: 2.** `react` and `react-dom`, both pinned exactly at 18.3.1.
@@ -430,3 +573,4 @@ Violating any of these is a defect, not a shortcut.
 | M1 | ✅ | ✅ | ✅ 47 | ✅ 7 | ✅ | ✅ 0 vulns | 48.30 KB JS gz — excludes CodeMirror |
 | M2 | ✅ | ✅ | ✅ 107 | ✅ 38 | ✅ | ✅ 0 vulns | R-10 checkpoint passed on Chromium, Firefox, WebKit |
 | M3 | ✅ | ✅ | ✅ 715 | ✅ 53 | ✅ | ✅ 0 vulns | R-01 regex checkpoint passed; `regexpp` not needed; domain coverage 97.70% |
+| M4 | ✅ | ✅ | ✅ 859 | ✅ 146 (3 skipped) | ✅ | ✅ 0 vulns | **Bundle checkpoint passed — 162.54 KB vs 170 KB target.** CodeMirror measured at 88 KB, not the ~150 KB estimated |

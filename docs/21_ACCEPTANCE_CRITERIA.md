@@ -35,6 +35,9 @@
 | R-20 | Engine-compatibility notes are accurate for lookbehind, `\p{}`, and the `v` flag | Unit |
 | R-21 | Examples load a working pattern and a matching test string | E2 |
 | R-22 | Fuzz corpus completes with zero crashes and zero non-termination | Property — ✅ domain verified at M3 |
+| — | **Regex execution never runs on the main thread** | ✅ verified at M4: `new RegExp` on user input exists only in `domain/regex/execute.ts`, imported by the execution worker alone; a CI grep asserts it |
+| — | **A catastrophic pattern times out with the UI responsive** | ✅ verified at M4 on Chromium, Firefox and a mobile viewport; not reproducible on WebKit for a measured engine reason |
+| — | **Bundle within the 170 KB target with CodeMirror present** | ✅ verified at M4: 162.54 KB counted, 148.79 KB entry chunk |
 | R-23 | **Differential: validity verdict matches `new RegExp` on every corpus input** | Property — ✅ verified at M3 |
 
 ---

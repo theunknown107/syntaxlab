@@ -122,6 +122,7 @@ graph TB
 |---|---|---|---|
 | B1 | Editor → application | Oversized input, hostile content | Size limits ×3 layers, no execution |
 | B2 | Main thread → worker | Malformed payload, oversized transfer | Worker re-validates; never trusts its caller |
+| B2′ | Main thread → worker | Unknown wire keys riding into the worker | **Payloads are reconstructed field by field at M4**, not only validated. The envelope was already rebuilt; the payload was passed through by reference, so the guarantee was half true. |
 | B3 | Worker → main thread | Malformed response, id confusion | Envelope validation, id matching, unknown ops discarded, **and per-operation result validation added at M3** — a successful response is checked by value, not accepted on a TypeScript cast |
 | B4 | IndexedDB → domain | Tampering, corruption, version confusion | Validate on read, quarantine failures, preserve unknown versions |
 | B5 | localStorage → theme | **CSS injection** | Strict hex/enum/range allowlist |

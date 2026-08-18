@@ -59,6 +59,22 @@ Dev tooling installed: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/*`,
 
 `npm audit` reports **0 vulnerabilities** at M1.
 
+**M4 added three runtime dependencies: `@codemirror/state`, `/view` and
+`/commands`** — three of the six §1.1 anticipated. `@codemirror/language` and
+`@lezer/highlight` were **not** installed: the regex colouring is driven by our
+own tokenizer through the shared decoration mechanism, so a CM6 language mode
+buys nothing and would let two grammars disagree about spans the explanation
+already refers to. `@codemirror/lang-json` remains scheduled for M5 and
+`@codemirror/search` remains unadopted.
+
+**The size estimate in §2.2 was wrong, in the helpful direction.** Estimated
+~150 KB gz; **measured 88.03 KB** for exactly the imports the editor uses
+(`12_PERFORMANCE.md` §10.5). The entry chunk is 148.79 KB gz and the counted
+budget 162.54 KB, inside the 170 KB target. §2.2 flagged that figure as "the
+number most likely to be wrong"; it was, by 62 KB.
+
+`npm audit` reports **0 vulnerabilities** with CodeMirror installed.
+
 **M3 added one dev dependency: `fast-check`**, which §3 already approves as
 "the highest-value test dependency in the project". It drives the property and
 differential suites. No runtime dependency was added, and **`regexpp` was not

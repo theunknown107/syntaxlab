@@ -15,7 +15,7 @@
 |---|---|---|---|---|---|---|
 | R-01 | Custom parser correctness | V1.0 | ~~4~~ 3 | 4 | ~~16~~ **12** | 🟠 **regex half passed M3; JSON half open until M5** |
 | R-03 | Cron timezone/DST correctness | **V1.1** | 3 | 4 | 12 | 🟠 |
-| R-05 | Bundle budget exceeded | V1.0 | 4 | 3 | 12 | 🟠 |
+| R-05 | Bundle budget exceeded | V1.0 | ~~4~~ 1 | 3 | ~~12~~ **3** | 🟢 **passed at M4 — 162.54 KB against a 170 KB target** |
 | R-04 | Explanation quality is mediocre | V1.0 | 3 | 4 | 12 | 🟠 |
 | R-02 | Scope/timeline overrun | V1.0 | 3 | 3 | 9 | 🟠 |
 | R-06 | Service-worker bug bricks cached copies | V1.0 | 2 | 5 | 10 | 🟠 |
@@ -111,7 +111,25 @@ caught by review rather than by a test.
 
 ---
 
-### R-05 — Bundle budget 🟠 12 · V1.0
+### R-05 — ✅ **BUNDLE CHECKPOINT PASSED at M4**
+
+The measurement this risk was waiting for exists. CodeMirror is in the build
+and costs **88.03 KB gz**, not the ~150 KB estimated — the entry chunk is
+148.79 KB and the counted budget 162.54 KB, inside the 170 KB target and 37 KB
+under the hard budget (`12_PERFORMANCE.md` §10.5).
+
+No optimisation was performed, because none was needed and removing something
+on the strength of an estimate is what §2.3 of the performance doc forbids.
+The §8.2 recovery ladder — drop `@codemirror/search`, then evaluate Preact —
+was not entered.
+
+**Residual: 🟢 low.** The remaining growth in V1.0 is the JSON feature plus
+`@codemirror/lang-json` (M5–M6), the drawers (M7–M8), and the service worker
+(M9), all of which are lazy chunks by design. Re-check at M11.
+
+---
+
+### R-05 (original) — Bundle budget 🟠 12 · V1.0
 
 **Risk.** The estimated initial bundle consumed essentially the entire 200 KB budget, with CodeMirror dominating.
 

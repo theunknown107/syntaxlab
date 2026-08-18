@@ -55,7 +55,7 @@ function spin(payload: ExecSpinPayload): ExecSpinResult {
  * The worker re-validates the input itself rather than trusting the caller: a
  * compromised main thread is exactly the case where trusting the sender would
  * be wrong (05_SECURITY.md §6). `executeRegex` owns the limits and is the only
- * place `new RegExp` is applied to user input.
+ * place a `RegExp` is constructed from user input.
  */
 function runRegex(id: number, payload: ExecRegexPayload): WorkerResponse {
   const result = executeRegex(payload);

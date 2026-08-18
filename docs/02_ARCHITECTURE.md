@@ -137,10 +137,10 @@ graph TB
     class Repo,Prefs,WClient,Clip,FileIO,SWReg inf
 ```
 
-> **Diagram status.** This is the **target** architecture for V1.0. As of M3
-> the presentation, application, and infrastructure layers exist, both worker
-> threads are built and verified on three engines, and the domain layer holds
-> `shared/` and a complete `regex/`. Still to come: `json/` (M5), `cron/`
+> **Diagram status.** This is the **target** architecture for V1.0. As of M4
+> every layer in the diagram exists and is connected end to end: the regex
+> feature drives both workers through the application layer, and no arrow in
+> the diagram is hypothetical any more. Still to come: `json/` (M5), `cron/`
 > (V1.1), and the storage adapters (M7). Nothing in the diagram has been
 > invalidated by implementation; see §9.1 for what physically exists today.
 
@@ -558,6 +558,8 @@ src/
 ├── domain/         ✅ M1   shared/ (result, limits, explanation)
 │                  ✅ M3   regex/ (tokenizer, ast, parser, explain,
 │                          warnings, analyze, validate)
+│                  ✅ M4   regex/execute (the only `new RegExp` on user input)
+├── features/       ✅ M4   regex/ (workspace, panels, tester, view models)
 ├── infrastructure/ ✅ M2   workers/ (protocol, workerClient, workers)
 │                          browser/ (capabilities)
 ├── workers/        ✅ M2   analysis.worker.ts, exec.worker.ts
@@ -570,7 +572,8 @@ src/
    infrastructure/storage/  M7
 ```
 
-`domain/json/`, `features/`, and `infrastructure/storage/` do not exist yet. They are created at the milestones listed above.
+`domain/json/`, `features/json/`, and `infrastructure/storage/` do not exist
+yet. They are created at the milestones listed above.
 
 ### Why this structure, given the brief warned against elaborate hierarchies
 

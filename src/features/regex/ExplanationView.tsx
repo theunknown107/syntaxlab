@@ -6,10 +6,14 @@ import styles from './regex.module.css';
  * Renders `ExplanationNode[]` — 03_DOMAIN_MODEL.md §2.4, ADR-011
  *
  * Every branch below emits a React text child. There is no HTML string, no
- * markdown pass, and no `dangerouslySetInnerHTML` anywhere in this path, which
- * is the whole reason explanations are a tree of typed segments rather than a
- * string: user syntax reaches the DOM as a text node, so there is no injection
- * point to sanitise on the product's highest-frequency operation.
+ * markdown pass, and no raw-HTML prop anywhere in this path, which is the
+ * whole reason explanations are a tree of typed segments rather than a string:
+ * user syntax reaches the DOM as a text node, so there is no injection point
+ * to sanitise on the product's highest-frequency operation.
+ *
+ * (The banned prop is not named here in full — the CI scan greps `src/` for the
+ * literal, and a comment mentioning it would fail the build. That is the scan
+ * working, not a nuisance: it cannot be silenced by an inline disable.)
  *
  * The renderer also never *composes* an explanation. If a sentence reads
  * badly, the fix belongs in `domain/regex/explain.ts` where it can be reviewed
