@@ -1,0 +1,249 @@
+import type { DomainError } from '@/domain/shared/result';
+
+/**
+ * Worker wire protocol — 15_API_AND_BROWSER_CAPABILITIES.md §2
+ *
+ * Both ends of this boundary ship in the same build, so there is no version
+ * negotiation: a mismatched protocol cannot occur in practice and a version
+ * field would be ceremony.
+ *
+ * What the boundary *does* need is validation. The worker re-validates every
+ * payload rather than trusting its caller — the scenario that matters is a
+ * compromised main thread, where trusting the sender is exactly wrong. The
+ * main thread likewise validates every response before acting on it.
+ *
+ * Only structured-clone-safe plain data crosses. No functions, no class
+ * instances, no Date, no RegExp objects.
+ */
+
+/* ------------------------------------------------------------------ *
+ * Operations
+ * ------------------------------------------------------------------ */
+
+/**
+ * M2 ships infrastructure only. These two operations exist to prove the
+ * boundary works end to end; they are NOT analysis and do not pretend to be.
+ * `parse.regex` and `parse.json` replace them at M3 and M5.
+ */
+export const ANALYSIS_OPS = ['analysis.ping', 'analysis.echo'] as const;
+export type AnalysisOp = (typeof ANALYSIS_OPS)[number];
+
+/**
+ * `exec.spin` is an infrastructure test primitive, not a product feature: it
+ * busy-loops for a requested duration so termination can be proven against
+ * genuinely blocked thread. A `setTimeout` would leave the worker responsive
+ * and would prove nothing — the whole point is that the thread cannot yield,
+ * which is precisely the situation a catastrophically backtracking regex
+ * creates at M4.
+ *
+ * It is never exposed in the UI.
+ */
+export const EXEC_OPS = ['exec.spin'] as const;
+export type ExecOp = (typeof EXEC_OPS)[number];
+
+export type WorkerOp = AnalysisOp | ExecOp;
+
+/* ------------------------------------------------------------------ *
+ * Payloads and results
+ * ------------------------------------------------------------------ */
+
+export interface AnalysisPingPayload {
+  readonly sentAt: number;
+}
+export interface AnalysisPingResult {
+  readonly pong: true;
+  readonly sentAt: number;
+  readonly receivedAt: number;
+}
+
+export interface AnalysisEchoPayload {
+  readonly text: string;
+}
+export interface AnalysisEchoResult {
+  readonly text: string;
+  readonly length: number;
+}
+
+export interface ExecSpinPayload {
+  /** Milliseconds to occupy the worker thread for. */
+  readonly durationMs: number;
+}
+export interface ExecSpinResult {
+  readonly completed: true;
+  readonly elapsedMs: number;
+}
+
+/** Maps an operation to its payload and result types. */
+export interface OpTypes {
+  'analysis.ping': { payload: AnalysisPingPayload; result: AnalysisPingResult };
+  'analysis.echo': { payload: AnalysisEchoPayload; result: AnalysisEchoResult };
+  'exec.spin': { payload: ExecSpinPayload; result: ExecSpinResult };
+}
+
+export type PayloadFor<TOp extends WorkerOp> = OpTypes[TOp]['payload'];
+export type ResultFor<TOp extends WorkerOp> = OpTypes[TOp]['result'];
+
+/* ------------------------------------------------------------------ *
+ * Envelopes
+ * ------------------------------------------------------------------ */
+
+/**
+ * Distributive on purpose: `WorkerRequest` expands to a union of concrete
+ * shapes rather than one shape with union members, so `switch (request.op)`
+ * narrows `payload` correctly and the exhaustiveness check has teeth.
+ */
+export type WorkerRequest<TOp extends WorkerOp = WorkerOp> = TOp extends WorkerOp
+  ? { readonly id: number; readonly op: TOp; readonly payload: PayloadFor<TOp> }
+  : never;
+
+/** Requests the analysis worker accepts. */
+export type AnalysisRequest = WorkerRequest<AnalysisOp>;
+/** Requests the execution worker accepts. */
+export type ExecRequest = WorkerRequest<ExecOp>;
+
+export type WorkerResponse<TOp extends WorkerOp = WorkerOp> =
+  | { readonly id: number; readonly ok: true; readonly result: ResultFor<TOp> }
+  | { readonly id: number; readonly ok: false; readonly error: DomainError };
+
+/** A response the analysis worker may produce. */
+export type AnalysisResponse = WorkerResponse<AnalysisOp>;
+
+/* ------------------------------------------------------------------ *
+ * Client-side error type
+ * ------------------------------------------------------------------ */
+
+/**
+ * Conditions the *client* detects. These never cross the wire — a timed-out
+ * worker sends nothing, by definition — so they are deliberately separate
+ * from `DomainError`, which describes failures the worker reports about the
+ * input it was given.
+ *
+ * Keeping them apart means the domain never grows codes that describe
+ * transport problems it has no opinion about.
+ */
+export type WorkerErrorCode =
+  /** The deadline expired. For a disposable worker this implies termination. */
+  | 'TIMEOUT'
+  /** A newer request for the same key replaced this one before it settled. */
+  | 'SUPERSEDED'
+  /** Workers are unsupported or construction failed. */
+  | 'UNAVAILABLE'
+  /** The worker was terminated (timeout of a sibling request, or disposal). */
+  | 'TERMINATED'
+  /** A malformed or uncorrelatable message crossed the boundary. */
+  | 'PROTOCOL'
+  /** The worker reported a failure about the request itself. */
+  | 'DOMAIN'
+  /** An unexpected client-side failure. */
+  | 'INTERNAL';
+
+export interface WorkerError {
+  readonly code: WorkerErrorCode;
+  /** User-facing, plain language. Never a stack trace (05_SECURITY.md §11). */
+  readonly message: string;
+  /** Present only when `code` is 'DOMAIN' — the error the worker reported. */
+  readonly cause?: DomainError;
+}
+
+export function workerError(
+  code: WorkerErrorCode,
+  message: string,
+  cause?: DomainError,
+): WorkerError {
+  // Built field-by-field rather than by spreading, so an unexpected key can
+  // never reach a WorkerError (18_CODING_STANDARDS.md S4).
+  return cause === undefined ? { code, message } : { code, message, cause };
+}
+
+/* ------------------------------------------------------------------ *
+ * Validation — both directions
+ * ------------------------------------------------------------------ */
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isRequestId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+export function isAnalysisOp(value: unknown): value is AnalysisOp {
+  return ANALYSIS_OPS.includes(value as AnalysisOp);
+}
+
+export function isExecOp(value: unknown): value is ExecOp {
+  return EXEC_OPS.includes(value as ExecOp);
+}
+
+/** Per-operation payload validators. Each narrows `unknown` structurally. */
+const PAYLOAD_VALIDATORS: {
+  [TOp in WorkerOp]: (payload: unknown) => payload is PayloadFor<TOp>;
+} = {
+  'analysis.ping': (payload): payload is AnalysisPingPayload =>
+    isRecord(payload) && typeof payload.sentAt === 'number',
+
+  'analysis.echo': (payload): payload is AnalysisEchoPayload =>
+    isRecord(payload) && typeof payload.text === 'string',
+
+  'exec.spin': (payload): payload is ExecSpinPayload =>
+    isRecord(payload) &&
+    typeof payload.durationMs === 'number' &&
+    Number.isFinite(payload.durationMs) &&
+    payload.durationMs >= 0,
+};
+
+/**
+ * Validates a message received *by a worker*. Returns null rather than
+ * throwing: an unparseable message has no id, so there is nobody to reply to
+ * and the only correct action is to discard it.
+ */
+export function parseWorkerRequest(value: unknown): WorkerRequest | null {
+  if (!isRecord(value)) return null;
+  if (!isRequestId(value.id)) return null;
+
+  const op = value.op;
+  if (!isAnalysisOp(op) && !isExecOp(op)) return null;
+
+  const validate = PAYLOAD_VALIDATORS[op];
+  const payload: unknown = value.payload;
+  if (!validate(payload)) return null;
+
+  // Reconstructed field-by-field: unknown keys on the wire are dropped rather
+  // than carried into the worker.
+  return { id: value.id, op, payload } as WorkerRequest;
+}
+
+/** Distinguishes a payload that failed validation from a wholly unknown op. */
+export function describeRequestRejection(value: unknown): string {
+  if (!isRecord(value)) return 'Message was not an object.';
+  if (!isRequestId(value.id)) return 'Message had no valid request id.';
+  const op = value.op;
+  if (!isAnalysisOp(op) && !isExecOp(op)) return `Unknown operation: ${String(op)}.`;
+  return `Invalid payload for operation ${op}.`;
+}
+
+function isDomainError(value: unknown): value is DomainError {
+  return isRecord(value) && typeof value.code === 'string' && typeof value.message === 'string';
+}
+
+/**
+ * Validates a message received *by the main thread*. A response that fails
+ * this check is discarded and its request settles as a PROTOCOL error, rather
+ * than an unvalidated object reaching application state.
+ */
+export function parseWorkerResponse(value: unknown): WorkerResponse | null {
+  if (!isRecord(value)) return null;
+  if (!isRequestId(value.id)) return null;
+
+  if (value.ok === true) {
+    if (!('result' in value)) return null;
+    return { id: value.id, ok: true, result: value.result } as WorkerResponse;
+  }
+
+  if (value.ok === false) {
+    if (!isDomainError(value.error)) return null;
+    return { id: value.id, ok: false, error: value.error };
+  }
+
+  return null;
+}
