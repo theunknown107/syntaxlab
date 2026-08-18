@@ -230,6 +230,24 @@ const PAYLOAD_VALIDATORS: {
 };
 
 /**
+ * Rebuilds each payload field by field.
+ *
+ * Validation alone leaves the original object in place, so an extra key on the
+ * wire would ride into the worker unexamined — which is what the envelope
+ * reconstruction below already refuses to allow. Added at M4, when a test
+ * showed the claim was true of the envelope but not of its contents.
+ */
+const PAYLOAD_RECONSTRUCTORS: {
+  [TOp in WorkerOp]: (payload: PayloadFor<TOp>) => PayloadFor<TOp>;
+} = {
+  'analysis.ping': (p) => ({ sentAt: p.sentAt }),
+  'analysis.echo': (p) => ({ text: p.text }),
+  'analysis.regex': (p) => ({ source: p.source, flags: p.flags }),
+  'exec.regex': (p) => ({ source: p.source, flags: p.flags, subject: p.subject }),
+  'exec.spin': (p) => ({ durationMs: p.durationMs }),
+};
+
+/**
  * Validates a message received *by a worker*. Returns null rather than
  * throwing: an unparseable message has no id, so there is nobody to reply to
  * and the only correct action is to discard it.
@@ -245,9 +263,10 @@ export function parseWorkerRequest(value: unknown): WorkerRequest | null {
   const payload: unknown = value.payload;
   if (!validate(payload)) return null;
 
-  // Reconstructed field-by-field: unknown keys on the wire are dropped rather
-  // than carried into the worker.
-  return { id: value.id, op, payload } as WorkerRequest;
+  // Envelope *and* payload are reconstructed field by field, so no unknown key
+  // from the wire reaches the worker.
+  const reconstruct = PAYLOAD_RECONSTRUCTORS[op] as (p: unknown) => unknown;
+  return { id: value.id, op, payload: reconstruct(payload) } as WorkerRequest;
 }
 
 /** Distinguishes a payload that failed validation from a wholly unknown op. */

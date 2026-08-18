@@ -224,6 +224,23 @@
   overflow-wrap: anywhere;
 }
 
+.sectionLink {
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-accent-text);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+  overflow-wrap: anywhere;
+}
+
+.sectionLink:hover,
+.sectionLink:focus-visible {
+  text-decoration: underline;
+}
+
 .sectionBody {
   font-size: var(--text-sm);
   color: var(--color-text-secondary);

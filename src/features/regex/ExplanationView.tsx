@@ -111,7 +111,35 @@ export function ExplanationView({ explanation, links }: ExplanationViewProps): R
         <ol className={styles.sections}>
           {explanation.details.map((section) => (
             <li key={section.id} className={styles.section}>
-              <span className={styles.sectionTitle}>{section.title}</span>
+              {section.span === undefined ? (
+                <span className={styles.sectionTitle}>{section.title}</span>
+              ) : (
+                // The bidirectional explanation-to-source link
+                // (08_UI_UX_SPEC.md §7.1). A button rather than a hover
+                // target, so it works from the keyboard as well as the mouse.
+                <button
+                  type="button"
+                  className={styles.sectionLink}
+                  onMouseEnter={() => {
+                    links.onHover(section.span ?? null);
+                  }}
+                  onMouseLeave={() => {
+                    links.onHover(null);
+                  }}
+                  onFocus={() => {
+                    links.onHover(section.span ?? null);
+                  }}
+                  onBlur={() => {
+                    links.onHover(null);
+                  }}
+                  onClick={() => {
+                    if (section.span) links.onSelect(section.span);
+                  }}
+                  aria-label={`${section.title} — at position ${section.span.start} in the pattern`}
+                >
+                  {section.title}
+                </button>
+              )}
               <span className={styles.sectionBody}>
                 <ExplanationNodes nodes={section.body} links={links} />
               </span>

@@ -1,9 +1,8 @@
-import { assertNever, type SourceSpan } from '../shared/result';
+import { assertNever } from '../shared/result';
 import {
   code,
   emphasis,
   joinClauses,
-  ref,
   section,
   text,
   type Explanation,
@@ -637,9 +636,4 @@ function groupBody(
         text('.'),
       ];
   }
-}
-
-/** Builds a positioned reference node. Exported for the token table. */
-export function spanRef(raw: string, span: SourceSpan): ExplanationNode {
-  return ref(raw, span);
 }
