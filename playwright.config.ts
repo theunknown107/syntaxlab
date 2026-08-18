@@ -9,6 +9,11 @@ import { defineConfig, devices } from '@playwright/test';
  *                  development-only harness, which is compiled out of
  *                  production. `shell.spec` asserts that removal.
  *
+ * regex.spec  → the PRODUCTION build (:4173), on all three engines. The regex
+ *                feature needs no development harness — it drives real workers
+ *                through the real UI — so it runs against the build that
+ *                actually ships, CSP included.
+ *
  * Worker specs run on all three engines: M2's risk checkpoint (R-10) is that
  * `terminate()` reliably stops a runaway thread, and that is an engine-level
  * behaviour that cannot be assumed from one browser.
@@ -27,6 +32,26 @@ export default defineConfig({
       name: 'shell-chromium',
       testMatch: /shell\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'regex-chromium',
+      testMatch: /regex\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'regex-firefox',
+      testMatch: /regex\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'regex-webkit',
+      testMatch: /regex\.spec\.ts/,
+      use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'regex-mobile',
+      testMatch: /regex\.spec\.ts/,
+      use: { ...devices['Pixel 5'], baseURL: 'http://localhost:4173' },
     },
     {
       name: 'workers-chromium',

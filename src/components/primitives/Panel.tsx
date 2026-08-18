@@ -33,22 +33,28 @@ export function Panel({
     <section className={styles.panel} aria-labelledby={`${bodyId}-title`}>
       <div className={styles.panelHeader}>
         {collapsible ? (
-          <button
-            type="button"
-            id={`${bodyId}-title`}
-            className={styles.panelToggle}
-            aria-expanded={open}
-            aria-controls={bodyId}
-            onClick={() => {
-              setOpen((previous) => !previous);
-            }}
-          >
-            <span className={styles.panelChevron} aria-hidden="true">
-              {open ? '▾' : '▸'}
-            </span>
-            <span className={styles.panelTitle}>{title}</span>
-            {meta !== undefined && <span className={styles.panelMeta}>{meta}</span>}
-          </button>
+          // The button sits *inside* the heading rather than replacing it.
+          // A collapsible panel is still a section of the page, and losing its
+          // heading would take it out of the document outline a screen-reader
+          // user navigates by (08_UI_UX_SPEC.md §12.1).
+          <h3 className={styles.panelHeading}>
+            <button
+              type="button"
+              id={`${bodyId}-title`}
+              className={styles.panelToggle}
+              aria-expanded={open}
+              aria-controls={bodyId}
+              onClick={() => {
+                setOpen((previous) => !previous);
+              }}
+            >
+              <span className={styles.panelChevron} aria-hidden="true">
+                {open ? '▾' : '▸'}
+              </span>
+              <span className={styles.panelTitle}>{title}</span>
+              {meta !== undefined && <span className={styles.panelMeta}>{meta}</span>}
+            </button>
+          </h3>
         ) : (
           <h3 id={`${bodyId}-title`} className={styles.panelTitle}>
             {title}

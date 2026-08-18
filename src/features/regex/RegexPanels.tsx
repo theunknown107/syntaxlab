@@ -168,7 +168,7 @@ export function WarningList({ warnings, errors, links }: WarningListProps): Reac
           <Badge tone="error">Error</Badge>
           <span>
             {error.message}
-            {error.hint !== undefined && <span className={styles.muted}> {error.hint}</span>}
+            {error.hint !== undefined && <span className={styles.warningHint}> {error.hint}</span>}
           </span>
           {error.span !== undefined && <JumpButton span={error.span} links={links} />}
         </li>
@@ -186,7 +186,9 @@ export function WarningList({ warnings, errors, links }: WarningListProps): Reac
           </Badge>
           <span>
             {warning.message}
-            {warning.hint !== undefined && <span className={styles.muted}> {warning.hint}</span>}
+            {warning.hint !== undefined && (
+              <span className={styles.warningHint}> {warning.hint}</span>
+            )}
           </span>
           <JumpButton span={warning.span} links={links} />
         </li>

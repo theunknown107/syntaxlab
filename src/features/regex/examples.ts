@@ -45,7 +45,8 @@ export const EXAMPLES: readonly RegexExample[] = [
     label: 'IPv4 address',
     pattern: '\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b',
     flags: 'g',
-    subject: 'Hosts 192.168.0.14 and 10.0.0.255 answered; 999.1.1.1 is not an address.',
+    subject:
+      'Hosts 192.168.0.14 and 10.0.0.255 answered. So does 999.1.1.1 — this pattern checks the shape, not the range.',
   },
   {
     id: 'semver',

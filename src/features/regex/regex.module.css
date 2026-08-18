@@ -340,6 +340,13 @@
   border-color: var(--color-info);
 }
 
+/* Hint text inside a warning row sits on a tinted background, not the panel
+   surface, so it cannot use the muted token: measured 3.88:1 on the amber
+   tint, below AA. Caught by axe during M4. */
+.warningHint {
+  color: var(--color-text-secondary);
+}
+
 /* ---- Structure ---- */
 
 .astRow {
