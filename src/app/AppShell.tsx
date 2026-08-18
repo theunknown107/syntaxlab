@@ -1,6 +1,6 @@
 import { Header } from './Header';
 import { StatusBar } from './StatusBar';
-import { WorkspacePlaceholder } from './WorkspacePlaceholder';
+import { Workspace } from './Workspace';
 import styles from './AppShell.module.css';
 
 /**
@@ -24,7 +24,7 @@ export function AppShell(): React.JSX.Element {
 
       <main id="main" className={styles.main} tabIndex={-1}>
         <h1 className="srOnly">SyntaxLab — understand developer syntax instantly</h1>
-        <WorkspacePlaceholder />
+        <Workspace />
       </main>
 
       <StatusBar />

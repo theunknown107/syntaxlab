@@ -1,0 +1,22 @@
+/**
+ * The workspace container — 08_UI_UX_SPEC.md §5
+ *
+ * Owns page-level width, padding and centring. The mode features own their own
+ * internal columns, because regex and JSON split their panes differently.
+ */
+.workspace {
+  flex: 1;
+  width: 100%;
+  max-width: var(--layout-max-width);
+  min-height: 0;
+  padding: var(--space-4);
+  margin-inline: auto;
+}
+
+/* 360 px is the narrowest width the editor must stay usable at, so the
+   horizontal padding shrinks rather than the content (§15 of the M4 brief). */
+@media (width <= 560px) {
+  .workspace {
+    padding: var(--space-3);
+  }
+}

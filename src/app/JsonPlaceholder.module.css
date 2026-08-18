@@ -1,36 +1,22 @@
 /**
- * Two-pane workspace — 08_UI_UX_SPEC.md §5
+ * JSON empty state — 08_UI_UX_SPEC.md §13
  *
- *   Desktop   ≥1024px   two columns
- *   Tablet    768–1023  stacked, input above analysis
- *   Mobile    <768px    stacked, tighter spacing
- *
- * Drag-to-resize and the mobile tab bar arrive with the features that make
- * them meaningful (M4, M6). The column structure is established now because
- * retrofitting a layout under finished panels is the expensive version.
+ * The regex workspace replaced the shared placeholder at M4. What remains here
+ * is the JSON pane's empty state, kept as a real mode with honest copy rather
+ * than a disabled segment, which reads as broken rather than as pending
+ * (§2.1). The JSON feature replaces this at M6.
  */
 
-.workspace {
-  flex: 1;
+.placeholder {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--panel-gap);
   width: 100%;
-  max-width: var(--layout-max-width);
-  margin-inline: auto;
-  padding: var(--space-4);
-  min-height: 0;
 }
 
 @media (width >= 1024px) {
-  .workspace {
+  .placeholder {
     grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (width >= 1440px) {
-  .workspace {
-    grid-template-columns: 45fr 55fr;
   }
 }
 
@@ -99,11 +85,6 @@
 }
 
 @media (width <= 560px) {
-  .workspace {
-    padding: var(--space-3);
-    gap: var(--space-3);
-  }
-
   .paneBody {
     padding: var(--space-5) var(--space-4);
   }

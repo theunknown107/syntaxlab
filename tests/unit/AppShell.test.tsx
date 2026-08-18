@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { App } from '@/App';
@@ -42,7 +42,11 @@ describe('AppShell', () => {
 
   it('exposes a polite live region for status', () => {
     render(<App />);
-    const status = screen.getByRole('status');
+
+    // Scoped to the footer: M4 added further polite regions inside the
+    // workspace for match results, so "the status bar" has to be named
+    // rather than assumed to be the only one.
+    const status = within(screen.getByRole('contentinfo')).getByRole('status');
 
     // Established at M1 so every later feature inherits a working
     // announcement channel. Polite, never assertive: results must not
@@ -67,15 +71,18 @@ describe('AppShell', () => {
     expect(screen.queryByText('ECMAScript (JavaScript)')).not.toBeInTheDocument();
   });
 
-  it('switches the input pane heading with the mode', async () => {
+  it('switches the workspace with the mode', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Regex input' })).toBeInTheDocument();
+    // From M4 the regex mode is the real feature, so its input pane is the
+    // pattern editor rather than the shared placeholder.
+    expect(screen.getByRole('heading', { name: 'Pattern' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('radio', { name: 'JSON' }));
 
     expect(screen.getByRole('heading', { name: 'JSON input' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Pattern' })).not.toBeInTheDocument();
   });
 
   it('does not offer any cron affordance', () => {

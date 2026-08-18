@@ -1,5 +1,5 @@
 import { AppShell } from './app/AppShell';
-import { ErrorBoundary } from './app/ErrorBoundary';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export function App(): React.JSX.Element {
   return (

@@ -1,0 +1,444 @@
+/**
+ * Regex workspace — 08_UI_UX_SPEC.md §5, §7.1
+ *
+ * Two columns on desktop, stacked below 1024 px. No horizontal page overflow
+ * at any width: anything that cannot shrink (tables, the tree) scrolls inside
+ * its own container instead of pushing the page wider.
+ */
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+  gap: var(--panel-gap);
+  align-items: start;
+  width: 100%;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--panel-gap);
+  min-width: 0;
+}
+
+@media (width <= 1023px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- Pattern editor ---- */
+
+.patternRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.patternEditor {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The delimiters are chrome, not content: they show exactly what is being
+   parsed, and are never part of the pattern the user is editing. */
+.delimiter {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.flavour {
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-accent-text);
+  border: 1px solid var(--color-border-accent);
+  border-radius: var(--radius-full);
+}
+
+.help {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.inputFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.countWarn {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+}
+
+/* ---- Flags ---- */
+
+.flagBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.flagLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.flagGroup {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.flagOff,
+.flagOn {
+  min-width: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.flagOff {
+  color: var(--color-text-muted);
+  background-color: transparent;
+}
+
+.flagOff:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+/* Active state is carried by colour, weight *and* border, so it survives a
+   greyscale rendering (08_UI_UX_SPEC.md §12.1). */
+.flagOn {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-inverse);
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.flagReset {
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+
+.flagNote {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ---- Explanation ---- */
+
+.explanation {
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+
+.summary {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text);
+}
+
+.emphasis {
+  font-style: normal;
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+}
+
+.code {
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  background-color: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+}
+
+/* A ref is a button so the explanation-to-source link is keyboard reachable;
+   it is styled as inline code so it does not read as a form control. */
+.ref {
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--color-accent-text);
+  cursor: pointer;
+  background-color: var(--color-surface-raised);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.ref:hover,
+.ref:focus-visible {
+  border-color: var(--color-border-accent);
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.section {
+  display: grid;
+  grid-template-columns: minmax(6rem, 12rem) minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.sectionTitle {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.sectionBody {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.explanationList {
+  padding-inline-start: var(--space-4);
+  margin: var(--space-1) 0;
+}
+
+@media (width <= 767px) {
+  .section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}
+
+/* ---- Tables ---- */
+
+.table {
+  width: 100%;
+  font-size: var(--text-sm);
+  border-collapse: collapse;
+}
+
+.table caption {
+  text-align: start;
+}
+
+.table th {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  text-align: start;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table td {
+  padding: var(--space-1) var(--space-2);
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.numeric {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.rowButton {
+  padding: 0;
+  font: inherit;
+  color: var(--color-text);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.rowButton:hover {
+  color: var(--color-accent-text);
+}
+
+.jump {
+  padding: 0;
+  font-size: var(--text-xs);
+  color: var(--color-accent-text);
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+/* ---- Warnings ---- */
+
+.warningList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  list-style: none;
+}
+
+.warningError,
+.warningWarn,
+.warningInfo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-2);
+  border-inline-start: 2px solid;
+  border-radius: var(--radius-sm);
+}
+
+.warningError {
+  background-color: var(--color-error-bg);
+  border-color: var(--color-error);
+}
+
+.warningWarn {
+  background-color: var(--color-warning-bg);
+  border-color: var(--color-warning);
+}
+
+.warningInfo {
+  background-color: var(--color-info-bg);
+  border-color: var(--color-info);
+}
+
+/* ---- Structure ---- */
+
+.astRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.astLabel {
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+/* ---- Matches ---- */
+
+.resultSummary {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.truncationNotice {
+  padding: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-warning);
+  background-color: var(--color-warning-bg);
+  border-radius: var(--radius-sm);
+}
+
+.captureList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.captureLabel {
+  display: inline-block;
+  min-width: 4ch;
+  margin-inline-end: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.stateBlock {
+  font-size: var(--text-sm);
+}
+
+.stateBlock p {
+  margin: 0 0 var(--space-2);
+}
+
+/* ---- Shared ---- */
+
+.muted {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.compat {
+  font-size: var(--text-sm);
+}
+
+.compatNotes {
+  padding-inline-start: var(--space-4);
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.examplePicker {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.examplePickerLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.select {
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+/* iOS zooms the viewport when a focused control is under 16 px
+   (08_UI_UX_SPEC.md §18). */
+@media (width <= 767px) {
+  .select {
+    font-size: 1rem;
+  }
+}

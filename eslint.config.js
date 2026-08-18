@@ -269,9 +269,14 @@ export default tseslint.config(
      complexity measures branch count, which for a `switch` over token kinds
      rises with the size of the grammar rather than with the difficulty of the
      code. The limits stay in force everywhere else
-     (18_CODING_STANDARDS.md §4 calls them guidelines, not laws). */
+     (18_CODING_STANDARDS.md §4 calls them guidelines, not laws).
+
+     `features/regex/viewModel.ts` is included for the same reason: it is the
+     presentation-side exhaustive switch over the same node union, and the
+     exhaustiveness is precisely what stops a new node type rendering as a
+     blank row. */
   {
-    files: ['src/domain/regex/**/*.ts'],
+    files: ['src/domain/regex/**/*.ts', 'src/features/regex/viewModel.ts'],
     rules: { complexity: 'off', 'max-depth': ['warn', 4] },
   },
 
