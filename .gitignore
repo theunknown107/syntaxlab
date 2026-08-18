@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Test / coverage output
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# Bundle analysis
+stats.html
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Environment — the app needs none at runtime; this exists so one can never
+# be committed by accident if that ever changes (18_CODING_STANDARDS.md S7).
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
