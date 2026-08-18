@@ -1,0 +1,109 @@
+name: CI
+
+# Runs on the remote once one exists. The repository is local-only at M1
+# (22_OPEN_QUESTIONS.md D-07), so this workflow is authored but not yet
+# executed. Every job here is runnable locally via the matching npm script.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck, lint, format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # The documented gate (16_DEPENDENCIES.md §5). Failures are fixed or
+      # explicitly justified — never suppressed.
+      - run: npm audit --audit-level=high
+
+  banned-apis:
+    name: Banned API scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Belt-and-braces alongside the ESLint rules: a grep cannot be silenced
+      # by an inline disable comment (05_SECURITY.md §2.1).
+      - name: Scan for banned APIs in src/
+        run: |
+          if grep -rnE "dangerouslySetInnerHTML|\beval\(|new Function\(|\.innerHTML\s*=" src/; then
+            echo "::error::Banned API found in src/ — see 18_CODING_STANDARDS.md §6"
+            exit 1
+          fi
+          echo "No banned APIs found."
+
+  test:
+    name: Unit and integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
+
+  build:
+    name: Build and bundle budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Fails on the hard budget, warns on the target (12_PERFORMANCE.md §2).
+      - run: npm run size
+
+  e2e:
+    name: End-to-end and accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+      # Includes the axe gate, the CSP-violation check, and the assertion that
+      # the app makes no network requests after load.
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
