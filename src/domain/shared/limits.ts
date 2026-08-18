@@ -20,6 +20,21 @@ export const LIMITS = {
     execMs: 2_000,
     /** Rendering more is pointless; the UI states that results were truncated. */
     maxMatches: 10_000,
+    /**
+     * Per-value clip for matched and captured text. A pattern such as `.*`
+     * against a 1 MB subject matches quickly and legitimately, and without a
+     * clip the result would carry the whole subject back across the worker
+     * boundary once per match. The true length travels alongside the clipped
+     * value, so the UI reports the real size rather than the shown one.
+     */
+    maxMatchTextChars: 2_000,
+    /**
+     * Ceiling on the total text a single execution may return. `maxMatches`
+     * alone does not bound memory: 10 000 matches of 2 000 characters each
+     * would be 20 MB. Reaching this stops the scan and is reported as a
+     * truncation, never silently.
+     */
+    maxOutputChars: 2_000_000,
     /** Nested-group depth before we refuse rather than risk a stack overflow. */
     maxDepth: 100,
   },

@@ -1,8 +1,11 @@
 /// <reference lib="webworker" />
 import { domainError } from '@/domain/shared/result';
+import { executeRegex } from '@/domain/regex/execute';
 import {
   isExecOp,
   parseWorkerRequest,
+  type ExecRegexPayload,
+  type ExecRequest,
   type ExecSpinPayload,
   type ExecSpinResult,
   type WorkerResponse,
@@ -11,8 +14,8 @@ import {
 /**
  * Execution worker — disposable, sacrificial.
  *
- * This is the thread that will run foreign, uninterruptible code: at M4,
- * `RegExp.exec` against a user-supplied pattern. JavaScript regex execution
+ * This is the thread that runs foreign, uninterruptible code: `RegExp.exec`
+ * against a user-supplied pattern, added at M4. JavaScript regex execution
  * cannot be interrupted — there is no timeout, no step limit, no abort
  * signal — so destroying the thread is the only reliable stop
  * (04_PARSER_ARCHITECTURE.md §2.7).
@@ -46,6 +49,32 @@ function spin(payload: ExecSpinPayload): ExecSpinResult {
   return { completed: true, elapsedMs: Date.now() - startedAt };
 }
 
+/**
+ * Runs the user's pattern.
+ *
+ * The worker re-validates the input itself rather than trusting the caller: a
+ * compromised main thread is exactly the case where trusting the sender would
+ * be wrong (05_SECURITY.md §6). `executeRegex` owns the limits and is the only
+ * place `new RegExp` is applied to user input.
+ */
+function runRegex(id: number, payload: ExecRegexPayload): WorkerResponse {
+  const result = executeRegex(payload);
+  return result.ok
+    ? { id, ok: true, result: result.value }
+    : { id, ok: false, error: result.error };
+}
+
+function dispatch(request: ExecRequest): WorkerResponse {
+  // Exhaustive: adding an operation without handling it is a lint error.
+  switch (request.op) {
+    case 'exec.spin':
+      return { id: request.id, ok: true, result: spin(request.payload) };
+
+    case 'exec.regex':
+      return runRegex(request.id, request.payload);
+  }
+}
+
 scope.onmessage = (event: MessageEvent<unknown>): void => {
   const request = parseWorkerRequest(event.data);
 
@@ -61,14 +90,11 @@ scope.onmessage = (event: MessageEvent<unknown>): void => {
   }
 
   try {
-    scope.postMessage({
-      id: request.id,
-      ok: true,
-      result: spin(request.payload),
-    } satisfies WorkerResponse);
+    scope.postMessage(dispatch(request));
   } catch {
-    // Reached only if the engine throws (for example, out of memory). The
-    // client's deadline covers the case where nothing comes back at all.
+    // Reached only if the engine throws — out of memory on a huge result set
+    // is the realistic case. The client's deadline covers the other outcome,
+    // where nothing comes back at all because the thread never yields.
     scope.postMessage({
       id: request.id,
       ok: false,

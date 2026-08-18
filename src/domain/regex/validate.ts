@@ -179,3 +179,77 @@ export function isValidRegexAnalysis(value: unknown): value is RegexAnalysis {
       isRecord(error) && typeof error.code === 'string' && typeof error.message === 'string',
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * Execution results — added at M4
+ * ------------------------------------------------------------------ */
+
+function isOffset(value: unknown, max: number): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
+}
+
+function isClippedText(value: unknown, length: unknown): boolean {
+  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) return false;
+  if (value === null) return length === 0;
+  return typeof value === 'string' && value.length <= length;
+}
+
+function isCapture(value: unknown, subjectLength: number): boolean {
+  if (!isRecord(value)) return false;
+  if (typeof value.number !== 'number' || !Number.isInteger(value.number) || value.number < 1) {
+    return false;
+  }
+  if (!isClippedText(value.value, value.length)) return false;
+  // Offsets are present only under the `d` flag, so absence is valid; a
+  // present offset must still be inside the subject.
+  if (value.start !== undefined && !isOffset(value.start, subjectLength)) return false;
+  if (value.end !== undefined && !isOffset(value.end, subjectLength)) return false;
+  return true;
+}
+
+function isNamedCapture(value: unknown): boolean {
+  return (
+    isRecord(value) && typeof value.name === 'string' && isClippedText(value.value, value.length)
+  );
+}
+
+function isMatch(value: unknown, subjectLength: number): boolean {
+  if (!isRecord(value)) return false;
+  if (!isOffset(value.start, subjectLength) || !isOffset(value.end, subjectLength)) return false;
+  if (value.end < value.start) return false;
+  if (typeof value.ordinal !== 'number' || !Number.isInteger(value.ordinal) || value.ordinal < 0) {
+    return false;
+  }
+  if (typeof value.value !== 'string') return false;
+  if (!isClippedText(value.value, value.length)) return false;
+  if (!Array.isArray(value.captures) || !value.captures.every((c) => isCapture(c, subjectLength))) {
+    return false;
+  }
+  return Array.isArray(value.named) && value.named.every(isNamedCapture);
+}
+
+const TRUNCATIONS = new Set(['none', 'matchCount', 'outputSize']);
+
+/**
+ * Validates an execution result crossing the worker boundary.
+ *
+ * Stricter than the analysis guard, and deliberately so: this object carries
+ * offsets that the UI uses to slice the subject and to place highlight
+ * decorations. An out-of-range offset would not be a cosmetic problem, so
+ * every offset is checked against the reported subject length here rather
+ * than being clamped later at each of the several places that consume one.
+ */
+export function isValidRegexExecResult(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value.kind !== 'regexExec') return false;
+  if (typeof value.subjectLength !== 'number' || !Number.isInteger(value.subjectLength)) {
+    return false;
+  }
+  if (value.subjectLength < 0) return false;
+  if (typeof value.findsAll !== 'boolean' || typeof value.hasIndices !== 'boolean') return false;
+  if (typeof value.elapsedMs !== 'number' || !Number.isFinite(value.elapsedMs)) return false;
+  if (typeof value.truncated !== 'string' || !TRUNCATIONS.has(value.truncated)) return false;
+  return (
+    Array.isArray(value.matches) && value.matches.every((m) => isMatch(m, value.subjectLength))
+  );
+}

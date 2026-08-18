@@ -1,6 +1,12 @@
 import type { DomainError } from '@/domain/shared/result';
 import type { RegexAnalysis } from '@/domain/regex/ast';
-import { isValidRegexAnalysis } from '@/domain/regex/validate';
+import type {
+  MatchCapture,
+  NamedCapture,
+  RegexExecResult,
+  RegexMatch,
+} from '@/domain/regex/execute';
+import { isValidRegexAnalysis, isValidRegexExecResult } from '@/domain/regex/validate';
 
 /**
  * Worker wire protocol — 15_API_AND_BROWSER_CAPABILITIES.md §2
@@ -40,7 +46,7 @@ export type AnalysisOp = (typeof ANALYSIS_OPS)[number];
  *
  * It is never exposed in the UI.
  */
-export const EXEC_OPS = ['exec.spin'] as const;
+export const EXEC_OPS = ['exec.spin', 'exec.regex'] as const;
 export type ExecOp = (typeof EXEC_OPS)[number];
 
 export type WorkerOp = AnalysisOp | ExecOp;
@@ -72,6 +78,18 @@ export interface AnalysisRegexPayload {
   readonly flags: string;
 }
 
+/**
+ * The only operation that runs foreign code. It lives on the disposable
+ * worker so its deadline can be enforced by destroying the thread, which is
+ * the only reliable stop for an uninterruptible regex.
+ */
+export interface ExecRegexPayload {
+  readonly source: string;
+  /** Raw flag string, re-validated in the worker rather than trusted. */
+  readonly flags: string;
+  readonly subject: string;
+}
+
 export interface ExecSpinPayload {
   /** Milliseconds to occupy the worker thread for. */
   readonly durationMs: number;
@@ -87,6 +105,7 @@ export interface OpTypes {
   'analysis.echo': { payload: AnalysisEchoPayload; result: AnalysisEchoResult };
   'analysis.regex': { payload: AnalysisRegexPayload; result: RegexAnalysis };
   'exec.spin': { payload: ExecSpinPayload; result: ExecSpinResult };
+  'exec.regex': { payload: ExecRegexPayload; result: RegexExecResult };
 }
 
 export type PayloadFor<TOp extends WorkerOp> = OpTypes[TOp]['payload'];
@@ -197,6 +216,12 @@ const PAYLOAD_VALIDATORS: {
   'analysis.regex': (payload): payload is AnalysisRegexPayload =>
     isRecord(payload) && typeof payload.source === 'string' && typeof payload.flags === 'string',
 
+  'exec.regex': (payload): payload is ExecRegexPayload =>
+    isRecord(payload) &&
+    typeof payload.source === 'string' &&
+    typeof payload.flags === 'string' &&
+    typeof payload.subject === 'string',
+
   'exec.spin': (payload): payload is ExecSpinPayload =>
     isRecord(payload) &&
     typeof payload.durationMs === 'number' &&
@@ -265,7 +290,44 @@ const RESULT_VALIDATORS: {
     isRecord(result) && result.completed === true && typeof result.elapsedMs === 'number',
 
   'analysis.regex': (result): result is RegexAnalysis => isValidRegexAnalysis(result),
+
+  'exec.regex': (result): result is RegexExecResult => isValidRegexExecResult(result),
 };
+
+/**
+ * Rebuilds one match. Unlike the analysis tree this *is* rebuilt in full: it
+ * is small, bounded by `maxMatches`, and its offsets are used to slice the
+ * subject and place editor decorations, so nothing unexamined should reach
+ * the code that does that.
+ */
+function reconstructMatch(match: RegexMatch): RegexMatch {
+  return {
+    ordinal: match.ordinal,
+    start: match.start,
+    end: match.end,
+    value: match.value,
+    length: match.length,
+    captures: match.captures.map(reconstructCapture),
+    named: match.named.map((named): NamedCapture => ({
+      name: named.name,
+      value: named.value,
+      length: named.length,
+    })),
+  };
+}
+
+function reconstructCapture(capture: MatchCapture): MatchCapture {
+  const rebuilt: {
+    number: number;
+    value: string | null;
+    length: number;
+    start?: number;
+    end?: number;
+  } = { number: capture.number, value: capture.value, length: capture.length };
+  if (capture.start !== undefined) rebuilt.start = capture.start;
+  if (capture.end !== undefined) rebuilt.end = capture.end;
+  return rebuilt;
+}
 
 /** Rebuilds a validated result field-by-field so no unknown key survives. */
 const RESULT_RECONSTRUCTORS: {
@@ -279,6 +341,15 @@ const RESULT_RECONSTRUCTORS: {
   // own code inside the worker, its shape is asserted by isValidRegexAnalysis,
   // and it is rendered as text rather than executed. Passed through as-is.
   'analysis.regex': (r) => r,
+  'exec.regex': (r) => ({
+    kind: 'regexExec',
+    matches: r.matches.map(reconstructMatch),
+    truncated: r.truncated,
+    findsAll: r.findsAll,
+    hasIndices: r.hasIndices,
+    subjectLength: r.subjectLength,
+    elapsedMs: r.elapsedMs,
+  }),
 };
 
 /**
