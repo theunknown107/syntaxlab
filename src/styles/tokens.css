@@ -1,0 +1,249 @@
+/**
+ * SyntaxLab design tokens — 09_DESIGN_SYSTEM.md
+ *
+ * Three layers:
+ *   1. Primitives  raw values. Only the theme system writes these at runtime.
+ *   2. Semantic    meaning, not appearance. Components read these.
+ *   3. Component   only where no semantic token fits; always derived from (2).
+ *
+ * Components must never contain a literal colour, spacing, or size value.
+ * Stylelint enforces this. Runtime theming (M8) rewrites layer 1, and layers
+ * 2 and 3 recompute automatically because they are defined in terms of it.
+ */
+
+:root {
+  /* ============================================================
+     1. PRIMITIVES
+     ============================================================ */
+
+  /* Greens — six steps, deliberately not ten. Each has a job:
+     accent, hover, active, border, glow, deep-gradient stop. */
+  --green-100: #d4f5e2;
+  --green-300: #6ee7a0;
+  --green-500: #00ff88; /* signature accent */
+  --green-600: #00cc6a;
+  --green-700: #059648;
+  --green-900: #003d1f;
+
+  /* Neutrals. --gray-950 is a green-tinted near-black, not pure #000:
+     pure black against bright text causes halation and is fatiguing
+     over a long session, and leaves darker surfaces nowhere to go. */
+  --gray-950: #0a0e0c;
+  --gray-900: #101613;
+  --gray-800: #171f1b;
+  --gray-700: #1f2a24;
+  --gray-600: #2d3a33;
+  --gray-500: #4a5a52;
+  --gray-400: #7a8d83; /* 5.20:1 on --gray-900, 5.52:1 on --gray-950 — measured */
+  --gray-300: #9aada3;
+  --gray-100: #e8f0eb;
+  --white: #f5faf7;
+
+  /* Status — desaturated so they sit in a dark UI without vibrating. */
+  --red-500: #ff5c5c;
+  --red-900: #3d1414;
+  --amber-500: #ffb020;
+  --amber-900: #3d2a0a;
+  --blue-500: #4a9eff;
+  --blue-900: #0a1f3d;
+
+  /* ============================================================
+     2. SEMANTIC
+     ============================================================ */
+
+  /* Surfaces */
+  --color-bg: var(--gray-950);
+  --color-surface: var(--gray-900);
+  --color-surface-raised: var(--gray-800);
+  --color-surface-sunken: #070a09;
+
+  /* Text */
+  --color-text: var(--gray-100);
+  --color-text-secondary: var(--gray-300);
+  --color-text-muted: var(--gray-400);
+  --color-text-inverse: var(--gray-950);
+  --color-text-disabled: var(--gray-500);
+
+  /* Accent — the customisable axis (M8 rewrites --color-accent) */
+  --color-accent: var(--green-500);
+  --color-accent-hover: var(--green-300);
+  --color-accent-active: var(--green-600);
+  --color-accent-subtle: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  --color-accent-text: var(--green-300);
+
+  /* Borders */
+  --color-border: var(--gray-700);
+  --color-border-strong: var(--gray-600);
+  --color-border-accent: color-mix(in oklab, var(--color-accent) 40%, transparent);
+
+  /* Status */
+  --color-success: var(--green-500);
+  --color-success-bg: color-mix(in oklab, var(--green-500) 10%, transparent);
+  --color-error: var(--red-500);
+  --color-error-bg: var(--red-900);
+  --color-warning: var(--amber-500);
+  --color-warning-bg: var(--amber-900);
+  --color-info: var(--blue-500);
+  --color-info-bg: var(--blue-900);
+
+  /* Focus — never falls below 3:1 against any surface */
+  --color-focus: var(--green-300);
+
+  /* ---- Gradient ----
+     Intensity multiplies alpha rather than swapping colours, so the M8
+     customisation slider is one continuous axis from invisible to bold
+     and can never produce a broken-looking state. */
+  --gradient-from: var(--green-500);
+  --gradient-to: var(--green-900);
+  --gradient-angle: 135deg;
+  --gradient-intensity: 0.4;
+
+  --gradient-primary: linear-gradient(
+    var(--gradient-angle),
+    color-mix(in oklab, var(--gradient-from) calc(var(--gradient-intensity) * 100%), transparent),
+    color-mix(in oklab, var(--gradient-to) calc(var(--gradient-intensity) * 100%), transparent)
+  );
+
+  --gradient-subtle: linear-gradient(
+    var(--gradient-angle),
+    color-mix(in oklab, var(--gradient-from) calc(var(--gradient-intensity) * 25%), transparent),
+    transparent
+  );
+
+  --glow-intensity: 0.25;
+  --glow-accent: 0 0 calc(20px * var(--glow-intensity))
+    color-mix(in oklab, var(--color-accent) 30%, transparent);
+
+  /* ---- Typography ----
+     System stacks only for now. Self-hosted subsetted webfonts are a later
+     milestone; see 09_DESIGN_SYSTEM.md §5. The fallbacks are deliberate,
+     not a placeholder: they cost zero bytes and zero layout shift. */
+  --font-sans:
+    -apple-system, blinkmacsystemfont, 'Segoe UI', system-ui, roboto, 'Helvetica Neue', arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, sfmono-regular, 'SF Mono', menlo, consolas, 'Liberation Mono', monospace;
+
+  --font-scale: 1;
+  --text-xs: calc(0.75rem * var(--font-scale));
+  --text-sm: calc(0.8125rem * var(--font-scale));
+  --text-base: calc(0.875rem * var(--font-scale));
+  --text-md: calc(1rem * var(--font-scale));
+  --text-lg: calc(1.125rem * var(--font-scale));
+  --text-xl: calc(1.375rem * var(--font-scale));
+  --text-2xl: calc(1.75rem * var(--font-scale));
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --tracking-tight: -0.01em;
+  --tracking-wide: 0.02em;
+
+  /* ---- Spacing — 4px base ---- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* ---- Radii — small reads technical; 16px reads consumer ---- */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+
+  /* ---- Elevation ----
+     In a dark UI, depth comes mostly from borders and background steps.
+     Over-shadowing on near-black just produces grey mud. */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+  --shadow-focus: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-focus);
+
+  /* ---- Motion ----
+     Every duration is tied to a state change. Focus is never animated:
+     delaying feedback for keyboard users is a bug, not a flourish. */
+  --duration-instant: 0ms;
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ============================================================
+     3. COMPONENT
+     ============================================================ */
+  --header-height: 52px;
+  --statusbar-height: 32px;
+  --drawer-width: 380px;
+  --panel-gap: var(--space-3);
+
+  --control-height-sm: 26px;
+  --control-height-md: 32px;
+  --control-height-lg: 38px;
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  --layout-max-width: 1600px;
+}
+
+/* Touch targets reach 44px on coarse pointers. One media query, no component
+   changes — the reason control heights are tokens rather than literals. */
+@media (pointer: coarse) {
+  :root {
+    --control-height-sm: 36px;
+    --control-height-md: 44px;
+    --control-height-lg: 48px;
+  }
+}
+
+/* High contrast. Also honours the OS setting automatically, below. */
+[data-contrast='high'] {
+  --color-bg: #000;
+  --color-surface: #0a0a0a;
+  --color-surface-raised: #141414;
+  --color-text: #fff;
+  --color-text-secondary: #e0e0e0;
+  --color-text-muted: #c0c0c0;
+  --color-border: #666;
+  --color-border-strong: #999;
+  --gradient-intensity: 0.15;
+  --glow-intensity: 0;
+}
+
+@media (prefers-contrast: more) {
+  :root:not([data-contrast='normal']) {
+    --color-bg: #000;
+    --color-surface: #0a0a0a;
+    --color-text: #fff;
+    --color-text-secondary: #e0e0e0;
+    --color-text-muted: #c0c0c0;
+    --color-border: #666;
+    --color-border-strong: #999;
+    --gradient-intensity: 0.15;
+    --glow-intensity: 0;
+  }
+}
+
+/* Fallback for engines without color-mix(). Values are the computed
+   equivalents at default intensity, so the UI degrades in appearance
+   rather than losing colour entirely. */
+@supports not (color: color-mix(in oklab, red, blue)) {
+  :root {
+    --color-accent-subtle: rgb(0 255 136 / 0.12);
+    --color-border-accent: rgb(0 255 136 / 0.4);
+    --color-success-bg: rgb(0 255 136 / 0.1);
+    --gradient-primary: linear-gradient(135deg, rgb(0 255 136 / 0.4), rgb(0 61 31 / 0.4));
+    --gradient-subtle: linear-gradient(135deg, rgb(0 255 136 / 0.1), transparent);
+    --glow-accent: 0 0 5px rgb(0 255 136 / 0.3);
+  }
+}

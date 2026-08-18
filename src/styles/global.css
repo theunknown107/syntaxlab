@@ -1,0 +1,123 @@
+@import './tokens.css';
+@import './reset.css';
+
+/**
+ * Global element styling. Everything beyond this lives in a component's own
+ * CSS module — there are no global utility classes, and no global selectors
+ * outside this file.
+ */
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+
+  /* Prevent the whole page from scrolling sideways. Wide content (trees,
+     tables, code) scrolls inside its own container instead. */
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+
+  /* 100dvh accounts for mobile browser chrome that appears and disappears.
+     The 100vh line above is the fallback for engines without dvh. */
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/**
+ * Focus. Two rules, in this order, deliberately:
+ *   1. remove the default ring only where we replace it
+ *   2. apply ours on :focus-visible, so mouse users do not see it but
+ *      keyboard users always do
+ * Never animated — delaying focus feedback is a keyboard-accessibility bug.
+ */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-sm);
+}
+
+/* A visible focus ring must survive forced-colors mode, where our custom
+   colours are discarded. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid canvastext;
+  }
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 25%, transparent);
+  color: var(--color-text);
+}
+
+a {
+  color: var(--color-accent-text);
+  text-underline-offset: 0.2em;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+/* Scrollbars. Dark by default so they do not flash white on a near-black UI. */
+* {
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+/**
+ * Screen-reader-only text. Used for headings that give landmarks accessible
+ * names and for status text that should be announced but not shown.
+ */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip link — visually hidden until focused, then pinned to the top-left. */
+.skipLink {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 100;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-accent);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  transform: translateY(calc(-100% - var(--space-4)));
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.skipLink:focus {
+  transform: translateY(0);
+}
+
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

@@ -1,0 +1,91 @@
+/**
+ * Minimal reset. Not normalize.css — we need about fifteen rules, not a
+ * dependency, and every rule here has a stated reason.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  /* Prevent iOS text inflation on rotate without disabling user zoom. */
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Long tokens — a regex or a minified JSON line — must wrap rather than
+   force the whole page to scroll horizontally. */
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  overflow-wrap: break-word;
+}
+
+ul[role='list'],
+ol[role='list'] {
+  list-style: none;
+  padding: 0;
+}
+
+:target {
+  scroll-margin-block: var(--space-5);
+}
+
+/**
+ * Reduced motion. The blunt global override is correct here: no state in this
+ * application is conveyed only by motion, so removing all of it loses no
+ * information. `!important` is the one sanctioned use in the codebase
+ * (18_CODING_STANDARDS.md §8) because it must beat component styles.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-motion='never'] *,
+[data-motion='never'] *::before,
+[data-motion='never'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
