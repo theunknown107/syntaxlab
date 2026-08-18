@@ -42,6 +42,30 @@ A test plan that is not tied to milestones becomes a wish-list written at the en
 | M12 | Full E2E suite; cross-browser; manual checklist |
 | **M14–M16 (V1.1)** | Cron units, golden corpus, refusal tests, DST matrix, property; I8, I9; E4 |
 
+### Implemented at M1
+
+| Suite | Count | Status |
+|---|---|---|
+| Unit (`vitest`) | **47** across 6 files | ✅ passing |
+| E2E (`playwright`, production build) | **7** | ✅ passing |
+| Accessibility (`axe-core`, in E2E) | 1 gate, all views at M1 | ✅ 0 critical/serious |
+
+M1 unit coverage: the store primitive (reference-equality short-circuit,
+unsubscribe-during-notify, isolation), `Result`/`DomainError` construction and
+hostile-input truncation, `LIMITS` values and the debounce/manual-analysis
+boundaries, `ModeSelector` radiogroup semantics and keyboard navigation, the
+shell's landmark and live-region structure, and error-boundary recovery.
+
+M1 E2E coverage: shell renders without a page error, product identity is
+present, keyboard-only mode switching, **zero CSP violations**, **zero network
+requests after load**, **zero critical/serious axe violations**, and no
+horizontal scroll at a 360 px viewport.
+
+**One real defect was found by these tests and fixed:** `--gray-400` failed
+WCAG AA contrast (4.19:1 on surfaces against a 4.5:1 requirement). The
+documented value had been calculated by hand and was wrong. See
+`09_DESIGN_SYSTEM.md` §3.4.
+
 ### Tooling
 
 | Layer | Tool | Why |

@@ -137,6 +137,12 @@ graph TB
     class Repo,Prefs,WClient,Clip,FileIO,SWReg inf
 ```
 
+> **Diagram status.** This is the **target** architecture for V1.0. As of M1 the
+> presentation and application layers exist, the domain layer exists in outline
+> (`shared/` only), and the worker threads are not yet built — they arrive at M2.
+> Nothing in the diagram has been invalidated by implementation; see §9.1 for
+> what physically exists today.
+
 ### Layer contract
 
 | Layer | May import from | May **not** import from | Enforced by |
@@ -443,6 +449,31 @@ syntaxlab/
 ├── package.json
 └── package-lock.json              # committed, exact pins
 ```
+
+### 9.1 Implemented at M1
+
+The structure below exists in the repository today. Directories are created by
+the milestone that needs them, not up front — an empty `features/regex/` at M1
+would be scaffolding for its own sake.
+
+```
+src/
+├── app/            ✅ M1   AppShell, Header, ModeSelector, StatusBar,
+│                          ErrorBoundary, WorkspacePlaceholder
+├── application/    ✅ M1   stores/ (createStore, workspaceStore)
+├── components/     ✅ M1   hooks/useStore
+├── domain/         ✅ M1   shared/ (result, limits)
+├── styles/         ✅ M1   tokens.css, reset.css, global.css
+├── App.tsx         ✅ M1
+└── main.tsx        ✅ M1
+
+   infrastructure/  M2  worker client, then storage at M7
+   workers/         M2  analysis + exec entry points
+   features/        M4  regex, then json at M6
+```
+
+`domain/regex/`, `domain/json/`, `features/`, `infrastructure/`, and `workers/`
+do not exist yet. They are created at the milestones listed above.
 
 ### Why this structure, given the brief warned against elaborate hierarchies
 

@@ -35,7 +35,35 @@
 
 **Total required runtime dependencies for V1.0: 4 packages** (React pair, CodeMirror set, `idb`, `vite-plugin-pwa`).
 
-### 1.2 Admission criteria
+### 1.2 Installed at M1 — actual
+
+Measured from `package.json` after M1. **2 runtime dependencies, 25 dev.**
+
+| Runtime | Version | Why |
+|---|---|---|
+| `react` | 18.3.1 (exact) | UI rendering + automatic text escaping |
+| `react-dom` | 18.3.1 (exact) | |
+
+Dev tooling installed: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/*`,
+`vitest`, `@vitest/coverage-v8`, `happy-dom`, `@testing-library/{react,jest-dom,user-event}`,
+`@playwright/test`, `@axe-core/playwright`, `eslint` + `typescript-eslint` +
+`eslint-plugin-{react-hooks,react-refresh,jsx-a11y,boundaries}`, `globals`,
+`stylelint` + `stylelint-config-standard`, `prettier`, `rollup-plugin-visualizer`.
+
+**Two security-driven version decisions made during M1:**
+
+| Package | Change | Reason |
+|---|---|---|
+| `eslint-plugin-boundaries` | 5 → **7** | v5 pulled a vulnerable `handlebars` transitively (1 critical, 2 high). v7 drops it. Required migrating to the `policies` API. |
+| `happy-dom` | 17 → **20** | v17 carried a critical VM-context-escape advisory. This is the DOM that later milestones run fuzzed and hostile input through, so it is not a theoretical concern. |
+
+`npm audit` reports **0 vulnerabilities** at M1.
+
+**Not installed, deliberately:** no state library, no router, no UI kit, no icon
+library, no animation library, no date library, no validation library, and
+**no CodeMirror** — that arrives at M4 with the editor.
+
+### 1.3 Admission criteria
 
 Every runtime dependency must pass all six:
 

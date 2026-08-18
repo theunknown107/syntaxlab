@@ -295,19 +295,38 @@ Additional protections at scale: node cap (500k), depth cap (500), match cap (10
 
 **This is the authoritative record.** Nothing elsewhere in the documentation may claim a size or timing that is not recorded here.
 
-First entry is due at the end of **Milestone 1**, once there is a production build to measure — deliberately early, so a budget problem is found while it is cheap to fix.
+### 10.1 M1 — application shell
 
-| Date | Milestone | Build | Initial JS (gz) | CSS (gz) | Precache | FCP | TTI | Lighthouse Perf | Notes |
-|---|---|---|---|---|---|---|---|---|---|
-| — | M1 | — | — | — | — | — | — | — | *Not yet measured* |
+Production build, `vite build`, gzipped. Measured 2026-08-18.
 
-Per-chunk breakdown, recorded alongside each row:
+| Asset | Raw | **Gzipped** |
+|---|---|---|
+| `assets/index-*.js` | 148.41 KB | **47.05 KB** |
+| `assets/index-*.css` | 12.79 KB | **3.30 KB** |
+| `index.html` | 2.86 KB | 1.35 KB |
+| `theme-bootstrap.js` | 2.71 KB | 1.25 KB |
+| **Total deployed** | | **53.55 KB** |
 
-| Chunk | Budget | Measured | Δ |
-|---|---|---|---|
-| initial | 200 KB | — | — |
-| analysis.worker | 40 KB | — | — |
-| exec.worker | 3 KB | — | — |
+| Budget | Measured | Target | Hard | Status |
+|---|---|---|---|---|
+| Initial JS | 48.30 KB | 170 KB | 200 KB | ✅ ok |
+| CSS | 3.30 KB | 15 KB | 20 KB | ✅ ok |
+| Total precache | 53.55 KB | 1.5 MB | 2 MB | ✅ ok |
+
+### 10.2 What this measurement does NOT prove
+
+**It does not validate the 200 KB budget.** The M1 build contains React and the shell. It does **not** contain CodeMirror, which is expected to be the single largest dependency in the project and is installed at M4 where the editor is built (`16_DEPENDENCIES.md` §1.1).
+
+Read plainly: **48 KB of the budget is spent and the largest item has not arrived.** The remaining headroom against the 170 KB target is roughly 122 KB, and the CodeMirror estimate is ~150 KB — which would exceed it.
+
+**The budget-critical measurement is M4.** Reporting the M1 number as comfortable would be exactly the estimate-as-evidence error this section exists to prevent. Tracked as **R-05**.
+
+### 10.3 Measurement log
+
+| Date | Milestone | Initial JS (gz) | CSS (gz) | Total (gz) | Notes |
+|---|---|---|---|---|---|
+| 2026-08-18 | M1 | 48.30 KB | 3.30 KB | 53.55 KB | Shell only. **No CodeMirror** — see §10.2 |
+| — | M4 | — | — | — | First budget-meaningful measurement |
 
 ---
 

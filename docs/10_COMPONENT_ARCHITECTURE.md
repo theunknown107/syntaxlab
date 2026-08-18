@@ -21,6 +21,35 @@
 
 ## 2. Tree
 
+> **Built at M1** (marked ✅). Everything else is scheduled to its milestone.
+> The shell tree below is the current implementation, not an intention.
+
+```
+<App>                                   ✅ M1
+└── <ErrorBoundary scope="app">         ✅ M1
+    └── <AppShell>                      ✅ M1
+        ├── <Header>                    ✅ M1
+        │   ├── wordmark + tagline      ✅ M1
+        │   └── <ModeSelector/>         ✅ M1  radiogroup, roving tabindex
+        │
+        ├── <WorkspacePlaceholder>      ✅ M1  real layout, no editor yet
+        │   ├── <ErrorBoundary scope="input">     ✅ M1
+        │   │   └── input pane + ECMAScript label ✅ M1
+        │   └── <ErrorBoundary scope="analysis">  ✅ M1
+        │       └── analysis pane                 ✅ M1
+        │
+        └── <StatusBar/>                ✅ M1  polite live region
+```
+
+Header actions (history, theme, help) are **not** rendered at M1. They arrive
+with the features they open (M7, M8, M10). Rendering them now as inert buttons
+would be the disabled-affordance defect the UX spec rules out (§2.1) — a
+control that does nothing reads as broken, not as pending.
+
+### 2.1 Target tree
+
+
+
 ```
 <App>
 └── <ErrorBoundary scope="app">
