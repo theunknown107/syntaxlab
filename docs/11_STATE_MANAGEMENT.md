@@ -33,7 +33,7 @@ This substitution is deliberate and is listed in `22_OPEN_QUESTIONS.md` §3 as a
 | Editor text | Session | `workspaceStore` + CM6 internal | ❌ (except across an SW update) | Needs to survive mode switches and drawer opens |
 | Current mode | Session | `workspaceStore` | ❌ | Ephemeral choice; `regex` or `json` in V1.0 |
 | Regex flags | Session | `workspaceStore` | ⚠️ defaults in settings | Per-analysis, but the default is a preference |
-| Analysis result | Derived | `workspaceStore` | ❌ | Recomputed in ms; storing it invites staleness |
+| Analysis result | Derived | `workspaceStore` | ❌ | Recomputed in ms; storing it invites staleness. M3 measured a typical regex analysis at 0.02–0.06 ms, so recomputation is genuinely cheaper than cache invalidation. |
 | Analysis status | Session | `workspaceStore` | ❌ | idle / parsing / ready / error / timeout |
 | Cursor, selection | Ephemeral | CM6 | ❌ | Belongs to the editor |
 | Tree expansion | Ephemeral | Component | ❌ | Resets per analysis, correctly |

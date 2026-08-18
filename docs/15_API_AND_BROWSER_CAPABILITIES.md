@@ -56,6 +56,14 @@ type WorkerResponse =
   | { id: number; ok: false; error: DomainError };
 ```
 
+**Result validation (added at M3).** The rules below cover requests. Responses
+are validated in both halves: `parseWorkerResponse` checks the envelope, and
+`validateResult` then checks the `result` **against the operation that produced
+it**. Before M3 a successful response reached application state as an
+unvalidated `unknown` behind a TypeScript cast — the type was trusted instead
+of the value. Validated results are also reconstructed field-by-field, so
+unknown wire keys are dropped rather than carried inward.
+
 **Security rules:**
 - The worker **re-validates every payload**; it never trusts the main thread (a compromised main thread is the scenario where this matters)
 - Only structured-clone-safe plain data crosses the boundary

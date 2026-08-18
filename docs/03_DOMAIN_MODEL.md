@@ -163,6 +163,12 @@ type GroupKind =
   | 'modifier';   // (?i:…) — ES2025 modifier groups; parsed, flagged as newer syntax
 ```
 
+**Added at M3: `errors: readonly DomainError[]`.** The parser recovers, so a
+*successful* analysis can still carry syntax errors — one typo in a long
+pattern yields an explanation for the rest, and the UI shows both. An analysis
+fails outright only when nothing useful can be produced (over the length limit,
+or unusable flags).
+
 ### 3.2 Invariants
 
 | # | Invariant | Enforced |

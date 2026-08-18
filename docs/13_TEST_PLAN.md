@@ -94,6 +94,44 @@ The unit suite uses a controllable Worker double: real workers cannot be
 driven deterministically from a unit test, since timing is at the mercy of the
 thread scheduler. Real workers are covered by the E2E matrix above.
 
+### Implemented at M3
+
+| Suite | Count | Status |
+|---|---|---|
+| Unit — tokenizer | 77 | ✅ |
+| Unit — parser | 62 | ✅ |
+| Unit — golden corpus | 170 | ✅ |
+| Unit — edge cases | 61 | ✅ |
+| Unit — differential vs `new RegExp` | 206 | ✅ |
+| Property / fuzz | 19 properties | ✅ |
+| Unit — protocol + client validation | +27 | ✅ |
+| E2E — regex through the worker, ×3 engines | 15 | ✅ |
+| **Total after M3** | **715 unit, 53 E2E** | ✅ |
+
+**Golden corpus: 164 distinct human-reviewed patterns**, organised by grammar
+area — literals, escapes, anchors, dot, character classes (including class
+identity escapes), quantifiers, quantified groups, alternation, groups,
+nesting, lookaround in context, backreferences, Unicode properties, flags,
+astral characters, and realistic patterns. Plus malformed, foreign-dialect,
+and warning cases asserted separately.
+
+**Coverage of `src/domain/regex`: 97.70% statements, 90.85% branch** — above
+the documented ≥95% gate.
+
+**Defects found by these tests during M3** (all fixed, all pinned as
+regressions):
+
+| Found by | Defect |
+|---|---|
+| Differential | `\k<name>` rejected where the engine accepts it (Annex B) |
+| Differential | `[a\-z]` rejected under `/u` |
+| Differential | `\01` accepted under `/u` |
+| Property (span containment) | empty group body anchored outside its parent |
+| Parser unit test | groups reported in completion order, not source order |
+| Golden review | `[\]]` read as "the escape", not as a literal |
+| Golden review | multi-part lookaround body not bracketed, so its extent was ambiguous |
+| Lint (exhaustiveness) | `analysis.regex` case missing from the worker dispatch |
+
 ### Tooling
 
 | Layer | Tool | Why |

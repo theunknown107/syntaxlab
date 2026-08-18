@@ -59,6 +59,14 @@ Dev tooling installed: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/*`,
 
 `npm audit` reports **0 vulnerabilities** at M1.
 
+**M3 added one dev dependency: `fast-check`**, which §3 already approves as
+"the highest-value test dependency in the project". It drives the property and
+differential suites. No runtime dependency was added, and **`regexpp` was not
+adopted**: the escalation path in §6 requires persistent differential
+disagreement first, and the custom parser now agrees with `new RegExp` across
+the whole corpus and fuzz budget (see `04_PARSER_ARCHITECTURE.md` §8.1.1 for
+the four disagreements found and fixed).
+
 **M2 added no dependencies.** The worker boundary is built entirely on
 platform APIs — `Worker`, `postMessage`, `structuredClone`, and `setTimeout`.
 A worker-RPC library (comlink and similar) was considered and rejected: it

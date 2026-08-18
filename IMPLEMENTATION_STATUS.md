@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M2 complete → M3 next (awaiting approval)
+**Current milestone:** M3 complete → M4 next (awaiting approval)
 **Last updated:** 2026-08-18
 
 > Living document, updated at the end of every milestone. The architecture
@@ -28,8 +28,8 @@
 | M0 | Bootstrap planning | ✅ Complete |
 | M1 | Tooling, design tokens, shell | ✅ Complete |
 | M2 | Worker infrastructure | ✅ **Complete** |
-| M3 | Regex domain | ⬜ Next |
-| M4 | Regex UI | ⬜ |
+| M3 | Regex domain | ✅ **Complete** |
+| M4 | Regex UI | ⬜ Next |
 | M5 | JSON domain | ⬜ |
 | M6 | JSON UI | ⬜ |
 | M7 | History and storage | ⬜ |
@@ -170,6 +170,140 @@ rejected — it would abstract away the lifecycle control M2 exists to establish
 
 ---
 
+## M3 — objective and outcome
+
+**Objective:** a complete, correct regex analysis domain — tokenizer, parser,
+explanation tree, warnings — with **no UI and no regex execution**.
+
+**Outcome:** met. All M3 tasks are implemented, plus the M2 security-boundary
+hardening M3 required as its first task. **The R-01 regex checkpoint passed:**
+the hand-written parser agrees with `new RegExp` across the whole corpus and
+the seeded fuzz budget, so `regexpp` was **not** adopted.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
+| Unit tests | ✅ **715 passed** (14 files, +608 from M2) |
+| E2E | ✅ **53 passed** across 4 projects, all three engines |
+| Coverage — `src/domain/regex` | ✅ **97.70% stmt / 90.85% branch** (gate ≥95%) |
+| Production build | ✅ 780 ms |
+| Bundle budget | ✅ 59.54 KB counted JS — entry chunk unchanged at 47.05 KB |
+| `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
+| Banned-API scan | ✅ none |
+
+### First task — M2 security boundary hardening
+
+`parseWorkerResponse` validated the response *envelope*, but a successful
+`result` reached application state as an unvalidated `unknown` behind a
+TypeScript cast — the type was trusted instead of the value. Added
+`RESULT_VALIDATORS` / `RESULT_RECONSTRUCTORS` and `validateResult(op, result)`
+in `protocol.ts`, called from `workerClient.ts`; an unrecognised shape now
+settles as `PROTOCOL` error rather than propagating. Results are also
+reconstructed field-by-field, so unknown wire keys are dropped rather than
+carried inward.
+
+### Built
+
+```
+src/domain/regex/
+  tokenizer.ts   890  single pass over UTF-16 code units, foreign-dialect detection
+  parser.ts      613  recursive descent → RegexNode tree
+  ast.ts         264  discriminated union + RegexAnalysis
+  explain.ts     640  RegexNode → ExplanationNode[] (typed segments, never HTML)
+  warnings.ts    208  ReDoS shapes, footguns, portability notes
+  analyze.ts     133  the single entry point
+  validate.ts    181  runtime shape guard used at the worker boundary
+```
+
+**No `new RegExp` on user input anywhere in M3.** It appears only inside the
+differential *test* suite, as the conformance oracle.
+
+### R-01 regex checkpoint — PASSED
+
+| Evidence | Result |
+|---|---|
+| Differential vs `new RegExp`, curated corpus × 2 flag sets | 174 cases, full agreement |
+| Differential, generated patterns | 6 000 runs, seeded `20260818` |
+| Property — never throws, always terminates, spans well formed | 19 properties |
+| Golden corpus, human-reviewed | **164 distinct patterns**, 170 tests |
+| `regexpp` adoption required? | **No** — the escalation path was not triggered |
+
+**Residual risk stays 🟡.** Agreement on *validity* is established by an
+oracle; explanation *correctness* has no oracle and rests on the reviewed
+golden corpus. R-01's JSON half remains open until M5.
+
+### Parser performance — measured, not estimated
+
+| Case | Median |
+|---|---|
+| Typical short pattern (13 ch) | **0.022 ms** |
+| Typical medium pattern (37 ch) | **0.050 ms** |
+| At the 10 000-character limit | **2.558 ms** |
+| Worst observed — 2 000 unclosed groups | **3.763 ms** |
+| Mixed-corpus throughput | ~117 000 analyses/sec |
+
+Scaling is approximately linear across the valid range (1 000 → 0.41 ms,
+5 000 → 1.27 ms, 10 000 → 2.56 ms). Full table in `docs/12_PERFORMANCE.md`
+§10.4.
+
+### Findings and fixes during M3
+
+**Four ECMAScript conformance bugs, found by differential testing:**
+
+| # | Defect |
+|---|---|
+| 1 | `\k<name>` with no named groups — we rejected; the engine accepts it as an Annex B identity escape |
+| 2 | `[a\-z]` under `/u` — we rejected; `\-` is a valid ClassEscape |
+| 3 | `\01` under `/u` — we accepted; the engine rejects legacy octal |
+| 4 | Empty group body anchored outside its parent span (`a(`) — found by the span-containment property |
+
+**Three implementation defects:**
+
+| Found by | Defect |
+|---|---|
+| Parser unit test | `((a)(b))` reported groups `[2,3,1]` — entries are appended at the closing paren, so they needed sorting by number |
+| Parser unit test | Group depth captured *after* the descent unwound, so every group reported its parent's depth |
+| Lint `switch-exhaustiveness-check` | The `analysis.regex` dispatch case was missing from the worker — it fell through returning `undefined`, surfacing as a bogus TIMEOUT |
+
+**Two explanation-quality defects, found by reading real output as a user
+would:**
+
+| Defect | Fix |
+|---|---|
+| `[\]]` read as *"Matches any of the escape \]"* | `classEscapePhrase()` — now *"a literal ]"* |
+| `(?=.*a)(?=.*b)` ran the assertion body into the following syntax, so its extent was ambiguous | Multi-part assertion bodies are now bracketed |
+
+The last two are the reason the golden corpus is reviewed by hand rather than
+snapshot-generated: a snapshot would have frozen both defects as expected
+output.
+
+### Dependencies added at M3
+
+**One dev dependency: `fast-check`**, which `16_DEPENDENCIES.md` §3 already
+approves. No runtime dependency. **`regexpp` was not installed** — the §6
+escalation path requires persistent differential disagreement, which did not
+occur.
+
+### Known limitations at M3
+
+- **No UI.** The regex feature components, the editor, and the match tester
+  are M4. Nothing in the shell renders an analysis.
+- **No regex execution.** `analyze()` never runs the pattern against a subject;
+  that is M4 and belongs to the execution worker.
+- **Explanations are `ExplanationNode[]`**, never strings. Rendering is M4.
+- **Annex B and strict-unicode divergence** is implemented and reported, but
+  there is no UI affordance to explain it to the user yet.
+- **Deep nesting is capped** and reported as a limit error rather than parsed.
+
+### Deviations at M3
+
+**None.** No task was skipped, deferred, or substituted.
+
+---
+
 ## Dependencies added at M1
 
 **Runtime: 2.** `react` and `react-dom`, both pinned exactly at 18.3.1.
@@ -295,3 +429,4 @@ Violating any of these is a defect, not a shortcut.
 | M0 | n/a | n/a | n/a | n/a | n/a | n/a | Node v22.22.0, npm 10.9.4, git 2.51.1 |
 | M1 | ✅ | ✅ | ✅ 47 | ✅ 7 | ✅ | ✅ 0 vulns | 48.30 KB JS gz — excludes CodeMirror |
 | M2 | ✅ | ✅ | ✅ 107 | ✅ 38 | ✅ | ✅ 0 vulns | R-10 checkpoint passed on Chromium, Firefox, WebKit |
+| M3 | ✅ | ✅ | ✅ 715 | ✅ 53 | ✅ | ✅ 0 vulns | R-01 regex checkpoint passed; `regexpp` not needed; domain coverage 97.70% |

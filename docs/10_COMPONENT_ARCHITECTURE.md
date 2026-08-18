@@ -41,6 +41,9 @@
         └── <StatusBar/>                ✅ M1  polite live region
 ```
 
+M3 added no components either — it is domain and worker work only. The regex
+feature components arrive at M4.
+
 M2 added no components. It added `src/app/devWorkerHarness.ts`, which renders
 nothing: it attaches a control surface to `window` under `import.meta.env.DEV`
 so the E2E suite can drive real workers, and is dropped from production builds.

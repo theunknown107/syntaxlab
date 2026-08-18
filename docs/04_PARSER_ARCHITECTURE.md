@@ -82,6 +82,47 @@ This is a **recognition table, not a second parser.** It adds a small set of pat
 
 ### 2.1 Regex analysis flow
 
+> ✅ **Implemented at M3.** Parsing and explanation only — no `RegExp` is
+> constructed and nothing is executed. Execution is M4.
+
+**The M3 pipeline, as built:**
+
+```mermaid
+flowchart TD
+    A["pattern + flag string"] --> B["checkPatternLength<br/><i>10 000 limit, enforced in the domain</i>"]
+    B -->|over| B1["LIMIT_EXCEEDED"]
+    B -->|ok| C["parseFlags<br/><i>rejects unknown, repeated, u+v</i>"]
+    C -->|invalid| C1["SYNTAX error"]
+    C -->|ok| D["tokenize<br/><i>UTF-16 units, inCharClass context,<br/>Annex B vs /u, foreign-dialect table</i>"]
+    D --> E["parse — recursive descent<br/>alternation → sequence → quantified → atom<br/><i>depth cap 100, error recovery</i>"]
+    E --> F["AST"]
+    F --> G["pass two<br/><i>group numbering, backreference resolution</i>"]
+    G --> H["scanWarnings<br/><i>+ ECMAScript level and notes</i>"]
+    H --> I["explain — AST walk<br/><i>exhaustive switch → ExplanationNode[]</i>"]
+    I --> J["RegexAnalysis<br/><i>ast · tokens · groups · explanation ·<br/>warnings · compatibility · errors</i>"]
+    J --> K["analysis worker response"]
+    K --> L["validateResult<br/><i>runtime check at the boundary</i>"]
+    L -->|invalid| L1["PROTOCOL error"]
+    L -->|ok| M["main thread"]
+
+    B1 --> N["Result.err"]
+    C1 --> N
+
+    classDef danger fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class B1,C1,L1,N danger
+    class F,J,M safe
+```
+
+**Not in this diagram, deliberately:** `RegExp` execution. It runs in the
+disposable worker and arrives at M4.
+
+### 2.1.1 Conceptual flow
+
+The same pipeline expressed as decision points rather than modules. Kept
+because it answers a different question: *what happens to a given input*,
+rather than *which module runs when*.
+
 ```mermaid
 flowchart TD
     A["Pattern + flags"] --> B{"Length ≤ 10 000?"}
@@ -666,6 +707,23 @@ The one unbounded row is regex execution, which is exactly why it lives in a dis
 | Regression fixtures | Every reported parser bug becomes a permanent named case | Bugs found once stay found |
 | Performance | 1 MB JSON in a worker; 10 KB regex parse | No pathological slowdown |
 | Security corpus | Pathological inputs from `13_TEST_PLAN.md` §7 | Hostile input is handled as designed |
+
+### 8.1.1 Conformance findings from M3
+
+Differential testing found four genuine ECMAScript conformance bugs on its
+first runs. Each is now a permanent regression case, and each is a rule that a
+hand-written parser gets wrong by default:
+
+| Input | What we did | What the engine does |
+|---|---|---|
+| `\k<name>` with no named groups | rejected it | accepts it — Annex B makes `\k` an identity escape when the pattern contains no group names at all |
+| `[a\-z]` under `/u` | rejected it | accepts it — `\-` is a valid `ClassEscape` inside a character class |
+| `\01` under `/u` | accepted it | rejects it — a legacy octal escape, which `/u` forbids |
+| `a(` empty group body | produced a span outside its parent | n/a — caught by the span-containment property, not by the engine |
+
+The first three are the reason the differential suite exists: all three look
+correct to a careful reader, and none would have been found by example-based
+tests written from the same understanding that produced the bug.
 
 ### 8.2 What this establishes — and what it does not
 

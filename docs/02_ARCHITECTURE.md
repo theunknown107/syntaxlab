@@ -137,11 +137,12 @@ graph TB
     class Repo,Prefs,WClient,Clip,FileIO,SWReg inf
 ```
 
-> **Diagram status.** This is the **target** architecture for V1.0. As of M1 the
-> presentation and application layers exist, the domain layer exists in outline
-> (`shared/` only), and the worker threads are not yet built — they arrive at M2.
-> Nothing in the diagram has been invalidated by implementation; see §9.1 for
-> what physically exists today.
+> **Diagram status.** This is the **target** architecture for V1.0. As of M3
+> the presentation, application, and infrastructure layers exist, both worker
+> threads are built and verified on three engines, and the domain layer holds
+> `shared/` and a complete `regex/`. Still to come: `json/` (M5), `cron/`
+> (V1.1), and the storage adapters (M7). Nothing in the diagram has been
+> invalidated by implementation; see §9.1 for what physically exists today.
 
 ### Layer contract
 
@@ -554,7 +555,9 @@ src/
 │                          ErrorBoundary, WorkspacePlaceholder
 ├── application/    ✅ M1   stores/ (createStore, workspaceStore)
 ├── components/     ✅ M1   hooks/useStore
-├── domain/         ✅ M1   shared/ (result, limits)
+├── domain/         ✅ M1   shared/ (result, limits, explanation)
+│                  ✅ M3   regex/ (tokenizer, ast, parser, explain,
+│                          warnings, analyze, validate)
 ├── infrastructure/ ✅ M2   workers/ (protocol, workerClient, workers)
 │                          browser/ (capabilities)
 ├── workers/        ✅ M2   analysis.worker.ts, exec.worker.ts
@@ -562,14 +565,12 @@ src/
 ├── App.tsx         ✅ M1
 └── main.tsx        ✅ M1
 
-   domain/regex/    M3
    domain/json/     M5
    features/        M4  regex, then json at M6
    infrastructure/storage/  M7
 ```
 
-`domain/regex/`, `domain/json/`, `features/`, and `infrastructure/storage/` do
-not exist yet. They are created at the milestones listed above.
+`domain/json/`, `features/`, and `infrastructure/storage/` do not exist yet. They are created at the milestones listed above.
 
 ### Why this structure, given the brief warned against elaborate hierarchies
 

@@ -13,7 +13,7 @@
 
 | ID | Risk | Release | L | I | Score | |
 |---|---|---|---|---|---|---|
-| R-01 | Custom parser correctness | V1.0 | 4 | 4 | **16** | 🔴 |
+| R-01 | Custom parser correctness | V1.0 | ~~4~~ 3 | 4 | ~~16~~ **12** | 🟠 **regex half passed M3; JSON half open until M5** |
 | R-03 | Cron timezone/DST correctness | **V1.1** | 3 | 4 | 12 | 🟠 |
 | R-05 | Bundle budget exceeded | V1.0 | 4 | 3 | 12 | 🟠 |
 | R-04 | Explanation quality is mediocre | V1.0 | 3 | 4 | 12 | 🟠 |
@@ -41,7 +41,32 @@
 
 ## 2. Critical
 
-### R-01 — Custom parser correctness 🔴 16 · V1.0
+### R-01 — Custom parser correctness — ✅ **REGEX CHECKPOINT PASSED at M3**
+
+**Regex half verified 2026-08-18.** The M3 risk checkpoint asked whether the
+hand-written parser agrees with the platform. It does, across the corpus and
+the seeded fuzz budget, after four genuine conformance bugs were found and
+fixed (`04_PARSER_ARCHITECTURE.md` §8.1.1).
+
+| Evidence | Result |
+|---|---|
+| Differential vs `new RegExp`, curated corpus × 2 flag sets | 174 cases, full agreement |
+| Differential, generated patterns | 6 000 runs, seeded, full agreement |
+| Property — never throws, always terminates | 1 500 runs × 2 + adversarial set |
+| Golden corpus, human-reviewed | 164 distinct patterns |
+| Coverage of `domain/regex` | 97.70% stmt / 90.85% branch |
+| `regexpp` adoption required? | **No** — the §6 escalation path was not triggered |
+
+**Residual for the regex half: 🟡 8** (L2 × I4). Agreement on *validity* is
+established; explanation *correctness* has no oracle and rests on the reviewed
+golden corpus, so a wording or semantic error remains possible and would be
+caught by review rather than by a test.
+
+**The JSON half of R-01 is still open** and is checkpointed at M5.
+
+---
+
+### R-01 (original) — Custom parser correctness 🔴 16 · V1.0
 
 **Risk.** Two hand-written parsers with subtle edge cases (regex Annex B vs `/u`; JSON lone surrogates and number grammar). A wrong explanation is worse than no explanation, because the user acts on it.
 

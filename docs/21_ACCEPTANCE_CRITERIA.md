@@ -34,8 +34,8 @@
 | R-19 | **PCRE syntax (`(?>…)`, `a*+`, `(?R)`, `\A`) produces a specific "not supported in JavaScript" message** | Unit |
 | R-20 | Engine-compatibility notes are accurate for lookbehind, `\p{}`, and the `v` flag | Unit |
 | R-21 | Examples load a working pattern and a matching test string | E2 |
-| R-22 | Fuzz corpus completes with zero crashes and zero non-termination | Property |
-| R-23 | **Differential: validity verdict matches `new RegExp` on every corpus input** | Property |
+| R-22 | Fuzz corpus completes with zero crashes and zero non-termination | Property — ✅ domain verified at M3 |
+| R-23 | **Differential: validity verdict matches `new RegExp` on every corpus input** | Property — ✅ verified at M3 |
 
 ---
 

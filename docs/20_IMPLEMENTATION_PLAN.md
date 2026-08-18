@@ -108,7 +108,7 @@
 
 ---
 
-### M3 — Regex domain *(2.5–3.5 days)*
+### M3 — Regex domain *(2.5–3.5 days)* — ✅ **COMPLETE**
 
 **Objective:** regex parsing and explanation, fully tested, with no UI at all.
 

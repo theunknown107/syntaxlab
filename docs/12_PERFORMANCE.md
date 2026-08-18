@@ -348,12 +348,50 @@ The last row is the measurement that justifies eager respawn: a lazily created
 replacement would have cost the user a further ~29 ms on top of the 2 s they
 had just waited.
 
-### 10.4 Measurement log
+### 10.4 M3 — regex parser latency
+
+Measured 2026-08-18, Node 22 under Vitest, median of 25 runs per case. These
+are parse + explain only; nothing is executed.
+
+| Case | Input | Median |
+|---|---|---|
+| Typical short — `^[A-Z][a-z]+$` | 13 ch | **0.022 ms** |
+| Typical medium — password rule with lookaheads | 37 ch | **0.050 ms** |
+| Typical long — email shape | 28 ch | **0.030 ms** |
+| URL matcher | 38 ch | 0.054 ms |
+| 100 capture groups | 300 ch | 0.625 ms |
+| Large valid pattern | 1 000 ch | 0.410 ms |
+| Large valid pattern | 5 000 ch | 1.268 ms |
+| **At the 10 000-character limit** | 10 000 ch | **2.558 ms** |
+| Large character class | 1 002 ch | 0.279 ms |
+| Deep nesting, under the cap | 199 ch | 2.941 ms |
+| Deep nesting, over the cap | 1 001 ch | 2.970 ms |
+| **Malformed — 2 000 unclosed groups** | 2 000 ch | **3.763 ms** (worst observed) |
+| Malformed — 2 000 backslashes | 2 000 ch | 0.417 ms |
+| Malformed — 500 unclosed classes | 1 500 ch | 0.576 ms |
+| Adversarial shape `(a+)+$` | 6 ch | 0.008 ms |
+| **Mixed-corpus throughput** | — | **~117 000 analyses/sec** |
+
+**Scaling is approximately linear** across the valid-input range: 1 000 ch →
+0.41 ms, 5 000 ch → 1.27 ms, 10 000 ch → 2.56 ms. No superlinear blow-up
+appears, which is the property that matters — a parser that itself backtracks
+catastrophically would defeat the point of the whole architecture.
+
+**Worst observed case is 3.8 ms**, on deliberately malformed input at the
+practical size limit. That is far below the 100 ms round-trip target in §2.5
+and imperceptible next to the 150–300 ms debounce, so parse latency is not a
+factor in the typing path.
+
+**Not measured here:** regex *execution*, which is M4 and is the only unbounded
+operation in the product (§7 of `04_PARSER_ARCHITECTURE.md`).
+
+### 10.5 Measurement log
 
 | Date | Milestone | Initial JS (gz) | CSS (gz) | Total (gz) | Notes |
 |---|---|---|---|---|---|
 | 2026-08-18 | M1 | 48.30 KB | 3.30 KB | 53.55 KB | Shell only. **No CodeMirror** — see §10.2 |
 | 2026-08-18 | M2 | 49.52 KB | 3.30 KB | 54.78 KB | + worker chunks (separate, not initial) |
+| 2026-08-18 | M3 | 59.54 KB | 3.30 KB | 64.79 KB | Entry chunk **47.05 KB**, unchanged by M3. The +10.64 KB is the analysis-worker chunk, which now carries the regex domain (34.6 KB raw). `check-size.mjs` counts every JS asset toward "initial JS", so the worker chunks are charged to the budget even though the browser fetches them separately — deliberately conservative. |
 | — | M4 | — | — | — | First budget-meaningful measurement |
 
 ---
