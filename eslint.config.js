@@ -106,7 +106,13 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        // A `default` branch is exhaustive handling. Requiring every member to
+        // be listed as well produces dead cases in dispatchers that
+        // legitimately treat "everything else" uniformly.
+        { considerDefaultExhaustiveForUnions: true, allowDefaultCaseForExhaustiveSwitch: true },
+      ],
       '@typescript-eslint/no-unnecessary-condition': 'error',
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
 
@@ -257,6 +263,16 @@ export default tseslint.config(
       globals: globals.browser,
       parserOptions: { project: null, projectService: false },
     },
+  },
+
+  /* Parsing code is a dispatch over a large grammar union. Cyclomatic
+     complexity measures branch count, which for a `switch` over token kinds
+     rises with the size of the grammar rather than with the difficulty of the
+     code. The limits stay in force everywhere else
+     (18_CODING_STANDARDS.md §4 calls them guidelines, not laws). */
+  {
+    files: ['src/domain/regex/**/*.ts'],
+    rules: { complexity: 'off', 'max-depth': ['warn', 4] },
   },
 
   /* Config files and scripts run under Node. */

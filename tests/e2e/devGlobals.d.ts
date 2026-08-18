@@ -6,7 +6,15 @@
  * the declarations do not collide, and the e2e specs get real types instead
  * of `any` — which the strict lint rules require.
  */
+type HarnessOutcome = Promise<{
+  ok: boolean;
+  code?: string;
+  message?: string;
+  value?: unknown;
+}>;
+
 interface SyntaxLabDevHarness {
+  regex: (source: string, flags?: string) => HarnessOutcome;
   ping: () => Promise<{ ok: boolean; code?: string; message?: string; value?: unknown }>;
   echo: (
     text: string,

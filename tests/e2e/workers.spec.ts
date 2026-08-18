@@ -191,3 +191,88 @@ test.describe('capability detection', () => {
     expect(available).toBe(true);
   });
 });
+
+/**
+ * Worker integration — M3.
+ *
+ * Proves the regex domain genuinely runs inside the analysis worker and that
+ * the result survives the structured-clone boundary and the runtime validator
+ * on the way back. No UI is involved.
+ */
+test.describe('regex analysis through the worker', () => {
+  test('returns a validated RegexAnalysis', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.regex('^[A-Z][a-z]+$', ''),
+    );
+
+    expect(outcome.ok).toBe(true);
+    const analysis = outcome.value as {
+      kind: string;
+      source: string;
+      groups: unknown[];
+      explanation: { summary: unknown[] };
+      tokens: unknown[];
+    };
+    expect(analysis.kind).toBe('regex');
+    expect(analysis.source).toBe('^[A-Z][a-z]+$');
+    expect(analysis.tokens.length).toBeGreaterThan(5);
+    expect(analysis.explanation.summary.length).toBeGreaterThan(0);
+  });
+
+  test('numbers capture groups across the boundary', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.regex('(a)(?<mid>b)(c)', ''),
+    );
+
+    const analysis = outcome.value as { groups: { number: number; name?: string }[] };
+    expect(analysis.groups.map((group) => group.number)).toEqual([1, 2, 3]);
+    expect(analysis.groups[1]?.name).toBe('mid');
+  });
+
+  test('reports a foreign dialect with its origin', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.regex(String.raw`(?P<year>\d+)`, ''),
+    );
+
+    const analysis = outcome.value as { errors: { code: string; message: string }[] };
+    expect(analysis.errors.some((error) => error.code === 'UNSUPPORTED')).toBe(true);
+    expect(analysis.errors.some((error) => error.message.includes('Python'))).toBe(true);
+  });
+
+  test('rejects an over-limit pattern in the worker, not only in the UI', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.regex('a'.repeat(10_001), ''),
+    );
+
+    // The worker never trusts its caller: the limit is enforced here even
+    // though the editor will also enforce it.
+    expect(outcome.ok).toBe(false);
+    expect(outcome.code).toBe('DOMAIN');
+    expect(outcome.message).toMatch(/limit/i);
+  });
+
+  test('keeps the analysis worker alive after an execution timeout', async ({ page }) => {
+    test.setTimeout(60_000);
+    await ready(page);
+
+    await page.evaluate(
+      (deadline) => window.__syntaxlabDev!.spin(deadline * 15, deadline),
+      EXEC_DEADLINE_MS,
+    );
+
+    // The isolation invariant, now with real parser state at stake rather
+    // than a stub.
+    const outcome: Outcome = await page.evaluate(() => window.__syntaxlabDev!.regex('(a+)+', ''));
+    expect(outcome.ok).toBe(true);
+    const analysis = outcome.value as { warnings: { code: string }[] };
+    expect(analysis.warnings.some((warning) => warning.code === 'NESTED_QUANTIFIER')).toBe(true);
+  });
+});

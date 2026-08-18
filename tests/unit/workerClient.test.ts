@@ -371,4 +371,50 @@ describe('WorkerClient', () => {
       client.dispose();
     });
   });
+
+  describe('result validation at the boundary', () => {
+    it('settles as PROTOCOL when the worker returns a malformed result', async () => {
+      // The M2 gap: the envelope was checked but the value was not, so a
+      // malformed result reached application state behind a cast.
+      const client = makeClient({ defaultTimeoutMs: 500 });
+      const pending = client.request('analysis.echo', { text: 'x' });
+      const worker = FakeWorker.latest!;
+
+      worker.respond({ id: postedId(worker), ok: true, result: { text: 42, length: 'no' } });
+
+      const result = await pending;
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('PROTOCOL');
+      client.dispose();
+    });
+
+    it('settles as PROTOCOL when a result is missing fields', async () => {
+      const client = makeClient({ defaultTimeoutMs: 500 });
+      const pending = client.request('analysis.ping', { sentAt: 1 });
+      const worker = FakeWorker.latest!;
+
+      worker.respond({ id: postedId(worker), ok: true, result: { pong: true } });
+
+      const result = await pending;
+      if (!result.ok) expect(result.error.code).toBe('PROTOCOL');
+      client.dispose();
+    });
+
+    it('strips unknown keys from a valid result', async () => {
+      const client = makeClient();
+      const pending = client.request('analysis.echo', { text: 'x' });
+      const worker = FakeWorker.latest!;
+
+      worker.respond({
+        id: postedId(worker),
+        ok: true,
+        result: { text: 'x', length: 1, injected: 'nope' },
+      });
+
+      const result = await pending;
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(Object.keys(result.value)).toEqual(['text', 'length']);
+      client.dispose();
+    });
+  });
 });
