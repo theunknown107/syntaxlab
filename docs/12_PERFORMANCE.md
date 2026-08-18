@@ -321,11 +321,39 @@ Read plainly: **48 KB of the budget is spent and the largest item has not arrive
 
 **The budget-critical measurement is M4.** Reporting the M1 number as comfortable would be exactly the estimate-as-evidence error this section exists to prevent. Tracked as **R-05**.
 
-### 10.3 Measurement log
+### 10.3 M2 — worker infrastructure
+
+Bundle impact is negligible: the workers are separate chunks, not part of the
+initial payload.
+
+| Asset | Raw | Gzipped |
+|---|---|---|
+| `assets/index-*.js` (initial, unchanged) | 148.41 KB | 47.05 KB |
+| `assets/analysis.worker-*.js` | 1.44 KB | — |
+| `assets/exec.worker-*.js` | 1.27 KB | — |
+| **Total deployed** | | **54.78 KB** |
+
+Worker timings, Chromium, dev server (unminified — production cold start will
+be lower):
+
+| Measurement | Value | Note |
+|---|---|---|
+| Cold start (first request incl. construction + module load) | **29 ms** | Paid once |
+| Warm round trip, median of 20 | **< 0.1 ms** | |
+| Warm round trip, max of 20 | **0.2 ms** | |
+| Timeout detection and settle (2000 ms deadline) | **2011 ms** | 11 ms overhead |
+| First request after respawn | **7 ms** | vs 29 ms cold — confirms the replacement was already warm |
+
+The last row is the measurement that justifies eager respawn: a lazily created
+replacement would have cost the user a further ~29 ms on top of the 2 s they
+had just waited.
+
+### 10.4 Measurement log
 
 | Date | Milestone | Initial JS (gz) | CSS (gz) | Total (gz) | Notes |
 |---|---|---|---|---|---|
 | 2026-08-18 | M1 | 48.30 KB | 3.30 KB | 53.55 KB | Shell only. **No CodeMirror** — see §10.2 |
+| 2026-08-18 | M2 | 49.52 KB | 3.30 KB | 54.78 KB | + worker chunks (separate, not initial) |
 | — | M4 | — | — | — | First budget-meaningful measurement |
 
 ---

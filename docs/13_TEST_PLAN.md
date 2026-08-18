@@ -66,6 +66,34 @@ WCAG AA contrast (4.19:1 on surfaces against a 4.5:1 requirement). The
 documented value had been calculated by hand and was wrong. See
 `09_DESIGN_SYSTEM.md` §3.4.
 
+### Implemented at M2
+
+| Suite | Count | Status |
+|---|---|---|
+| Unit — protocol validation | 38 | ✅ passing |
+| Unit — WorkerClient lifecycle | 22 | ✅ passing |
+| E2E — real workers, **3 engines** | 10 × 3 = 30 | ✅ passing |
+| **Total after M2** | **107 unit, 38 E2E** | ✅ |
+
+Cross-browser matrix for the R-10 checkpoint:
+
+| Behaviour | Chromium | Firefox | WebKit |
+|---|---|---|---|
+| Worker startup and round trip | ✅ | ✅ | ✅ |
+| Concurrent requests, no crossed responses | ✅ | ✅ | ✅ |
+| Work completes inside the deadline | ✅ | ✅ | ✅ |
+| **Busy loop terminated at the deadline** | ✅ | ✅ | ✅ |
+| **Replacement worker serves the next request** | ✅ | ✅ | ✅ |
+| Settles at the deadline, not after the task | ✅ | ✅ | ✅ |
+| Survives three consecutive timeouts | ✅ | ✅ | ✅ |
+| **Analysis worker survives an execution timeout** | ✅ | ✅ | ✅ |
+| **Main thread interactive while the worker is pinned** | ✅ | ✅ | ✅ |
+| Capability detection reports availability | ✅ | ✅ | ✅ |
+
+The unit suite uses a controllable Worker double: real workers cannot be
+driven deterministically from a unit test, since timing is at the mercy of the
+thread scheduler. Real workers are covered by the E2E matrix above.
+
 ### Tooling
 
 | Layer | Tool | Why |

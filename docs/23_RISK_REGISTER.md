@@ -20,7 +20,7 @@
 | R-02 | Scope/timeline overrun | V1.0 | 3 | 3 | 9 | 🟠 |
 | R-06 | Service-worker bug bricks cached copies | V1.0 | 2 | 5 | 10 | 🟠 |
 | R-07 | Supply-chain compromise | V1.0 | 2 | 5 | 10 | 🟠 |
-| R-10 | Worker termination unreliable | V1.0 | 2 | 5 | 10 | 🟠 |
+| R-10 | Worker termination unreliable | V1.0 | ~~2~~ 1 | 4 | ~~10~~ **4** | 🟡 **checkpoint passed M2** |
 | R-08 | Screen-reader experience unusable in the editor | V1.0 | 3 | 3 | 9 | 🟠 |
 | R-09 | Users store secrets in history | V1.0 | 3 | 3 | 9 | 🟠 |
 | R-19 | V1.0 perceived as incomplete without cron | V1.0 | 3 | 3 | 9 | 🟠 |
@@ -142,13 +142,24 @@ A bad SW persists across reloads; users can be stuck on a broken version.
 
 ---
 
-### R-10 — Worker termination unreliable 🟠 10 · V1.0
+### R-10 — Worker termination unreliable — ✅ **CHECKPOINT PASSED at M2**
 
-If `terminate()` does not promptly stop a running regex on some engine, the entire ReDoS defence fails.
+**Original risk:** if `terminate()` does not promptly stop a running regex on some engine, the entire ReDoS defence fails.
 
-**Mitigations:** verified at **M2, before anything is built on it**; tested on Chromium, Firefox, WebKit; the exec worker is deliberately tiny so termination has nothing to clean up.
+**Verified 2026-08-18.** An execution worker was pinned by a busy loop (a thread that genuinely cannot yield or process messages — the same condition catastrophic backtracking produces), timed out at a 2 s deadline, terminated, and respawned. Confirmed on **Chromium, Firefox, and WebKit**:
 
-**Contingency:** **stop and escalate.** The alternatives (RE2 via WASM, static analysis only, disabling the tester on the affected browser) are architectural decisions, not quick fixes.
+| Assertion | Result |
+|---|---|
+| Caller settles at the deadline, not after the task | ✅ 2011 ms against a 2000 ms deadline |
+| Worker terminated | ✅ all three engines |
+| Replacement serves the next request | ✅ 7 ms (warm) |
+| Survives three consecutive timeouts | ✅ all three engines |
+| Analysis worker unaffected — still `ready` | ✅ all three engines |
+| Main thread interactive while pinned | ✅ a real control was clicked and responded |
+
+**Residual score: 🟡 4** (L1 × I4). The mechanism is proven on all target engines. What remains is that a future browser change could regress it, which the E2E matrix would catch — it runs on every CI pass.
+
+**Still true:** termination is the *only* reliable stop. The static nested-quantifier warning planned for M3 remains a heuristic with false negatives and is never presented as a safety guarantee.
 
 ---
 

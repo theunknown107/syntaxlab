@@ -59,6 +59,12 @@ Dev tooling installed: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/*`,
 
 `npm audit` reports **0 vulnerabilities** at M1.
 
+**M2 added no dependencies.** The worker boundary is built entirely on
+platform APIs — `Worker`, `postMessage`, `structuredClone`, and `setTimeout`.
+A worker-RPC library (comlink and similar) was considered and rejected: it
+would abstract away exactly the lifecycle control M2 exists to establish, and
+terminate-and-respawn is not something a general-purpose RPC layer models.
+
 **Not installed, deliberately:** no state library, no router, no UI kit, no icon
 library, no animation library, no date library, no validation library, and
 **no CodeMirror** — that arrives at M4 with the editor.

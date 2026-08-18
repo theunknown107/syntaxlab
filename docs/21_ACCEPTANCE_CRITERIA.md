@@ -23,8 +23,8 @@
 | R-8 | Test strings produce highlighted matches at correct offsets | I3 |
 | R-9 | Capture groups show correct numbers, names, and values | Unit + I3 |
 | R-10 | **`(a+)+$` against 40 `a`s + `!` produces a timeout state within ~2.5 s** | I4, E12 |
-| R-11 | **The main thread stays responsive during a catastrophic execution** (a click is handled) | E12 |
-| R-12 | After a timeout the worker respawns and the next test succeeds | I4 |
+| R-11 | **The main thread stays responsive during a catastrophic execution** (a click is handled) | E12 — ✅ infrastructure verified at M2 on 3 engines |
+| R-12 | After a timeout the worker respawns and the next test succeeds | I4 — ✅ infrastructure verified at M2 on 3 engines |
 | R-13 | Match count is capped at 10 000 and truncation is stated | Unit |
 | R-14 | Zero-length global matches do not loop infinitely | Unit |
 | R-15 | Patterns over 10 000 chars are rejected before parsing | Security §7.4 |

@@ -16,7 +16,7 @@ The brief asks this document to define "server/cache/local state boundaries". **
 |---|---|---|
 | **Domain state** | The parsed result of an analysis: AST/CST, explanation, warnings. Produced by the domain layer in a worker; **never persisted**; recomputed from input. | `workspaceStore.result` |
 | **UI state** | What the interface is currently showing: open drawers, expanded tree nodes, hovered spans, toasts, cursor position. Disposable. | React local state + `uiStore` |
-| **Transient worker state** | In-flight request ids, deadline timers, worker readiness. Not application state at all — an infrastructure detail. | `WorkerClient` internals |
+| **Transient worker state** | In-flight request ids, deadline timers, worker readiness. Not application state at all — an infrastructure detail. ✅ Implemented at M2: `pending` map, per-request timers, and lifecycle status live entirely inside `WorkerClient` and are never mirrored into a store. | `WorkerClient` internals |
 | **Persistent history** | Analysis inputs and metadata. Survives reload. | IndexedDB via `historyStore` |
 | **Theme and settings** | Small preference data, read synchronously before first paint. | localStorage via `themeStore` / `settingsStore` |
 

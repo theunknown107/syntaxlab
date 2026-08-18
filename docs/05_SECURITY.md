@@ -212,8 +212,8 @@ A user (or someone who sent them a share link) supplies a pattern like `(a+)+$` 
 
 | # | Control | Reliability |
 |---|---|---|
-| 1 | **Execution in a dedicated worker** | Absolute — the main thread is never the one blocked |
-| 2 | **2 s deadline + `worker.terminate()`** | Absolute — thread destruction is the only interrupt JS regex offers |
+| 1 | **Execution in a dedicated worker** | ✅ Implemented and verified at M2 on three engines — the main thread is never the one blocked |
+| 2 | **2 s deadline + `worker.terminate()`** | ✅ Implemented and verified at M2 on three engines. Thread destruction is the only interrupt JS regex offers, and it was proven against a thread that genuinely cannot yield |
 | 3 | Eager respawn of the execution worker | Keeps the feature usable after a timeout |
 | 4 | Test-subject length cap (1 MB) | Reduces the input side of the blowup |
 | 5 | Match-count cap (10 000) | Prevents memory exhaustion from a million match objects |

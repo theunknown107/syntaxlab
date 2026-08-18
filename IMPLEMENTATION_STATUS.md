@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M1 complete → M2 next (awaiting approval)
+**Current milestone:** M2 complete → M3 next (awaiting approval)
 **Last updated:** 2026-08-18
 
 > Living document, updated at the end of every milestone. The architecture
@@ -26,9 +26,9 @@
 | # | Milestone | Status |
 |---|---|---|
 | M0 | Bootstrap planning | ✅ Complete |
-| M1 | Tooling, design tokens, shell | ✅ **Complete** |
-| M2 | Worker infrastructure | ⬜ Next |
-| M3 | Regex domain | ⬜ |
+| M1 | Tooling, design tokens, shell | ✅ Complete |
+| M2 | Worker infrastructure | ✅ **Complete** |
+| M3 | Regex domain | ⬜ Next |
 | M4 | Regex UI | ⬜ |
 | M5 | JSON domain | ⬜ |
 | M6 | JSON UI | ⬜ |
@@ -80,6 +80,93 @@ Budget: target ≤ 170 KB, hard 200 KB. **Currently 48.30 KB initial JS.**
 > M4. Roughly 122 KB of target headroom remains against a ~150 KB estimate.
 > **The budget-critical measurement is M4.** Recorded in
 > `docs/12_PERFORMANCE.md` §10.2 and tracked as risk R-05.
+
+---
+
+## M2 — objective and outcome
+
+**Objective:** the async computation boundary exists and is proven safe before
+any parser is written against it.
+
+**Outcome:** met, including the **R-10 risk checkpoint on all three engines**.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean |
+| Unit tests | ✅ **107 passed** (8 files, +60 from M2) |
+| E2E | ✅ **38 passed** across 4 projects |
+| Production build | ✅ 722 ms |
+| Bundle budget | ✅ 49.52 KB initial JS |
+| `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
+| Banned-API scan | ✅ none |
+
+### R-10 risk checkpoint — PASSED
+
+An execution worker was pinned by a busy loop — a thread that genuinely cannot
+yield or process messages, which is the condition catastrophic backtracking
+creates — then timed out, terminated, and respawned.
+
+| Assertion | Chromium | Firefox | WebKit |
+|---|---|---|---|
+| Terminated at the deadline | ✅ | ✅ | ✅ |
+| Replacement serves the next request | ✅ | ✅ | ✅ |
+| Settles at the deadline, not after the task | ✅ | ✅ | ✅ |
+| Survives three consecutive timeouts | ✅ | ✅ | ✅ |
+| **Analysis worker unaffected, still `ready`** | ✅ | ✅ | ✅ |
+| **Main thread interactive while pinned** | ✅ | ✅ | ✅ |
+
+**All three browsers ran locally.** No engine is reported as untested.
+
+### Worker measurements (Chromium, dev server)
+
+| Measurement | Value |
+|---|---|
+| Cold start (construction + module load) | 29 ms |
+| Warm round trip (median / max of 20) | < 0.1 ms / 0.2 ms |
+| Timeout settle against a 2000 ms deadline | 2011 ms |
+| First request after respawn | **7 ms** vs 29 ms cold |
+
+The last row is the evidence for eager respawn: a lazily created replacement
+would have cost the user another ~29 ms after already waiting 2 s.
+
+### Architecture built
+
+```
+Main thread ── WorkerClient ─┬─ Analysis worker   long-lived,  timeout ≠ terminate
+                             └─ Exec worker       disposable,  timeout → terminate + respawn
+```
+
+Both clients are the same class with different lifecycle policies, because the
+only real difference is what a deadline does.
+
+### Dependencies added at M2
+
+**None.** Built entirely on platform APIs: `Worker`, `postMessage`,
+`structuredClone`, `setTimeout`. A worker-RPC library was considered and
+rejected — it would abstract away the lifecycle control M2 exists to establish.
+
+### Deviations at M2
+
+| # | Deviation | Reason |
+|---|---|---|
+| D4 | **A development-only worker harness was added** (`src/app/devWorkerHarness.ts`) | M2 has no product surface that triggers a timeout — the regex tester is M4 — but R-10 had to be proven in real browsers now. Guarded by `import.meta.env.DEV`, dropped by the minifier, and `shell.spec.ts` asserts it is absent from the production bundle. |
+| D5 | **Playwright now runs two servers** | Worker specs need the dev-only harness, so they run against the dev server; shell specs stay on the production build, where the CSP and chunking exist. |
+
+### Known limitations at M2
+
+- The analysis worker's operations are **stubs** (`ping`, `echo`). They prove
+  the boundary and are labelled as such; real parsing arrives at M3 and M5.
+- `exec.spin` is an infrastructure test primitive, never exposed in the UI.
+- Workers are **not yet used by the application**. Nothing in the shell calls
+  them, so the production build ships the chunks but never fetches them. That
+  changes at M4.
+- Capability detection checks for `Worker` presence; genuine construction
+  failure is handled by `WorkerClient.start()` returning `UNAVAILABLE`. The
+  reduced-safety UI indicator is wired at M4, when there is a feature to
+  disable.
 
 ---
 
@@ -207,3 +294,4 @@ Violating any of these is a defect, not a shortcut.
 |---|---|---|---|---|---|---|---|
 | M0 | n/a | n/a | n/a | n/a | n/a | n/a | Node v22.22.0, npm 10.9.4, git 2.51.1 |
 | M1 | ✅ | ✅ | ✅ 47 | ✅ 7 | ✅ | ✅ 0 vulns | 48.30 KB JS gz — excludes CodeMirror |
+| M2 | ✅ | ✅ | ✅ 107 | ✅ 38 | ✅ | ✅ 0 vulns | R-10 checkpoint passed on Chromium, Firefox, WebKit |

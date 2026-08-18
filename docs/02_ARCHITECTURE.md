@@ -237,7 +237,99 @@ graph TB
 
 **Invariant (security and performance).** A regex execution timeout must never destroy unrelated parser state. This is why the two workers are separate rather than one, and it is a hard architectural rule, not a convenience: terminating a combined worker would discard warm module state and any in-flight unrelated parse, turning a contained ReDoS event into a broader failure.
 
+> ✅ **Implemented and verified at M2.** The invariant is asserted directly: an
+> execution worker is pinned by a busy loop, timed out, terminated, and
+> respawned, after which the analysis worker still reports `ready` and serves a
+> request correctly. Verified on **Chromium, Firefox, and WebKit**
+> (`tests/e2e/workers.spec.ts`).
+
 **Corollary:** regex execution never runs on the main thread. If workers are unavailable, the tester is disabled rather than relocated (§4.4).
+
+### 4.3.1 Request lifecycle — the four paths
+
+Four diagrams rather than one, because these are four different questions and
+a combined diagram answers none of them clearly.
+
+**① Normal request.** The common case: correlate by id, settle, clear the timer.
+
+```mermaid
+sequenceDiagram
+    participant UI as Caller
+    participant WC as WorkerClient
+    participant W as Worker
+
+    UI->>WC: request(op, payload)
+    WC->>WC: id = next++, start deadline timer
+    WC->>W: postMessage {id, op, payload}
+    W->>W: validate payload (never trusts caller)
+    W-->>WC: {id, ok:true, result}
+    WC->>WC: id is pending? yes → clear timer, delete entry
+    WC-->>UI: Result.ok(result)
+```
+
+**② Supersession.** A newer request for the same key retires the older one, so
+a slow earlier response can never overwrite a newer result.
+
+```mermaid
+sequenceDiagram
+    participant UI as Caller
+    participant WC as WorkerClient
+    participant W as Worker
+
+    UI->>WC: request(A, supersedeKey:"analyze")
+    WC->>W: postMessage {id:1}
+    UI->>WC: request(B, supersedeKey:"analyze")
+    WC->>WC: settle id:1 → SUPERSEDED, clear its timer
+    WC-->>UI: Result.err(SUPERSEDED) for A
+    WC->>W: postMessage {id:2}
+    W-->>WC: {id:1, ok:true, ...} (A finally finished)
+    WC->>WC: id:1 not pending → DISCARD
+    W-->>WC: {id:2, ok:true, result}
+    WC-->>UI: Result.ok(result) for B
+```
+
+**③ Timeout, termination, respawn.** The disposable policy. The worker cannot
+be asked to stop, so the thread is destroyed.
+
+```mermaid
+sequenceDiagram
+    participant UI as Caller
+    participant WC as WorkerClient
+    participant X1 as Exec worker (original)
+    participant X2 as Exec worker (replacement)
+
+    UI->>WC: request(exec, deadline 2000ms)
+    WC->>X1: postMessage {id}
+    X1->>X1: busy — cannot process messages, cannot yield
+    Note over WC: deadline expires
+    WC-->>UI: Result.err(TIMEOUT)
+    WC->>WC: settle siblings → TERMINATED (collateral, not timed out)
+    WC->>X1: terminate()
+    Note right of X1: thread destroyed — the only reliable stop
+    WC->>X2: construct eagerly
+    UI->>WC: next request
+    WC->>X2: postMessage {id}
+    X2-->>WC: {id, ok:true, result}
+    WC-->>UI: Result.ok(result)
+```
+
+**④ Stale and malformed responses.** Neither can reach application state.
+
+```mermaid
+flowchart TD
+    A["message arrives"] --> B{"parses as a<br/>WorkerResponse?"}
+    B -->|no| C["DISCARD<br/><i>caller settles on its deadline</i>"]
+    B -->|yes| D{"id currently pending?"}
+    D -->|"no — superseded,<br/>timed out, or already settled"| E["DISCARD"]
+    D -->|yes| F{"ok?"}
+    F -->|true| G["settle Result.ok(result)"]
+    F -->|false| H["settle Result.err(DOMAIN, cause)"]
+
+    classDef drop fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef good fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class C,E drop
+    class G,H good
+```
 
 ### 4.4 Two workers, not one — and why
 
@@ -463,17 +555,21 @@ src/
 ├── application/    ✅ M1   stores/ (createStore, workspaceStore)
 ├── components/     ✅ M1   hooks/useStore
 ├── domain/         ✅ M1   shared/ (result, limits)
+├── infrastructure/ ✅ M2   workers/ (protocol, workerClient, workers)
+│                          browser/ (capabilities)
+├── workers/        ✅ M2   analysis.worker.ts, exec.worker.ts
 ├── styles/         ✅ M1   tokens.css, reset.css, global.css
 ├── App.tsx         ✅ M1
 └── main.tsx        ✅ M1
 
-   infrastructure/  M2  worker client, then storage at M7
-   workers/         M2  analysis + exec entry points
+   domain/regex/    M3
+   domain/json/     M5
    features/        M4  regex, then json at M6
+   infrastructure/storage/  M7
 ```
 
-`domain/regex/`, `domain/json/`, `features/`, `infrastructure/`, and `workers/`
-do not exist yet. They are created at the milestones listed above.
+`domain/regex/`, `domain/json/`, `features/`, and `infrastructure/storage/` do
+not exist yet. They are created at the milestones listed above.
 
 ### Why this structure, given the brief warned against elaborate hierarchies
 

@@ -62,6 +62,16 @@ type WorkerResponse =
 - No worker is constructed from a `blob:` URL or a string
 - Errors inside a worker are caught at the top level and returned as `INTERNAL` errors; an uncaught throw would kill the worker silently
 
+**Client-side errors (added at M2).** The wire protocol above carries
+`DomainError`, which describes failures the worker reports *about the input*.
+Conditions the client detects — `TIMEOUT`, `SUPERSEDED`, `UNAVAILABLE`,
+`TERMINATED`, `PROTOCOL` — never cross the wire, because a timed-out worker
+sends nothing by definition. They are therefore a separate `WorkerError` type
+at the infrastructure layer, so the domain never grows codes describing
+transport problems it has no opinion about. `WorkerClient.request()` returns
+`Result<T, WorkerError>`; a worker-reported `DomainError` arrives wrapped as
+code `DOMAIN` with the original in `cause`.
+
 **Timeout and termination:** only the execution worker is terminated (`04_PARSER_ARCHITECTURE.md` §2.6). The analysis worker runs our own provably-terminating code and has never a reason to be killed — if it ever needs killing, that is a bug to fix, not a behaviour to design around.
 
 **Fallback:** `typeof Worker === 'undefined'` or construction throwing → main-thread parsing with a 64 KB limit, a visible "reduced-safety mode" indicator, and **regex execution disabled entirely**. We do not run uninterruptible foreign code on the thread that owns the UI.

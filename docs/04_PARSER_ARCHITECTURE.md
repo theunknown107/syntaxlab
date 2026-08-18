@@ -244,6 +244,11 @@ flowchart LR
     class E1,E2,E3,KILL danger
 ```
 
+> ✅ **The boundary in this diagram was built and verified at M2**, before any
+> parser was written against it. What M4 adds is the `RegExp` call inside the
+> execution worker; the correlation, deadline, termination, and respawn
+> machinery around it already exists and is tested on three engines.
+
 **Invariants this diagram encodes:**
 
 1. **User regex never executes on the main thread.** If workers are unavailable, the tester is disabled — not relocated (`02_ARCHITECTURE.md` §4.5).

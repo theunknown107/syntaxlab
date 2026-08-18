@@ -41,6 +41,10 @@
         └── <StatusBar/>                ✅ M1  polite live region
 ```
 
+M2 added no components. It added `src/app/devWorkerHarness.ts`, which renders
+nothing: it attaches a control surface to `window` under `import.meta.env.DEV`
+so the E2E suite can drive real workers, and is dropped from production builds.
+
 Header actions (history, theme, help) are **not** rendered at M1. They arrive
 with the features they open (M7, M8, M10). Rendering them now as inert buttons
 would be the disabled-affordance defect the UX spec rules out (§2.1) — a
