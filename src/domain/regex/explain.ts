@@ -129,15 +129,18 @@ function summarise(node: RegexNode, context: ExplainContext): ExplanationNode[] 
 
     case 'Group': {
       const body = summarise(node.body, context);
+      // A multi-part assertion body is bracketed so its extent is unambiguous:
+      // without it, `(?=.*a)b` reads as though the assertion swallowed `b`.
+      const assertionBody = isCompound(node.body) ? [text('['), ...body, text(']')] : body;
       switch (node.groupKind) {
         case 'lookahead':
-          return [text('a position followed by '), ...body];
+          return [text('a position followed by '), ...assertionBody];
         case 'negativeLookahead':
-          return [text('a position '), emphasis('not'), text(' followed by '), ...body];
+          return [text('a position '), emphasis('not'), text(' followed by '), ...assertionBody];
         case 'lookbehind':
-          return [text('a position preceded by '), ...body];
+          return [text('a position preceded by '), ...assertionBody];
         case 'negativeLookbehind':
-          return [text('a position '), emphasis('not'), text(' preceded by '), ...body];
+          return [text('a position '), emphasis('not'), text(' preceded by '), ...assertionBody];
         case 'named':
           return [
             text('a captured group named '),
@@ -189,7 +192,7 @@ function summariseClassItem(item: CharClassItem): ExplanationNode[] {
     case 'range':
       return [code(item.from.raw), text(' to '), code(item.to.raw)];
     case 'escape':
-      return [text(shorthandPhrase(item.raw))];
+      return [text(classEscapePhrase(item.escape, item.raw))];
     case 'property':
       return [text('characters with the property '), code(item.property)];
     default:
@@ -290,6 +293,35 @@ function shorthandPhrase(raw: string): string {
       return `the escape ${raw}`;
   }
 }
+
+/**
+ * How an escape reads *inside a character class*.
+ *
+ * Only shorthand classes keep their class meaning there. `\\]`, `\\^`, and `\\-`
+ * are identity escapes for the literal character, and calling them "the
+ * escape" told the user nothing they could act on.
+ */
+function classEscapePhrase(kind: string, raw: string): string {
+  if (kind === 'shorthand') return shorthandPhrase(raw);
+  const escaped = raw.slice(1);
+  if (kind === 'identity') return `a literal ${escaped}`;
+  if (kind === 'control') return controlName(CONTROL_VALUES[escaped] ?? '');
+  if (kind === 'hex' || kind === 'unicode' || kind === 'controlLetter') {
+    return `the character ${raw}`;
+  }
+  return `the escape ${raw}`;
+}
+
+/** Decoded values for the control escapes, so a class item can name them. */
+const CONTROL_VALUES: Readonly<Record<string, string>> = {
+  n: '\n',
+  r: '\r',
+  t: '\t',
+  f: '\f',
+  v: '\v',
+  b: '\b',
+  '0': '\0',
+};
 
 function escapePhrase(kind: string, raw: string, value: string): string {
   switch (kind) {

@@ -439,22 +439,19 @@ export function parsePattern(source: string, flags: RegexFlags): ParseResult {
             raw: toToken.raw,
             span: toToken.span,
           };
-          if (from.value.codePointAt(0) !== undefined && to.value.codePointAt(0) !== undefined) {
-            const fromCode = from.value.codePointAt(0) ?? 0;
-            const toCode = to.value.codePointAt(0) ?? 0;
-            if (fromCode > toCode) {
-              errors.push(
-                domainError('SYNTAX', `Character range \`${from.raw}-${to.raw}\` is backwards.`, {
-                  span: {
-                    start: from.span.start,
-                    end: to.span.end,
-                    line: from.span.line,
-                    column: from.span.column,
-                  },
-                  hint: 'The first character must not come after the second.',
-                }),
-              );
-            }
+          // Both values are non-empty, so `?? 0` is unreachable in practice.
+          if ((from.value.codePointAt(0) ?? 0) > (to.value.codePointAt(0) ?? 0)) {
+            errors.push(
+              domainError('SYNTAX', `Character range \`${from.raw}-${to.raw}\` is backwards.`, {
+                span: {
+                  start: from.span.start,
+                  end: to.span.end,
+                  line: from.span.line,
+                  column: from.span.column,
+                },
+                hint: 'The first character must not come after the second.',
+              }),
+            );
           }
           items.push({
             kind: 'range',
