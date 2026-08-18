@@ -225,6 +225,186 @@ runCases('golden — realistic patterns', [
   },
 ]);
 
+/* ---------------- nesting and structure ---------------- */
+
+runCases('golden — nesting', [
+  {
+    pattern: '((a))',
+    summary:
+      'Matches a captured group (number 1) containing a captured group (number 2) containing the character a.',
+  },
+  {
+    pattern: '(a(b))',
+    summary:
+      'Matches a captured group (number 1) containing the character a, then a captured group (number 2) containing the character b.',
+  },
+  {
+    pattern: '(?:(a)|(b))',
+    summary:
+      'Matches either a captured group (number 1) containing the character a, or a captured group (number 2) containing the character b.',
+  },
+  {
+    pattern: '(a)|(b)|(c)',
+    summary:
+      'Matches either a captured group (number 1) containing the character a, a captured group (number 2) containing the character b, or a captured group (number 3) containing the character c.',
+  },
+  {
+    // Non-capturing groups add no wording of their own, so deep nesting of
+    // them must read as a plain sequence rather than as three nested clauses.
+    pattern: '(?:a(?:b(?:c)))',
+    summary: 'Matches the character a, then the character b, then the character c.',
+  },
+]);
+
+/* ---------------- quantified groups ---------------- */
+
+runCases('golden — quantified groups', [
+  {
+    pattern: '(ab)*',
+    summary:
+      'Matches zero or more repetitions of [a captured group (number 1) containing the character a, then the character b].',
+  },
+  {
+    pattern: '(a|b){2}',
+    summary:
+      'Matches exactly 2 repetitions of [a captured group (number 1) containing either the character a, or the character b].',
+  },
+  {
+    pattern: '(\\d+)?',
+    summary: 'Matches optionally a captured group (number 1) containing one or more digits.',
+  },
+  { pattern: '[a-z]{1,3}', summary: 'Matches between 1 and 3 characters from a to z.' },
+  { pattern: 'a{0,1}', summary: 'Matches optionally the character a.' },
+  { pattern: '[A-Z]{2,}', summary: 'Matches 2 or more characters from A to Z.' },
+]);
+
+/* ---------------- lookaround in context ---------------- */
+
+runCases('golden — lookaround in context', [
+  {
+    pattern: '(?=\\d)a',
+    summary: 'Matches a position followed by a digit, then the character a.',
+  },
+  {
+    pattern: 'a(?!\\d)',
+    summary: 'Matches the character a, then a position not followed by a digit.',
+  },
+  {
+    pattern: '(?<=x)y',
+    summary: 'Matches a position preceded by the character x, then the character y.',
+  },
+  {
+    pattern: '(?<!x)y',
+    summary: 'Matches a position not preceded by the character x, then the character y.',
+  },
+  {
+    // A multi-part assertion body is bracketed, or where the assertion ends
+    // would be ambiguous.
+    pattern: '(?=.*a)(?=.*b)',
+    summary:
+      'Matches a position followed by [zero or more characters other than line breaks, then the character a], then a position followed by [zero or more characters other than line breaks, then the character b].',
+  },
+]);
+
+/* ---------------- more character classes ---------------- */
+
+runCases('golden — character class detail', [
+  {
+    pattern: '[\\w-]',
+    summary: 'Matches any of a word character (letter, digit, or underscore), or -.',
+  },
+  { pattern: '[^\\s]', summary: 'Matches any character except a whitespace character.' },
+  { pattern: '[a-z0-9_]', summary: 'Matches any of a to z, 0 to 9, or _.' },
+  // Inside a class these are identity escapes for the literal character, not
+  // class shorthands — naming them "the escape" told the user nothing.
+  { pattern: '[\\]]', summary: 'Matches any of a literal ].' },
+  { pattern: '[\\^]', summary: 'Matches any of a literal ^.' },
+  { pattern: '[0-9a-fA-F]', summary: 'Matches any of 0 to 9, a to f, or A to F.' },
+]);
+
+/* ---------------- more escapes ---------------- */
+
+runCases('golden — escape detail', [
+  { pattern: '\\/', summary: 'Matches a literal /.' },
+  { pattern: '\\*', summary: 'Matches a literal *.' },
+  { pattern: '\\(', summary: 'Matches a literal (.' },
+  { pattern: '\\[', summary: 'Matches a literal [.' },
+  { pattern: '\\v', summary: 'Matches a vertical tab.' },
+  { pattern: '\\f', summary: 'Matches a form feed.' },
+]);
+
+/* ---------------- flags change meaning ---------------- */
+
+runCases('golden — flags', [
+  {
+    pattern: 'abc',
+    flags: 'i',
+    summary: 'Matches the character a, the character b, then the character c.',
+  },
+  {
+    // The `s` flag changes what `.` means; stating only the default would be
+    // actively wrong here.
+    pattern: 'a.b',
+    flags: 's',
+    summary: 'Matches the character a, any character, including line breaks, then the character b.',
+  },
+  {
+    pattern: '^a',
+    flags: 'gm',
+    summary: 'Matches the start of the string or of any line, then the character a.',
+  },
+  { pattern: 'a', flags: 'y', summary: 'Matches the character a.' },
+  { pattern: 'a', flags: 'd', summary: 'Matches the character a.' },
+]);
+
+/* ---------------- more realistic patterns ---------------- */
+
+runCases('golden — realistic patterns II', [
+  {
+    pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+    summary:
+      'Matches the start of the string, exactly 4 digits, the character -, exactly 2 digits, the character -, exactly 2 digits, then the end of the string.',
+  },
+  {
+    pattern: '#[0-9a-f]{6}',
+    flags: 'i',
+    summary: 'Matches the character #, then exactly 6 characters from 0 to 9, or a to f.',
+  },
+  {
+    pattern: '\\bword\\b',
+    summary:
+      'Matches a word boundary, the character w, the character o, the character r, the character d, then a word boundary.',
+  },
+  {
+    pattern: '^\\s+|\\s+$',
+    summary:
+      'Matches either the start of the string, then one or more whitespace characters, or one or more whitespace characters, then the end of the string.',
+  },
+  {
+    pattern: '(\\w)\\1',
+    summary:
+      'Matches a captured group (number 1) containing a word character (letter, digit, or underscore), then the same text captured by group 1.',
+  },
+  {
+    pattern: '^.{0,10}$',
+    summary:
+      'Matches the start of the string, between 0 and 10 characters other than line breaks, then the end of the string.',
+  },
+]);
+
+/* ---------------- astral characters ----------------
+ * A code-unit/code-point mixup would surface here first.
+ * ------------------------------------------------- */
+
+runCases('golden — astral characters', [
+  { pattern: '\u{1F600}+', summary: 'Matches one or more of the character \u{1F600}.' },
+  {
+    pattern: '[\u{1F600}-\u{1F61C}]',
+    flags: 'u',
+    summary: 'Matches any of \u{1F600} to \u{1F61C}.',
+  },
+]);
+
 /* ---------------- structural assertions ----------------
  * Beyond exact wording, these assert properties the summary must have for
  * any input — the things a reviewer would check but that are cheap to
