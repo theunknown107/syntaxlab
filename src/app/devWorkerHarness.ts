@@ -38,6 +38,7 @@ declare global {
     __syntaxlabDev?: {
       ping: () => Promise<HarnessOutcome>;
       echo: (text: string) => Promise<HarnessOutcome>;
+      regex: (source: string, flags?: string) => Promise<HarnessOutcome>;
       spin: (durationMs: number, timeoutMs?: number) => Promise<HarnessOutcome>;
       execStatus: () => string;
       analysisStatus: () => string;
@@ -65,6 +66,9 @@ export function installDevWorkerHarness(): void {
 
     echo: async (text: string) =>
       toOutcome(await getAnalysisClient().request('analysis.echo', { text })),
+
+    regex: async (source: string, flags = '') =>
+      toOutcome(await getAnalysisClient().request('analysis.regex', { source, flags })),
 
     spin: async (durationMs: number, timeoutMs?: number) =>
       toOutcome(

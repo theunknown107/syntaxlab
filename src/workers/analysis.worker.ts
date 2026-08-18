@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { domainError, truncateForMessage } from '@/domain/shared/result';
+import { analyzeRegex } from '@/domain/regex/analyze';
 import {
   describeRequestRejection,
   isAnalysisOp,
@@ -8,6 +9,7 @@ import {
   type AnalysisEchoResult,
   type AnalysisPingPayload,
   type AnalysisPingResult,
+  type AnalysisRegexPayload,
   type AnalysisRequest,
   type WorkerResponse,
 } from '@/infrastructure/workers/protocol';
@@ -50,13 +52,32 @@ function handleEcho(payload: AnalysisEchoPayload): AnalysisEchoResult {
   return { text: payload.text, length: payload.text.length };
 }
 
+/**
+ * Regex parsing and explanation.
+ *
+ * The worker re-validates limits and flags itself rather than trusting the
+ * caller: a compromised main thread is exactly the case where trusting the
+ * sender would be wrong (05_SECURITY.md §6).
+ */
+function handleRegex(id: number, payload: AnalysisRegexPayload): WorkerResponse {
+  const result = analyzeRegex({ source: payload.source, flags: payload.flags });
+  return result.ok
+    ? { id, ok: true, result: result.value }
+    : { id, ok: false, error: result.error };
+}
+
 function dispatch(request: AnalysisRequest): WorkerResponse {
+  // Exhaustive by design: adding an operation without handling it is a lint
+  // error. That rule is what caught this case being missing during M3.
   switch (request.op) {
     case 'analysis.ping':
       return { id: request.id, ok: true, result: handlePing(request.payload) };
 
     case 'analysis.echo':
       return { id: request.id, ok: true, result: handleEcho(request.payload) };
+
+    case 'analysis.regex':
+      return handleRegex(request.id, request.payload);
   }
 }
 
