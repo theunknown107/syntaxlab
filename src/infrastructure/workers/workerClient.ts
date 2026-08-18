@@ -1,6 +1,7 @@
 import { err, ok, type Result } from '@/domain/shared/result';
 import {
   parseWorkerResponse,
+  validateResult,
   workerError,
   type PayloadFor,
   type ResultFor,
@@ -60,6 +61,8 @@ export interface RequestOptions {
 
 interface PendingRequest {
   readonly id: number;
+  /** Needed to pick the right result validator when the response arrives. */
+  readonly op: WorkerOp;
   readonly supersedeKey: string | undefined;
   readonly settle: (result: Result<unknown, WorkerError>) => void;
   readonly timer: ReturnType<typeof setTimeout>;
@@ -142,6 +145,7 @@ export class WorkerClient {
 
       this.pending.set(id, {
         id,
+        op,
         supersedeKey,
         timer,
         settle: resolve as (result: Result<unknown, WorkerError>) => void,
@@ -211,14 +215,28 @@ export class WorkerClient {
     // Correlation. A response whose id is not pending is stale — its request
     // was superseded, timed out, or already settled — and must never reach
     // application state.
-    if (!this.pending.has(response.id)) return;
+    const entry = this.pending.get(response.id);
+    if (!entry) return;
 
-    this.settle(
-      response.id,
-      response.ok
-        ? ok(response.result)
-        : err(workerError('DOMAIN', response.error.message, response.error)),
-    );
+    if (!response.ok) {
+      this.settle(response.id, err(workerError('DOMAIN', response.error.message, response.error)));
+      return;
+    }
+
+    // Per-operation result validation. The envelope check alone is not enough:
+    // without this the result reached application state as an unvalidated
+    // `unknown` behind a TypeScript cast, trusting the type rather than the
+    // value. A malformed result settles as PROTOCOL rather than being acted on.
+    const validated = validateResult(entry.op, response.result);
+    if (validated === null) {
+      this.settle(
+        response.id,
+        err(workerError('PROTOCOL', 'The worker returned an unexpected result.')),
+      );
+      return;
+    }
+
+    this.settle(response.id, ok(validated));
   };
 
   private handleTimeout(id: number, timeoutMs: number): void {

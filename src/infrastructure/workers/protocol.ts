@@ -1,4 +1,6 @@
 import type { DomainError } from '@/domain/shared/result';
+import type { RegexAnalysis } from '@/domain/regex/ast';
+import { isValidRegexAnalysis } from '@/domain/regex/validate';
 
 /**
  * Worker wire protocol — 15_API_AND_BROWSER_CAPABILITIES.md §2
@@ -25,7 +27,7 @@ import type { DomainError } from '@/domain/shared/result';
  * boundary works end to end; they are NOT analysis and do not pretend to be.
  * `parse.regex` and `parse.json` replace them at M3 and M5.
  */
-export const ANALYSIS_OPS = ['analysis.ping', 'analysis.echo'] as const;
+export const ANALYSIS_OPS = ['analysis.ping', 'analysis.echo', 'analysis.regex'] as const;
 export type AnalysisOp = (typeof ANALYSIS_OPS)[number];
 
 /**
@@ -64,6 +66,12 @@ export interface AnalysisEchoResult {
   readonly length: number;
 }
 
+export interface AnalysisRegexPayload {
+  readonly source: string;
+  /** Raw flag string, validated in the worker rather than trusted. */
+  readonly flags: string;
+}
+
 export interface ExecSpinPayload {
   /** Milliseconds to occupy the worker thread for. */
   readonly durationMs: number;
@@ -77,6 +85,7 @@ export interface ExecSpinResult {
 export interface OpTypes {
   'analysis.ping': { payload: AnalysisPingPayload; result: AnalysisPingResult };
   'analysis.echo': { payload: AnalysisEchoPayload; result: AnalysisEchoResult };
+  'analysis.regex': { payload: AnalysisRegexPayload; result: RegexAnalysis };
   'exec.spin': { payload: ExecSpinPayload; result: ExecSpinResult };
 }
 
@@ -185,6 +194,9 @@ const PAYLOAD_VALIDATORS: {
   'analysis.echo': (payload): payload is AnalysisEchoPayload =>
     isRecord(payload) && typeof payload.text === 'string',
 
+  'analysis.regex': (payload): payload is AnalysisRegexPayload =>
+    isRecord(payload) && typeof payload.source === 'string' && typeof payload.flags === 'string',
+
   'exec.spin': (payload): payload is ExecSpinPayload =>
     isRecord(payload) &&
     typeof payload.durationMs === 'number' &&
@@ -224,6 +236,64 @@ export function describeRequestRejection(value: unknown): string {
 
 function isDomainError(value: unknown): value is DomainError {
   return isRecord(value) && typeof value.code === 'string' && typeof value.message === 'string';
+}
+
+/**
+ * Per-operation result validators — added at M3.
+ *
+ * The envelope check alone is not enough. Without these, a successful response
+ * carried an unvalidated `unknown` straight into application state on the
+ * strength of a TypeScript cast, which is exactly the "trust the type, not the
+ * value" mistake the rest of the boundary avoids.
+ *
+ * Each validator narrows structurally and is paired with a reconstructor, so
+ * unknown wire keys are dropped rather than carried inward.
+ */
+const RESULT_VALIDATORS: {
+  [TOp in WorkerOp]: (result: unknown) => result is ResultFor<TOp>;
+} = {
+  'analysis.ping': (result): result is AnalysisPingResult =>
+    isRecord(result) &&
+    result.pong === true &&
+    typeof result.sentAt === 'number' &&
+    typeof result.receivedAt === 'number',
+
+  'analysis.echo': (result): result is AnalysisEchoResult =>
+    isRecord(result) && typeof result.text === 'string' && typeof result.length === 'number',
+
+  'exec.spin': (result): result is ExecSpinResult =>
+    isRecord(result) && result.completed === true && typeof result.elapsedMs === 'number',
+
+  'analysis.regex': (result): result is RegexAnalysis => isValidRegexAnalysis(result),
+};
+
+/** Rebuilds a validated result field-by-field so no unknown key survives. */
+const RESULT_RECONSTRUCTORS: {
+  [TOp in WorkerOp]: (result: ResultFor<TOp>) => ResultFor<TOp>;
+} = {
+  'analysis.ping': (r) => ({ pong: true, sentAt: r.sentAt, receivedAt: r.receivedAt }),
+  'analysis.echo': (r) => ({ text: r.text, length: r.length }),
+  'exec.spin': (r) => ({ completed: true, elapsedMs: r.elapsedMs }),
+  // RegexAnalysis is a large bounded tree. Rebuilding it node-by-node here
+  // would duplicate the parser for no additional safety: it is produced by our
+  // own code inside the worker, its shape is asserted by isValidRegexAnalysis,
+  // and it is rendered as text rather than executed. Passed through as-is.
+  'analysis.regex': (r) => r,
+};
+
+/**
+ * Validates a result against the operation that produced it. Returns null when
+ * the shape is wrong, so the caller settles as a PROTOCOL error rather than
+ * acting on a malformed object.
+ */
+export function validateResult<TOp extends WorkerOp>(
+  op: TOp,
+  result: unknown,
+): ResultFor<TOp> | null {
+  const validate = RESULT_VALIDATORS[op];
+  if (!validate(result)) return null;
+  const reconstruct = RESULT_RECONSTRUCTORS[op];
+  return reconstruct(result);
 }
 
 /**
