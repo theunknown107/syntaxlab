@@ -4,7 +4,7 @@
 
 Report privately — please do not open a public issue for a security problem.
 
-- **GitHub Security Advisories** (preferred): use the *Report a vulnerability*
+- **GitHub Security Advisories** (preferred): use the _Report a vulnerability_
   button on the repository's Security tab.
 - If that is unavailable, contact the maintainer directly.
 
@@ -16,12 +16,12 @@ and what you believe the impact is. A proof-of-concept helps a great deal.
 SyntaxLab is a small, volunteer-maintained project. We do not offer a formal
 SLA, and pretending otherwise would be dishonest. What we do commit to:
 
-| Stage | Expectation |
-|---|---|
-| Acknowledgement | Within a few days |
-| Assessment | We will tell you whether we consider it a vulnerability, and why |
-| Fix | Deployed as a patch release once validated |
-| Disclosure | After the fix is live, with credit if you want it |
+| Stage           | Expectation                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| Acknowledgement | Within a few days                                                |
+| Assessment      | We will tell you whether we consider it a vulnerability, and why |
+| Fix             | Deployed as a patch release once validated                       |
+| Disclosure      | After the fix is live, with credit if you want it                |
 
 ## Scope
 
@@ -30,6 +30,7 @@ database, no user accounts, and no server-side session — so whole categories
 of report do not apply here.
 
 **In scope**
+
 - Cross-site scripting or any path that renders user input as markup
 - Prototype pollution via parsed JSON, imported files, or stored preferences
 - CSS injection via theme values
@@ -40,6 +41,7 @@ of report do not apply here.
 - Malicious import files that are accepted rather than rejected
 
 **Out of scope**
+
 - Browser extensions reading page content. No web page can prevent this, and
   we document it rather than claim otherwise.
 - Local access to an unlocked device. History is stored unencrypted; this is
