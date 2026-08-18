@@ -105,3 +105,16 @@ test('is usable at a mobile viewport without horizontal scroll', async ({ page }
   );
   expect(overflows).toBe(false);
 });
+
+test('does not expose the development worker harness in production', async ({ page }) => {
+  await page.goto('/');
+
+  // The harness is guarded by import.meta.env.DEV and dropped by the
+  // minifier. Asserted rather than assumed, because a test hook reaching
+  // production would be a real security and quality defect.
+  const exposed = await page.evaluate(
+    () => (window as unknown as { __syntaxlabDev?: unknown }).__syntaxlabDev !== undefined,
+  );
+
+  expect(exposed).toBe(false);
+});

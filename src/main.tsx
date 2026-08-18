@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { installDevWorkerHarness } from './app/devWorkerHarness';
 import './styles/global.css';
 
 const container = document.getElementById('root');
@@ -15,3 +16,6 @@ createRoot(container).render(
     <App />
   </StrictMode>,
 );
+
+// Compiled out of production builds — see the module for why it exists.
+installDevWorkerHarness();
