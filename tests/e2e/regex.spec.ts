@@ -40,7 +40,7 @@ test('explains a pattern typed into the editor', async ({ page }) => {
 
   const explanation = panel(page, 'Explanation');
   await expect(explanation).toContainText('start of the string', { timeout: 10_000 });
-  await expect(explanation).toContainText('any of A to Z');
+  await expect(explanation).toContainText('any character from A to Z');
   await expect(explanation).toContainText('one or more');
 });
 

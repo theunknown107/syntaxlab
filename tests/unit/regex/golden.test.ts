@@ -56,9 +56,9 @@ runCases('golden — escapes', [
   { pattern: '\\t', summary: 'Matches a tab.' },
   { pattern: '\\r', summary: 'Matches a carriage return.' },
   { pattern: '\\0', summary: 'Matches a null character.' },
-  { pattern: '\\x41', summary: 'Matches the character \\x41.' },
-  { pattern: '\\u0041', summary: 'Matches the character \\u0041.' },
-  { pattern: '\\cA', summary: 'Matches the control character \\cA.' },
+  { pattern: '\\x41', summary: 'Matches the character A (U+0041).' },
+  { pattern: '\\u0041', summary: 'Matches the character A (U+0041).' },
+  { pattern: '\\cA', summary: 'Matches the control character U+0001.' },
   { pattern: '\\.', summary: 'Matches a literal ..' },
   { pattern: '\\\\', summary: 'Matches a literal \\.' },
   { pattern: '\\$', summary: 'Matches a literal $.' },
@@ -91,15 +91,15 @@ runCases('golden — dot', [
 /* ---------------- character classes ---------------- */
 
 runCases('golden — character classes', [
-  { pattern: '[abc]', summary: 'Matches any of a, b, or c.' },
-  { pattern: '[a-z]', summary: 'Matches any of a to z.' },
+  { pattern: '[abc]', summary: 'Matches any of [a, b, or c].' },
+  { pattern: '[a-z]', summary: 'Matches any character from a to z.' },
   { pattern: '[^a-z]', summary: 'Matches any character except a to z.' },
-  { pattern: '[a-zA-Z]', summary: 'Matches any of a to z, or A to Z.' },
-  { pattern: '[0-9]', summary: 'Matches any of 0 to 9.' },
-  { pattern: '[-a]', summary: 'Matches any of -, or a.' },
-  { pattern: '[a-]', summary: 'Matches any of a, or -.' },
-  { pattern: '[\\d]', summary: 'Matches any of a digit.' },
-  { pattern: '[.]', summary: 'Matches any of ..' },
+  { pattern: '[a-zA-Z]', summary: 'Matches any of [a to z, or A to Z].' },
+  { pattern: '[0-9]', summary: 'Matches any character from 0 to 9.' },
+  { pattern: '[-a]', summary: 'Matches any of [-, or a].' },
+  { pattern: '[a-]', summary: 'Matches any of [a, or -].' },
+  { pattern: '[\\d]', summary: 'Matches a digit.' },
+  { pattern: '[.]', summary: 'Matches a literal ..' },
 ]);
 
 /* ---------------- quantifiers ---------------- */
@@ -211,7 +211,7 @@ runCases('golden — realistic patterns', [
   {
     pattern: '^[A-Z][a-z]+$',
     summary:
-      'Matches the start of the string, any of A to Z, one or more characters from a to z, then the end of the string.',
+      'Matches the start of the string, any character from A to Z, one or more characters from a to z, then the end of the string.',
   },
   {
     pattern: '^\\d{3}-\\d{2}-\\d{4}$',
@@ -311,15 +311,15 @@ runCases('golden — lookaround in context', [
 runCases('golden — character class detail', [
   {
     pattern: '[\\w-]',
-    summary: 'Matches any of a word character (letter, digit, or underscore), or -.',
+    summary: 'Matches any of [a word character (letter, digit, or underscore), or -].',
   },
   { pattern: '[^\\s]', summary: 'Matches any character except a whitespace character.' },
-  { pattern: '[a-z0-9_]', summary: 'Matches any of a to z, 0 to 9, or _.' },
+  { pattern: '[a-z0-9_]', summary: 'Matches any of [a to z, 0 to 9, or _].' },
   // Inside a class these are identity escapes for the literal character, not
   // class shorthands — naming them "the escape" told the user nothing.
-  { pattern: '[\\]]', summary: 'Matches any of a literal ].' },
-  { pattern: '[\\^]', summary: 'Matches any of a literal ^.' },
-  { pattern: '[0-9a-fA-F]', summary: 'Matches any of 0 to 9, a to f, or A to F.' },
+  { pattern: '[\\]]', summary: 'Matches a literal ].' },
+  { pattern: '[\\^]', summary: 'Matches a literal ^.' },
+  { pattern: '[0-9a-fA-F]', summary: 'Matches any of [0 to 9, a to f, or A to F].' },
 ]);
 
 /* ---------------- more escapes ---------------- */
@@ -368,7 +368,7 @@ runCases('golden — realistic patterns II', [
   {
     pattern: '#[0-9a-f]{6}',
     flags: 'i',
-    summary: 'Matches the character #, then exactly 6 characters from 0 to 9, or a to f.',
+    summary: 'Matches the character #, then exactly 6 characters from [0 to 9, or a to f].',
   },
   {
     pattern: '\\bword\\b',
@@ -401,7 +401,7 @@ runCases('golden — astral characters', [
   {
     pattern: '[\u{1F600}-\u{1F61C}]',
     flags: 'u',
-    summary: 'Matches any of \u{1F600} to \u{1F61C}.',
+    summary: 'Matches any character from \u{1F600} to \u{1F61C}.',
   },
 ]);
 
@@ -524,5 +524,92 @@ describe('golden — warnings fire where expected', () => {
     if (!result.ok) return;
     const warning = result.value.warnings.find((w) => w.code === 'NESTED_QUANTIFIER');
     expect(warning?.hint).toMatch(/cannot find every case/i);
+  });
+});
+
+/* ---------------- M4 explanation review ----------------
+   Frozen after the M4 human review (§21 of the M4 brief). These are not
+   additional coverage of the grammar — the sections above do that. They pin
+   the specific wordings a review changed, so a later refactor that quietly
+   reverts one fails here rather than in a user's reading.
+
+   Each entry names the defect it guards against. -------------------------- */
+
+runCases('golden — reviewed wording, M4', [
+  // Found M3: read as "any of the escape \]", which told the user nothing
+  // about what it matches.
+  { pattern: '[\\]]', summary: 'Matches a literal ].' },
+  { pattern: '[\\^]', summary: 'Matches a literal ^.' },
+
+  // Found M4: "the character \\x41" restated the input instead of decoding it.
+  { pattern: '\\x41', summary: 'Matches the character A (U+0041).' },
+  { pattern: '\\u0041', summary: 'Matches the character A (U+0041).' },
+  { pattern: '\\cA', summary: 'Matches the control character U+0001.' },
+  // Unprintable results are named by code point rather than printed, because
+  // an invisible character in a sentence cannot be read.
+  { pattern: '\\x07', summary: 'Matches the character U+0007.' },
+
+  // Found M4: a multi-member class ran into the surrounding prose with no
+  // boundary, so the reader could not tell where the class ended.
+  {
+    pattern: '^[\\w.+-]+@[\\w-]+$',
+    summary:
+      'Matches the start of the string, one or more characters from [a word character (letter, digit, or underscore), a literal ., a literal +, or -], the character @, one or more characters from [a word character (letter, digit, or underscore), or -], then the end of the string.',
+  },
+
+  // Found M4: "Matches any of a literal ]" is not a sentence, but a lone range
+  // still needs the "any character from" frame or it reads as literal text.
+  { pattern: '[\\d]', summary: 'Matches a digit.' },
+  { pattern: '[a-z]', summary: 'Matches any character from a to z.' },
+  { pattern: '[ab]', summary: 'Matches any of [a, or b].' },
+
+  // Found M4: `.` and `-` are both literal inside a class and were described
+  // two different ways in the same list.
+  { pattern: '[.\\-]', summary: 'Matches any of [a literal ., or a literal -].' },
+  { pattern: '[.]', summary: 'Matches a literal ..' },
+
+  // Found M3: the assertion body ran into the following syntax, so where one
+  // lookahead ended and the next began was ambiguous.
+  {
+    pattern: '(?=.*a)(?=.*b)',
+    summary:
+      'Matches a position followed by [zero or more characters other than line breaks, then the character a], then a position followed by [zero or more characters other than line breaks, then the character b].',
+  },
+
+  // A single-part assertion body is *not* bracketed: brackets there would be
+  // noise, and the extent is already unambiguous.
+  {
+    pattern: '(?=a)b',
+    summary: 'Matches a position followed by the character a, then the character b.',
+  },
+]);
+
+/* ---------------- reviewed teaching quality ---------------- */
+
+describe('explanations teach rather than transcribe', () => {
+  it('reads a quantified shorthand in its plural form', () => {
+    // "one or more of a digit" is the token-dump failure R-04 describes.
+    expect(summaryOf('\\d+')).toBe('Matches one or more digits.');
+  });
+
+  it('says what a capture group is for, not only that it exists', () => {
+    const result = analyzeRegex({ source: '(a)', flags: '' });
+    if (!result.ok) throw new Error('analysis failed');
+    const body = explanationToText(result.value.explanation.details[0]?.body ?? []);
+    expect(body).toMatch(/referenced later/);
+    expect(body).toMatch(/[$]1/);
+  });
+
+  it('says what a backreference matches, which is the thing users get wrong', () => {
+    const result = analyzeRegex({ source: '(a)\\1', flags: '' });
+    if (!result.ok) throw new Error('analysis failed');
+    const backref = result.value.explanation.details.find((d) => d.id.startsWith('backref'));
+    expect(explanationToText(backref?.body ?? [])).toMatch(
+      /not the same pattern, the same actual text/,
+    );
+  });
+
+  it('distinguishes greedy from lazy in words, not in symbols', () => {
+    expect(summaryOf('a+?')).toContain('as few as possible');
   });
 });

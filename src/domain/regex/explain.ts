@@ -82,10 +82,17 @@ function summarise(node: RegexNode, context: ExplainContext): ExplanationNode[] 
 
     case 'CharClass': {
       const inner = node.items.map((item) => summariseClassItem(item));
-      const joined = joinClauses(inner, 'or');
-      return node.negated
-        ? [text('any character except '), ...joined]
-        : [text('any of '), ...joined];
+      // A class with several members is bracketed for the same reason a
+      // multi-part assertion body is: inside a longer summary the members are
+      // separated by commas, and without a boundary the reader cannot tell
+      // where the class ends and the next construct begins.
+      const joined = bracketIfCompound(joinClauses(inner, 'or'), node.items.length > 1);
+      if (node.negated) return [text('any character except '), ...joined];
+      if (node.items.length > 1) return [text('any of '), ...joined];
+      // With one member the member's own phrase usually reads as the whole
+      // answer — "any of a literal ]" is not a sentence. A lone range is the
+      // exception: "Matches a to z" reads as the literal text "a to z".
+      return node.items[0]?.kind === 'range' ? [text('any character from '), ...joined] : joined;
     }
 
     case 'Quantifier': {
@@ -184,10 +191,25 @@ function summarise(node: RegexNode, context: ExplainContext): ExplanationNode[] 
   }
 }
 
+/** Wraps a multi-part phrase so its extent is unambiguous inside a sentence. */
+function bracketIfCompound(nodes: ExplanationNode[], compound: boolean): ExplanationNode[] {
+  return compound ? [text('['), ...nodes, text(']')] : nodes;
+}
+
+/**
+ * Characters that look like syntax but are ordinary literals inside a class.
+ *
+ * Rendering `[.\-]` as "., or a literal -" described two literal characters
+ * two different ways in the same list, which reads as though they differ.
+ */
+const LITERAL_IN_CLASS = new Set(['.', '$', '*', '+', '?', '(', ')', '{', '}', '|']);
+
 function summariseClassItem(item: CharClassItem): ExplanationNode[] {
   switch (item.kind) {
     case 'char':
-      return [code(item.raw)];
+      return LITERAL_IN_CLASS.has(item.raw)
+        ? [text('a literal '), code(item.raw)]
+        : [code(item.raw)];
     case 'range':
       return [code(item.from.raw), text(' to '), code(item.to.raw)];
     case 'escape':
@@ -260,7 +282,10 @@ function pluralBody(node: RegexNode, context: ExplainContext): ExplanationNode[]
   }
   if (node.type === 'CharClass' && !node.negated) {
     const inner = node.items.map((item) => summariseClassItem(item));
-    return [text('characters from '), ...joinClauses(inner, 'or')];
+    return [
+      text('characters from '),
+      ...bracketIfCompound(joinClauses(inner, 'or'), node.items.length > 1),
+    ];
   }
   return null;
 }
@@ -308,6 +333,7 @@ function classEscapePhrase(kind: string, raw: string): string {
   if (kind === 'hex' || kind === 'unicode' || kind === 'controlLetter') {
     return `the character ${raw}`;
   }
+
   return `the escape ${raw}`;
 }
 
@@ -322,6 +348,22 @@ const CONTROL_VALUES: Readonly<Record<string, string>> = {
   '0': '\0',
 };
 
+/**
+ * Names a character by what it *is*, not by how it was written.
+ *
+ * `the character A` restates the input and teaches nothing; the point of an
+ * explanation is to say that it means `A`. Unprintable results are given as a
+ * code point instead, because printing a control character into a sentence
+ * produces an invisible gap the reader cannot interpret.
+ */
+function characterPhrase(value: string, raw: string): string {
+  const codePoint = value.codePointAt(0);
+  if (codePoint === undefined) return `the character ${raw}`;
+  const hex = `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
+  const printable = codePoint >= 0x20 && codePoint !== 0x7f;
+  return printable ? `the character ${value} (${hex})` : `the character ${hex}`;
+}
+
 function escapePhrase(kind: string, raw: string, value: string): string {
   switch (kind) {
     case 'shorthand':
@@ -329,10 +371,10 @@ function escapePhrase(kind: string, raw: string, value: string): string {
     case 'control':
       return controlName(value);
     case 'controlLetter':
-      return `the control character ${raw}`;
+      return `the control character ${characterPhrase(value, raw).replace('the character ', '')}`;
     case 'hex':
     case 'unicode':
-      return `the character ${raw}`;
+      return characterPhrase(value, raw);
     case 'legacyOctal':
       return `a legacy octal escape ${raw}`;
     case 'identity':
