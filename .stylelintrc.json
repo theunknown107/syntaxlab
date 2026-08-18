@@ -1,0 +1,40 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "rules": {
+    "custom-property-pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+    "selector-class-pattern": "^[a-z][a-zA-Z0-9]*(__[a-z][a-zA-Z0-9]*)?(--[a-z][a-zA-Z0-9]*)?$",
+    "max-nesting-depth": 2,
+    "selector-max-id": 0,
+    "declaration-no-important": true,
+    "color-named": "never",
+    "alpha-value-notation": "number",
+    "color-function-notation": "modern",
+    "declaration-property-value-no-unknown": true,
+    "comment-empty-line-before": null,
+    "no-descending-specificity": null,
+    "color-hex-length": null,
+    "custom-property-empty-line-before": null
+  },
+  "overrides": [
+    {
+      "files": ["src/styles/tokens.css", "src/styles/reset.css"],
+      "rules": {
+        "custom-property-pattern": null,
+        "declaration-no-important": null
+      }
+    },
+    {
+      "files": ["src/styles/global.css"],
+      "rules": {
+        "selector-max-id": 1,
+        "import-notation": null
+      }
+    },
+    {
+      "files": ["src/styles/reset.css"],
+      "rules": {
+        "property-no-vendor-prefix": null
+      }
+    }
+  ]
+}

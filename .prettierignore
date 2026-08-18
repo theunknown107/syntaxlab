@@ -1,0 +1,13 @@
+dist
+coverage
+node_modules
+playwright-report
+test-results
+stats.html
+package-lock.json
+
+# The architecture package is authored prose with hand-aligned tables and
+# Mermaid diagrams. Reformatting it produces large diffs that hide the real
+# documentation changes.
+docs
+IMPLEMENTATION_STATUS.md
