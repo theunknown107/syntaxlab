@@ -89,6 +89,24 @@
   /* Focus — never falls below 3:1 against any surface */
   --color-focus: var(--green-300);
 
+  /* ---- Editor ---- */
+  --color-selection: color-mix(in oklab, var(--green-500) 22%, var(--gray-700));
+
+  /* Match highlighting alternates so adjacent matches stay distinguishable.
+     Both are paired with an underline in the editor theme, because colour is
+     never the only signal (09_DESIGN_SYSTEM.md §3.3). */
+  --color-match-a: color-mix(in oklab, var(--green-500) 22%, transparent);
+  --color-match-b: color-mix(in oklab, var(--blue-500) 24%, transparent);
+
+  /* ---- Syntax palette (09_DESIGN_SYSTEM.md §3.3) ---- */
+  --syntax-error: var(--red-500);
+  --syntax-rx-meta: var(--green-500);
+  --syntax-rx-class: #ffb86c;
+  --syntax-rx-group: #8be9fd;
+  --syntax-rx-quantifier: #ff7edb;
+  --syntax-rx-anchor: #bd93f9;
+  --syntax-rx-escape: var(--green-300);
+
   /* ---- Gradient ----
      Intensity multiplies alpha rather than swapping colours, so the M8
      customisation slider is one continuous axis from invisible to bold
@@ -240,6 +258,9 @@
 @supports not (color: color-mix(in oklab, red, blue)) {
   :root {
     --color-accent-subtle: rgb(0 255 136 / 0.12);
+    --color-selection: #2a4a3a;
+    --color-match-a: rgb(0 255 136 / 0.22);
+    --color-match-b: rgb(74 158 255 / 0.24);
     --color-border-accent: rgb(0 255 136 / 0.4);
     --color-success-bg: rgb(0 255 136 / 0.1);
     --gradient-primary: linear-gradient(135deg, rgb(0 255 136 / 0.4), rgb(0 61 31 / 0.4));

@@ -1,0 +1,41 @@
+.tree {
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding-block: 2px;
+  padding-inline-end: var(--space-2);
+  cursor: default;
+  border-radius: var(--radius-sm);
+}
+
+.row:hover {
+  background-color: var(--color-surface-raised);
+}
+
+.row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.row[aria-selected='true'] {
+  background-color: var(--color-accent-subtle);
+}
+
+.twisty {
+  flex: none;
+  width: 1ch;
+  color: var(--color-text-muted);
+}
+
+/* Mobile drops connector lines and tightens indentation (08_UI_UX_SPEC.md §18). */
+@media (width <= 767px) {
+  .tree {
+    font-size: var(--text-xs);
+  }
+}
