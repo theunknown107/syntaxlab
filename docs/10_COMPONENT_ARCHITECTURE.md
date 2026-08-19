@@ -474,3 +474,62 @@ same ambiguity a screen-reader user would have heard.
 this feature produces are sentences rather than crashes: "1 entries", a count
 that says "0 more", or a privacy claim the architecture cannot enforce. Those
 are testable only if they are not embedded in JSX.
+
+
+---
+
+## M8 — the theme components
+
+```
+Header
+├── ModeSelector
+├── HistoryControls
+└── ThemeControls          the Appearance button + the three wiring effects
+    └── ThemeDrawer        native <dialog>, via the shared Drawer primitive
+        ├── Presets        five chips, role="radio" in a radiogroup
+        ├── Gradient       colour × 2 · ContrastNote · direction · intensity
+        │   └── ContrastNote   pass / low / fail, with a one-click fix
+        └── Interface      glow · contrast · motion · text size
+```
+
+### The interaction
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant D as ThemeDrawer
+    participant A as themeStore actions
+    participant V as readTheme
+    participant R as :root style
+    participant LS as localStorage
+
+    U->>D: drag the intensity slider
+    D->>A: updateGradient({ intensity })
+    A->>V: readTheme(candidate)
+    V-->>A: validated ThemePreferences
+    A->>R: setProperty — synchronous
+    Note over R: repaint this frame; no React render outside the drawer
+    A->>A: debounce 250 ms
+    A->>LS: setItem once, when the drag stops
+    D->>D: re-renders (it subscribes, so its own controls track the value)
+```
+
+### Why the controls are native elements
+
+`<input type="color">`, `<input type="range">` and real radio inputs. The
+platform's colour picker is the one the user already knows, is keyboard
+operable and screen-reader labelled with no work from us, and costs zero
+bytes. A picker library would be several kilobytes to be worse at all three
+(`16_DEPENDENCIES.md`).
+
+The radio chips wrap a visually hidden `<input type="radio">` rather than
+using `<button role="radio">`, because a native radio group gives arrow-key
+navigation and a single tab stop for free — which is what a keyboard user
+expects from a set of mutually exclusive options.
+
+### The one inline style in the feature
+
+The preset swatch. It has to show a colour that is deliberately *not* the
+active theme, so it cannot come from a token. The value is a validated hex
+from our own preset table and never user input, and the swatch is
+`aria-hidden` with the preset name carrying the meaning.

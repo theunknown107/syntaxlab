@@ -391,3 +391,19 @@ Follow the escalation ladder in `12_PERFORMANCE.md` §2.2, which starts with acc
 Each of those is a small, local fix. **Preact is the last resort, not the first lever**, and adopting it would require a measurement showing it is both necessary and sufficient.
 
 This is tracked as **R-05** in `23_RISK_REGISTER.md`, and its first measurement is an **M1 deliverable** rather than a late discovery — finding out at M13 that the budget never fitted would be the expensive version of this problem.
+
+
+---
+
+### M8 added no dependencies
+
+The theme system is CSS custom properties, `localStorage`, and three native
+input types. Specifically **not** added:
+
+| Rejected | Why |
+|---|---|
+| A colour-picker package | `<input type="color">` is the picker the user's platform already provides. It is keyboard accessible and labelled with no work from us, and costs nothing. A library would be kilobytes to be worse at all three. |
+| A theming library | The token architecture predates M8 and already does this. A library would add a second source of truth for values that live in `tokens.css`. |
+| A colour-manipulation library | The only colour maths needed is WCAG relative luminance and a lighten-toward-white loop: about thirty lines, in `domain/theme/preferences.ts`, unit-tested. |
+| An animation library | The theme has no animation. |
+| An icon set | The drawer uses text labels and one ✓ glyph. |

@@ -399,7 +399,9 @@ test('high contrast mode passes axe on the whole interface', async ({ page }) =>
 });
 
 test('a custom theme still passes axe with the analysis panes populated', async ({ page }) => {
-  await page.getByRole('textbox', { name: 'Regular expression' }).fill('(\w+)@(\w+)\.com');
+  await page
+    .getByRole('textbox', { name: 'Regular expression' })
+    .fill(String.raw`(\w+)@(\w+)\.com`);
   await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({ timeout: 10_000 });
 
   await openDrawer(page);

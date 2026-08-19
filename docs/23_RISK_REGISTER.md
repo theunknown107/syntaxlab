@@ -322,3 +322,23 @@ The last two rows are the direct security return on the Phase 1.5 scope decision
 | DR-14 | Absolute security claims would have shipped in the README | Corrected across the package; a claims table with a "why the absolute form is wrong" column now governs public wording |
 | DR-15 | Auto-capture ON by default raises R-09's prominence | Accepted deliberately, with the first-run notice as the compensating control |
 | DR-16 | Detection matching 5–7 cron fields would have suggested a mode the parser refuses | Detection tightened to exactly 5 fields |
+
+---
+
+## M8 — theme customisation
+
+**No new risk, and one existing one reduced.** Theme customisation adds a
+persisted-data-to-CSS boundary, which is the shape of R-04 (untrusted input
+reaching a sink). It is handled the same way as every other such boundary in
+this codebase: a positive-match allowlist rather than a filter, applied at a
+single choke point, verified in three real browsers.
+
+What is worth recording is the class of risk this feature *could* have added
+and does not:
+
+| Not a risk, because | |
+|---|---|
+| No dependency was added | A colour picker, a theming library or a colour-maths package would each have put third-party code on the path between persisted data and `setProperty`. |
+| Semantic status colours are not customisable | Letting a user make an error message low-contrast would turn an accessibility guarantee into a preference. |
+| The focus ring is not customisable | Same reasoning, and the stronger case: a focus ring the user can make invisible is a keyboard trap they cannot see. It stays fixed even when that means a green ring in the Mono theme — a visual inconsistency accepted deliberately in exchange for the guarantee. |
+| Theme state never enters a history record | Verified by an E2E test that reads the IndexedDB records back and asserts no theme vocabulary appears in them. |

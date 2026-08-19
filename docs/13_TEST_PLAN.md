@@ -728,3 +728,72 @@ Full evidence in `IMPLEMENTATION_STATUS.md`, M7.
 
 - **A real `QuotaExceededError` from a real browser.** Filling a browser's quota takes minutes and the threshold varies by machine. The error is injected instead, and the code path from the error to the UI is fully covered.
 - **Eviction under storage pressure.** Not triggerable on demand. It is disclosed in the UI copy instead, and that copy is asserted.
+
+
+---
+
+## 15. M8 — theme
+
+### The split
+
+| Layer | Where | What it proves |
+|---|---|---|
+| Validation, presets, contrast maths | Unit (43) | Every rule about what a theme value may be |
+| Store, application, persistence | Unit (21) | That a change reaches CSS, and only validated values do |
+| The whole feature | E2E, 3 engines (40 each) | The validator wired to a real `setProperty` under the real CSP |
+
+### The security corpus
+
+Eighteen payloads are planted in `localStorage` and the page reloaded, each
+asserting: only `#RRGGBB` reached the three colour properties, the angle is
+still an integer with a unit, the intensity is still a number, no dialog
+opened, no page error was thrown, no `img[src]` or inline `<script>` exists,
+and the application still works.
+
+```
+CSS injection through a colour · url() · expression() · HTML fragment
+style-tag escape · oversized hex · custom-property escape · null numerics
+out-of-range intensity · hostile angle string · unknown preset
+hostile contrast enum · future schemaVersion · malformed schemaVersion
+array · bare string · unparseable JSON · empty string
+```
+
+Plus: a payload combining `javascript:`, an `onerror` image and a script tag,
+asserted to open no dialog and throw no error; and a mixed record proving one
+corrupt field costs only that field.
+
+### Accessibility
+
+axe (`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`) over: the drawer open, the
+whole interface in **high-contrast mode**, the drawer in high-contrast mode,
+and a **custom theme with the analysis panes populated**. Plus keyboard
+operation of every control, focus trapping, Escape, and focus restoration.
+
+### Two measurement notes, so the numbers are not overread
+
+**Forced colors.** Playwright's `forcedColors: 'active'` flips the media query
+but does not apply a real forced palette, so axe measures our own colours
+against a mode the browser has not entered. Measured: the plain application
+reports **29 color-contrast nodes** under this emulation with no theme UI on
+screen at all. The rule is therefore excluded from that one test and the
+structural behaviour is asserted instead. **Real forced-colors validation
+needs an OS high-contrast mode and has not been performed** — it is a manual
+pre-release check, listed in §12.
+
+**Focus restoration.** WebKit on macOS does not focus a `<button>` when it is
+clicked, so a mouse-opened dialog has no opener to return to on that engine.
+The test opens from the keyboard, which is who focus restoration is for; all
+three engines then restore correctly with no code of ours involved. An earlier
+attempt to "fix" this in the `Dialog` primitive was reverted once measurement
+showed the platform already did it.
+
+### Defects these tests found
+
+| Found by | Defect |
+|---|---|
+| Unit | `matchesPreset` looked up the preset the theme *claimed*, so a theme could never name a preset again after one custom edit. |
+| Unit | Two store tests spied on `Storage.prototype`, which happy-dom does not route these writes through — the debounce test measured nothing and the storage-refusal test never entered its catch. |
+| Audit | `setTheme` trusted its callers; `applyTheme` is a `setProperty` sink. Now revalidated at the choke point. |
+| Audit | `SURFACE_HEX` was `#0d1117`; `--color-surface` is `#101613`. The contrast guard was reporting confident ratios against a background the accent is never shown on. A test now reads the value out of `tokens.css`. |
+| Spec review | The contrast guard was silent when a colour passed, where §4.5 specifies "✓ Passes AA". |
+| Visual review | "Amber Console" was ellipsised to "Amber Consol…". |

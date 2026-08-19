@@ -128,21 +128,21 @@
 
 | # | Criterion | Verification |
 |---|---|---|
-| T-1 | The default theme matches `09_DESIGN_SYSTEM.md` | Visual review |
-| T-2 | All five presets apply correctly | E6 |
-| T-3 | Gradient from/to/angle/intensity apply live | E6 |
-| T-4 | Accent, glow, contrast, motion, and font scale apply live | E6 |
-| T-5 | **Preferences persist across reload with no flash of default theme** | E6 |
-| T-6 | Reset restores defaults | E6 |
-| T-7 | The contrast checker reports the correct ratio and warns below 4.5:1 | Unit |
-| T-8 | High-contrast mode meets AA on every surface | Manual + axe |
-| T-9 | Reduced motion disables all transitions | E20 |
-| T-10 | `prefers-reduced-motion` and `prefers-contrast` are honoured by default | Manual |
-| T-11 | **Injection payloads in theme values are rejected; defaults applied** | Security §7.6 |
-| T-12 | Corrupt theme data in localStorage does not prevent the app loading | Unit |
-| T-13 | Theme changes propagate to other open tabs | Manual |
-| T-14 | No component contains a hard-coded colour or spacing value | Stylelint |
-| T-15 | The gradient appears in at most four places at default intensity | Visual review |
+| T-1 | The default theme matches `09_DESIGN_SYSTEM.md` | ✅ **M8** — visual review of the built interface at 1280×800; screenshots of default, Amber and Mono |
+| T-2 | All five presets apply correctly | ✅ **M8** — E2E, all five |
+| T-3 | Gradient from/to/angle/intensity apply live | ✅ **M8** — E2E; from, to, direction and intensity each assert the resolved custom property |
+| T-4 | Accent, glow, contrast, motion, and font scale apply live | ✅ **M8** — accent, glow, contrast, motion and font scale all applied and unit-tested. Accent is derived from the primary colour rather than separately chosen — `09_DESIGN_SYSTEM.md` §11.5 |
+| T-5 | **Preferences persist across reload with no flash of default theme** | ✅ **M8** — E2E reads `--gradient-from` at `readyState === "interactive"`, before React mounts, and finds the stored value |
+| T-6 | Reset restores defaults | ✅ **M8** — E2E, and the reset is verified to survive a reload |
+| T-7 | The contrast checker reports the correct ratio and warns below 4.5:1 | ✅ **M8** — unit, including both boundaries and the surface constant pinned to `tokens.css` |
+| T-8 | High-contrast mode meets AA on every surface | ✅ **M8** — axe over the whole interface and over the drawer in high-contrast mode |
+| T-9 | Reduced motion disables all transitions | ✅ **M8** — E2E under `prefers-reduced-motion: reduce`; every transition collapses below 0.01 s |
+| T-10 | `prefers-reduced-motion` and `prefers-contrast` are honoured by default | ✅ **M8** — `tokens.css` honours `prefers-contrast: more`; `prefers-reduced-motion` covered by E2E |
+| T-11 | **Injection payloads in theme values are rejected; defaults applied** | ✅ **M8** — eighteen payloads planted in `localStorage`, in three engines |
+| T-12 | Corrupt theme data in localStorage does not prevent the app loading | ✅ **M8** — unit and E2E; unparseable JSON, arrays, bare strings and an empty value all load the app |
+| T-13 | Theme changes propagate to other open tabs | ✅ **M8** — E2E across two real tabs, via the `storage` event |
+| T-14 | No component contains a hard-coded colour or spacing value | ✅ **M8** — Stylelint clean; the one inline style is a preset swatch that must not use a token |
+| T-15 | The gradient appears in at most four places at default intensity | ⚠️ **M8** — visual review only. The four documented locations are unchanged by M8; there is no automated check that a fifth has not appeared. |
 
 ---
 
@@ -181,7 +181,7 @@
 | S-6 | Every input limit is enforced at all three layers | Security §7.4 |
 | S-7 | Oversized inputs are rejected cleanly with no crash or hang | Security §7.4 |
 | S-8 | Tampered storage records are quarantined, not executed or crashed on | Security §7.5 |
-| S-9 | Theme injection is rejected by the hex allowlist | Security §7.6 |
+| S-9 | Theme injection is rejected by the hex allowlist | ✅ **M8** — unit and browser-level |
 | S-10 | Malicious import files are rejected with a specific reason | Security §7.7 |
 | S-11 | Clipboard writes are `text/plain` only, never `text/html` | Code review |
 | S-12 | All security headers are present in production | Post-deploy checklist |
@@ -235,7 +235,7 @@
 | P-10 | Typing does not re-render the analysis pane | Render-count test |
 | P-11 | A 1 MB JSON document analyses in under 500 ms in the worker | Benchmark |
 | P-12 | The 500-entry history list renders in under 50 ms | Benchmark |
-| P-13 | Theme changes repaint in under 50 ms | Manual |
+| P-13 | Theme changes repaint in under 50 ms | ✅ **M8** — measured at 1.1 ms median, 2.3 ms slowest (`12_PERFORMANCE.md` §10.9) |
 | P-14 | No memory growth after 20 open/close cycles of each drawer | Heap snapshot |
 | P-15 | **Measured numbers are recorded in `12_PERFORMANCE.md` §10** — an estimate never satisfies a criterion | Manual |
 | P-16 | **A first measurement exists from Milestone 1**, not only at release | Manual |

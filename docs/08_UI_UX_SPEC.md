@@ -434,6 +434,28 @@ with the browser profile can read it, and that the browser may clear it.
 
 ---
 
+
+### As built at M8 — where the drawer differs from the sketch, and why
+
+| # | Specification | As built | Reason |
+|---|---|---|---|
+| 1 | `Angle ●────── 135°` slider | Four named directions: Diagonal, Reverse diagonal, Left to right, Top to bottom | The stored value is still `angleDeg`, a bounded integer, so the schema and the pre-paint bootstrap are unchanged. A continuous angle invites fiddling with a number nobody can name. |
+| 2 | `Accent [■ #00ff88]` as its own control | Derived from the primary gradient colour | An amber gradient with a green focus ring is incoherent, and one fewer control is one fewer way to build an unreadable interface. |
+| 3 | Preset names `Cyan`, `Amber` | `Deep Cyan`, `Amber Console` | Display names only; ids, colours, angles and intensities are exactly `09_DESIGN_SYSTEM.md` §4.3. |
+| 4 | — | The contrast note also states the **passing** case | Silence is indistinguishable from the check not having run. §4.5 specifies "✓ Passes AA" and the guard was quiet there. |
+| 5 | Theme drawer opened from a theme control | Opened from an **Appearance** button in the header | Names what it does rather than what it is. Its accessible name states the current theme, which the visible label cannot. |
+
+Everything else in §10 is built as specified: presets, primary and secondary
+colour, intensity, glow, contrast, motion, text size, reset, and the current
+theme stated in the footer.
+
+**Live preview, no save button.** Every change applies on the frame it is
+made; persistence is debounced 250 ms behind it and flushed when the tab is
+hidden. Reset applies and persists at once.
+
+
+---
+
 ## 11. Keyboard shortcuts
 
 | Shortcut | Action | Notes |

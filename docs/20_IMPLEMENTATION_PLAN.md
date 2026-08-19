@@ -249,7 +249,7 @@ would reverse it again.
 
 ---
 
-### M8 — Theme customisation *(1 day)*
+### M8 — Theme customisation *(1 day)* — ✅ **COMPLETE**
 
 **Dependencies:** M1.
 
@@ -267,6 +267,13 @@ would reverse it again.
 **Acceptance:** no flash of default theme on reload; injection payloads rejected by the hex allowlist; contrast checker correct at boundaries.
 
 **Definition of done:** all §5 theme criteria pass.
+
+**Outcome:** met, with one criterion qualified. T-1 to T-14 pass; **T-15** (the
+gradient in at most four places) is verified by visual review only, as
+specified — there is no automated check. 8.1–8.6 are all built. No dependency
+was added. The initial-JS target is exceeded by 3.04 KB, investigated and
+accepted with the reasoning and the measured M11 lead in `12_PERFORMANCE.md`
+§10.9.
 
 ---
 

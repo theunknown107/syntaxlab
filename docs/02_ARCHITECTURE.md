@@ -751,3 +751,46 @@ Recorded rather than smoothed over.
 | T5 | Custom parsers vs the 3–4 day playbook estimate | **Resolved in Phase 1.5:** the project is staged (V1.0 = Regex + JSON, V1.1 = Cron) rather than lowering the quality bar or pretending the scope fits the estimate. `01_PRD.md` §3. |
 | T6 | SEO/discoverability vs a pure client-side app | Static prerendered `index.html` with real content in the initial HTML, semantic headings, and metadata. No SSR framework. |
 | T7 | Doc 11 in the brief mentions "server/cache state" boundaries | There is no server. `11_STATE_MANAGEMENT.md` documents this explicitly and defines the boundary as worker-result cache vs persistent local state instead. |
+
+
+---
+
+## M8 — where the theme lives
+
+```
+src/domain/theme/preferences.ts     the model, the presets, the validator,
+                                    the contrast maths — no DOM, no storage
+src/application/theme/themeStore.ts the store, applyTheme, persistence
+src/features/theme/                 the drawer, the header control, styles
+public/theme-bootstrap.js           pre-paint, outside the module graph
+```
+
+The layering is the usual one with one deliberate exception: **the pre-paint
+bootstrap is not part of the module graph at all.** It cannot be — it runs
+before the bundle, with no imports. That is why it restates the validation
+rules, and why `09_DESIGN_SYSTEM.md` §11 and `06_DATA_STORAGE.md` §12.2 both
+document how the two copies are kept in agreement.
+
+```mermaid
+flowchart TD
+    subgraph pre["Before the bundle"]
+        BS["theme-bootstrap.js"]
+    end
+    subgraph app["The module graph"]
+        DOM["domain/theme<br/>validation, presets, contrast"]
+        APPL["application/theme<br/>store, applyTheme, persist"]
+        FEAT["features/theme<br/>drawer, controls"]
+    end
+    CSS[(":root custom properties")]
+    LS[("localStorage")]
+
+    LS --> BS --> CSS
+    LS --> APPL
+    DOM --> APPL --> CSS
+    APPL --> FEAT
+    FEAT --> APPL
+    DOM --> FEAT
+```
+
+`features/theme` imports `domain` and `application`, never `infrastructure` —
+the same boundary the ESLint policy enforces for every other feature.

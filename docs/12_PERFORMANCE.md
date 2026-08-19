@@ -651,3 +651,89 @@ Initial JS now sits **0.71 KB under the 170 KB target** and 31 KB under the hard
 budget. That is tight enough to be worth stating plainly: M8 has very little
 headroom before the target needs a deliberate decision rather than an
 incidental one.
+
+
+---
+
+### 10.9 M8 — theme customisation
+
+`npm run measure:theme` (`scripts/measure-theme.mjs`), Chromium, production
+build.
+
+| Measurement | Value | Budget |
+|---|---|---|
+| Theme switch (median of 20) | **1.1 ms** | P-13: under 50 ms |
+| Theme switch (slowest of 20) | 2.3 ms | |
+| First Contentful Paint, default theme | 36 ms | |
+| First Contentful Paint, stored custom theme | 40 ms | no measurable flash cost |
+| `localStorage` writes for a 21-step slider drag | **1** | not one per frame |
+
+The switch figure includes the browser's style recalculation: the measurement
+reads a computed value in a loop until it changes, which forces the work
+rather than timing only our own call.
+
+**Why it is 1.1 ms and not 30 ms.** Changing the theme writes eight custom
+properties on `:root`. Nothing re-renders: the only React subscriber to
+`themeStore` is the drawer itself, so the analysis panes, the editors and the
+tree are untouched. This is the concrete payoff of ADR-005.
+
+The drag figure is driven through real Playwright input rather than synthetic
+events, because React tracks a controlled input's value itself and ignores a
+directly assigned one — a hand-dispatched `input` event measures nothing. The
+intensity is read back afterwards to prove the drag registered.
+
+#### Bundle
+
+| | M7 | M8 | Delta |
+|---|---|---|---|
+| Initial JS | 169.29 KB | **173.04 KB** | **+3.75 KB** |
+| Worker chunks | 19.56 KB | 19.56 KB | — |
+| CSS | 6.95 KB | 7.56 KB | +0.61 KB |
+| Total precache | 197.75 KB | 202.10 KB | +4.35 KB |
+
+**The 170 KB target is exceeded by 3.04 KB.** The 200 KB hard budget is met
+with 27 KB to spare. Stated plainly rather than reported as a pass, and the
+increase is entirely the theme feature — the domain model with five presets
+and the WCAG contrast maths, the store, and the drawer.
+
+Two things were tried before accepting it:
+
+**Code-splitting the drawer with `React.lazy` — measured, and it made the
+bundle larger.** It moved 1.59 KiB into its own chunk while the entry chunk
+shrank by only 0.46 KiB, the difference going to lazy-load machinery and to
+gzip having a smaller corpus to work with. Net **+1.11 KiB** for a deferred
+fetch nobody was waiting on. Recorded so the experiment is not repeated.
+
+**Dead weight removed.** The preset table carried a `description` string per
+preset that nothing rendered.
+
+#### The measured lead for M11
+
+Bundle composition (rendered bytes, `npm run analyze`):
+
+| Module | Rendered |
+|---|---|
+| `@codemirror/view` | 102.76 KB |
+| `react-dom` | 42.24 KB |
+| `@codemirror/state` | 33.51 KB |
+| `src/features` | 31.00 KB |
+| **`@lezer/common`** | **15.11 KB** |
+| `src/domain` | 11.51 KB |
+| **`@codemirror/language`** | **9.50 KB** |
+| `@codemirror/commands` | 9.15 KB |
+| **`@lezer/highlight`** | **6.42 KB** |
+
+SyntaxLab installs **no CodeMirror language mode** — `@codemirror/lang-json`
+was deliberately rejected at M6. The language and lezer packages are pulled in
+transitively by three imports from `@codemirror/commands`: `history`,
+`historyKeymap`, `standardKeymap`.
+
+**Measured, by stubbing those three imports and rebuilding: initial JS drops
+from 173.04 KB to 155.94 KB — a 17.04 KB saving.**
+
+It was not taken at M8, and should not be taken casually: those three imports
+provide undo/redo and the standard editing keymap. Removing them without a
+replacement would be a serious regression in both editors. The work is to find
+an equivalent that does not drag in a syntax-tree library — which is editor
+surgery with regression risk across Regex and JSON, and belongs in M11 with
+its own testing, not in a theme milestone.

@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M7 complete → M8 next (awaiting approval)
+**Current milestone:** M8 complete → M9 next (awaiting approval)
 **Last updated:** 2026-08-19
 
 > Living document, updated at the end of every milestone. The architecture
@@ -33,8 +33,8 @@
 | M5 | JSON domain | ✅ **Complete** |
 | M6 | JSON UI | ✅ **Complete** |
 | M7 | History and storage | ✅ **Complete** |
-| M8 | Theme customisation | ⬜ Next |
-| M9 | PWA and offline | ⬜ |
+| M8 | Theme customisation | ✅ **Complete** |
+| M9 | PWA and offline | ⬜ Next |
 | M10 | Accessibility and security hardening | ⬜ |
 | M11 | Performance measurement | ⬜ |
 | M12 | Integration, E2E, release QA | ⬜ |
@@ -1005,6 +1005,189 @@ residue is diffuse rather than pointed, and that none of it is caused by M7.
 - **No tag UI.** `tags` is in the schema, validated and bounded, with nothing that writes it. It is there so adding tags later is not a migration.
 - **Import merges only.** `importAll` supports `replace`, and the drawer offers only merge — replace is destructive and wants its own confirmation flow, and merge already covers restoring a backup.
 - **Two-tab conflict resolution is last-write-wins by `lastOpenedAt`.** Sufficient for one person with two tabs; it is not a sync algorithm.
+
+---
+
+## M8 — objective and outcome
+
+**Objective:** turn the existing token architecture into a theme system a user
+can customise, without a dependency, a backend, or a way to make the interface
+unreadable.
+
+**Outcome:** met, with one qualification and one accepted overage. All theme
+acceptance criteria T-1 – T-14 pass; T-15 is verified by visual review only,
+as the criterion itself specifies. The initial-JS **target** is exceeded by
+3.04 KB; the hard budget is met with 27 KB to spare.
+
+**This milestone was interrupted twice** — once by the session limit and once
+by a network outage — and resumed from the repository both times. Nothing was
+rebuilt from scratch and no commit was rewritten.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
+| Unit tests | ✅ **2 134 passed** (34 files, +64 from M7) |
+| E2E | ✅ **487 passed, 3 skipped** across 20 projects — the full matrix, zero failures |
+| Production build | ✅ |
+| Bundle | ⚠️ **173.04 KB initial** (target 170, hard 200) · 19.56 KB workers · 7.56 KB CSS |
+| `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
+| Raw-HTML / eval scan | ✅ none |
+| Dependencies added | ✅ **none** |
+| **Regex, JSON, History** | ✅ **unchanged and green** |
+
+### Built
+
+```
+src/domain/theme/preferences.ts      model · 5 presets · validator ·
+                                     WCAG contrast · lighten-to-pass
+src/application/theme/themeStore.ts  store · applyTheme · debounced persist
+src/features/theme/ThemeDrawer.tsx   presets · colours · direction ·
+                                     intensity · glow · contrast · motion ·
+                                     text size · contrast guard · reset
+src/features/theme/ThemeControls.tsx the Appearance button and the wiring
+public/theme-bootstrap.js            hardened (rewritten, not replaced)
+scripts/measure-theme.mjs            the performance harness
+```
+
+### The decisions that carry the most weight
+
+**Validation happens at one choke point, not by convention.** `setTheme` runs
+everything through `readTheme` — including values from our own controls. An
+`input[type="color"]` is guaranteed by specification to yield `#rrggbb`, but
+that guarantee lives in a specification and not in this repository, and
+`applyTheme` is a `setProperty` sink. This was found by auditing the sinks
+rather than by a failing test.
+
+**Reject, never clamp.** `angleDeg: 100000` becomes 135, not 359. Clamping
+invents a value the user never chose. The bootstrap follows the same rule,
+because a bootstrap that clamped where the domain resets would paint one theme
+and replace it a moment later.
+
+**A theme from a newer build is discarded**, which is the opposite of the
+history rule and deliberately so: a theme is a preference resettable in four
+clicks, and showing someone an interface they cannot fix from inside the app
+is worse than showing them the default.
+
+**Semantic colours and the focus ring are not customisable.** Letting a user
+make an error message or a focus ring low-contrast would turn an accessibility
+guarantee into a preference. The visible cost is a green focus ring in the
+Mono theme; that trade is taken knowingly.
+
+**The accent follows the primary colour** rather than being a separate
+control, so the gradient and the focus ring are always the same hue family.
+
+### Performance — measured
+
+`npm run measure:theme`, Chromium, production build.
+
+| Measurement | Value |
+|---|---|
+| Theme switch, median of 20 | **1.1 ms** |
+| Theme switch, slowest | 2.3 ms |
+| FCP, default theme | 36 ms |
+| FCP, stored custom theme | 40 ms |
+| `localStorage` writes for a 21-step drag | **1** |
+
+1.1 ms because nothing re-renders: the only React subscriber to `themeStore`
+is the drawer itself.
+
+### Bundle
+
+| | M7 | M8 | Delta |
+|---|---|---|---|
+| Initial JS | 169.29 KB | **173.04 KB** | **+3.75 KB** |
+| CSS | 6.95 KB | 7.56 KB | +0.61 KB |
+| Total precache | 197.75 KB | 202.10 KB | +4.35 KB |
+
+**Over the 170 KB target by 3.04 KB.** Two things were tried first:
+`React.lazy` on the drawer, which made the bundle *larger* by 1.11 KiB (it
+deferred 1.59 KiB while the entry chunk shrank by 0.46 KiB); and removing a
+dead `description` field from the preset table, which was kept.
+
+A **17.04 KB** saving was measured and deliberately not taken: three imports
+from `@codemirror/commands` pull in `@codemirror/language` and lezer for a
+product that installs no language mode. They provide undo/redo and the
+standard editing keymap, so removing them without a replacement is a serious
+editor regression. Recorded for M11 with the number and the trade-off in
+`12_PERFORMANCE.md` §10.9.
+
+### A note on the two flakes seen mid-milestone
+
+Partway through, one full-matrix run showed two failures in
+`workers-chromium` — a worker-termination test and a regex-dialect assertion.
+Both passed in isolation immediately afterwards, and the final full run was
+clean at 487 passed. Same signature as the environment flakiness characterised
+at M7: wall-clock-dependent tests, now sharing one machine across twenty
+browser projects rather than fourteen. No retry was added and no timeout was
+raised.
+
+### Defects found and fixed during M8
+
+| Found by | Defect |
+|---|---|
+| Unit | `matchesPreset` looked up the preset the theme *claimed* to be, so after one custom edit a theme could never name a preset again — editing back to exactly Amber left no preset marked while displaying Amber. |
+| Unit | Two store tests spied on `Storage.prototype`, which happy-dom does not route these writes through. The debounce test measured nothing and the storage-refusal test never entered the catch it existed to exercise. |
+| **Sink audit** | `setTheme` trusted its callers. |
+| **Sink audit** | `SURFACE_HEX` was `#0d1117`; `--color-surface` is `#101613`. The contrast guard reported confident ratios against a background the accent is never shown on. A test now reads the value out of `tokens.css`. |
+| Spec review | The contrast guard was silent on a passing colour, where §4.5 specifies "✓ Passes AA". |
+| **Visual review** | "Amber Console" was ellipsised to "Amber Consol…" — a chip whose whole job is to name a theme had stopped naming it. |
+| Bootstrap review | The bootstrap clamped where the domain rejects, accepted any `fontScale` in a range rather than the four steps, and did not check `schemaVersion` at all — three ways to paint one theme and replace it. |
+
+### Security
+
+| Assertion | Evidence |
+|---|---|
+| No arbitrary CSS reaches `setProperty` | Every call takes a value rebuilt by `readTheme`; enforced at `setTheme`, not by comment |
+| Hostile `localStorage` cannot inject | 18 payloads planted and reloaded in 3 engines |
+| No script executes | Asserted: no dialog, no page error, no `img[src]`, no inline `<script>` |
+| One corrupt field does not cost the theme | Asserted in unit and E2E |
+| Validation is an allowlist | `/^#[0-9a-fA-F]{6}$/` positive match; nothing is stripped or escaped |
+| Theme never enters a history record | E2E reads the IndexedDB records back and asserts no theme vocabulary |
+
+Not claimed: that the theme system is unbreakable. Claimed: values reaching
+`setProperty` have matched an explicit pattern, the check is a positive match
+rather than a filter, and it is tested in three engines.
+
+### Accessibility
+
+axe clean (`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`) over the drawer, the
+whole interface in high-contrast mode, the drawer in high-contrast mode, and a
+custom theme with the analysis panes populated. Keyboard operation of every
+control, focus trapping, Escape, and focus restoration all covered.
+
+**One honest limitation.** Playwright's `forcedColors: 'active'` flips the
+media query without applying a real forced palette — measured, the plain app
+reports 29 color-contrast nodes under it with no theme UI on screen. That rule
+is excluded from the one forced-colors test, structural behaviour is asserted
+instead, and **real forced-colors validation still needs an OS high-contrast
+mode and has not been performed.**
+
+### Dependencies added at M8
+
+**None.** A colour picker, a theming library, a colour-maths package and an
+icon set were each considered and rejected — `16_DEPENDENCIES.md`.
+
+### Deviations at M8
+
+| # | Deviation | Reason |
+|---|---|---|
+| D26 | **Direction is four named options, not a 0–359 slider** | The stored value is still a bounded `angleDeg`, so schema and bootstrap are unchanged. |
+| D27 | **Accent is derived from the primary colour** | Coherence, and one fewer way to build an unreadable interface. |
+| D28 | **Presets are named Deep Cyan and Amber Console** | Display names only; ids and values are exactly §4.3. |
+| D29 | **`backgroundDarkness` is in the model but unimplemented** | Nothing reads it and no token exists for it. A control for a value with no effect would be theatre. |
+| D30 | **Self-hosted `woff2` fonts (§5) are still not present** | Unchanged from M1. The files are not in the repository and M8 did not add them: sourcing typefaces and settling their licensing was out of scope. `tokens.css` says so where the stacks are defined. |
+| D31 | **The drawer is imported eagerly** | `React.lazy` was measured and made the bundle larger. |
+
+### Known limitations at M8
+
+- **Initial JS is 3.04 KB over target.** Accepted, with the 17.04 KB M11 lead measured and recorded.
+- **Forced colors is not truly validated** — see above.
+- **T-15 has no automated check.** That the gradient appears in at most four places is a visual review, as the criterion specifies.
+- **No light theme.** Deferred at V1.2+ by §8.3, untouched.
+- **The syntax palette does not follow the accent.** Deliberate: it is an editor palette, and tying it to a user accent would make token colours collide.
 
 ---
 
