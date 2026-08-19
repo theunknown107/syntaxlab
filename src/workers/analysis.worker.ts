@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { domainError, truncateForMessage } from '@/domain/shared/result';
 import { analyzeRegex } from '@/domain/regex/analyze';
+import { analyzeJson } from '@/domain/json/analyze';
 import {
   describeRequestRejection,
   isAnalysisOp,
@@ -9,6 +10,7 @@ import {
   type AnalysisEchoResult,
   type AnalysisPingPayload,
   type AnalysisPingResult,
+  type AnalysisJsonPayload,
   type AnalysisRegexPayload,
   type AnalysisRequest,
   type WorkerResponse,
@@ -23,9 +25,11 @@ import {
  * is a bug to fix rather than a behaviour to design around
  * (04_PARSER_ARCHITECTURE.md §2.7).
  *
- * M2 scope: dispatch, validation, and error containment. The regex parser
- * (M3) and JSON parser (M5) register their operations here without changing
- * anything below.
+ * M2 established dispatch, validation and error containment; the regex parser
+ * (M3) and the JSON parser (M5) each registered an operation here without
+ * changing anything else. JSON parsing belongs on *this* worker rather than
+ * the disposable one: it is our own bounded code, and a regex execution
+ * timeout must never destroy an unrelated parse.
  */
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -66,6 +70,20 @@ function handleRegex(id: number, payload: AnalysisRegexPayload): WorkerResponse 
     : { id, ok: false, error: result.error };
 }
 
+/**
+ * JSON parsing and explanation.
+ *
+ * The worker re-validates the size limit itself rather than trusting the
+ * caller — a compromised main thread is exactly the case where trusting the
+ * sender would be wrong (05_SECURITY.md §6).
+ */
+function handleJson(id: number, payload: AnalysisJsonPayload): WorkerResponse {
+  const result = analyzeJson(payload.source);
+  return result.ok
+    ? { id, ok: true, result: result.value }
+    : { id, ok: false, error: result.error };
+}
+
 function dispatch(request: AnalysisRequest): WorkerResponse {
   // Exhaustive by design: adding an operation without handling it is a lint
   // error. That rule is what caught this case being missing during M3.
@@ -78,6 +96,9 @@ function dispatch(request: AnalysisRequest): WorkerResponse {
 
     case 'analysis.regex':
       return handleRegex(request.id, request.payload);
+
+    case 'analysis.json':
+      return handleJson(request.id, request.payload);
   }
 }
 

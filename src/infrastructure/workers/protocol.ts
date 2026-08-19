@@ -7,6 +7,8 @@ import type {
   RegexMatch,
 } from '@/domain/regex/execute';
 import { isValidRegexAnalysis, isValidRegexExecResult } from '@/domain/regex/validate';
+import type { JsonAnalysis } from '@/domain/json/ast';
+import { isValidJsonAnalysis } from '@/domain/json/validate';
 
 /**
  * Worker wire protocol — 15_API_AND_BROWSER_CAPABILITIES.md §2
@@ -33,7 +35,12 @@ import { isValidRegexAnalysis, isValidRegexExecResult } from '@/domain/regex/val
  * boundary works end to end; they are NOT analysis and do not pretend to be.
  * `parse.regex` and `parse.json` replace them at M3 and M5.
  */
-export const ANALYSIS_OPS = ['analysis.ping', 'analysis.echo', 'analysis.regex'] as const;
+export const ANALYSIS_OPS = [
+  'analysis.ping',
+  'analysis.echo',
+  'analysis.regex',
+  'analysis.json',
+] as const;
 export type AnalysisOp = (typeof ANALYSIS_OPS)[number];
 
 /**
@@ -79,6 +86,15 @@ export interface AnalysisRegexPayload {
 }
 
 /**
+ * JSON parsing is analysis work: bounded, our own code, and worth keeping warm.
+ * It belongs on the long-lived worker, never on the disposable one — a regex
+ * timeout must not destroy an unrelated parse.
+ */
+export interface AnalysisJsonPayload {
+  readonly source: string;
+}
+
+/**
  * The only operation that runs foreign code. It lives on the disposable
  * worker so its deadline can be enforced by destroying the thread, which is
  * the only reliable stop for an uninterruptible regex.
@@ -104,6 +120,7 @@ export interface OpTypes {
   'analysis.ping': { payload: AnalysisPingPayload; result: AnalysisPingResult };
   'analysis.echo': { payload: AnalysisEchoPayload; result: AnalysisEchoResult };
   'analysis.regex': { payload: AnalysisRegexPayload; result: RegexAnalysis };
+  'analysis.json': { payload: AnalysisJsonPayload; result: JsonAnalysis };
   'exec.spin': { payload: ExecSpinPayload; result: ExecSpinResult };
   'exec.regex': { payload: ExecRegexPayload; result: RegexExecResult };
 }
@@ -216,6 +233,9 @@ const PAYLOAD_VALIDATORS: {
   'analysis.regex': (payload): payload is AnalysisRegexPayload =>
     isRecord(payload) && typeof payload.source === 'string' && typeof payload.flags === 'string',
 
+  'analysis.json': (payload): payload is AnalysisJsonPayload =>
+    isRecord(payload) && typeof payload.source === 'string',
+
   'exec.regex': (payload): payload is ExecRegexPayload =>
     isRecord(payload) &&
     typeof payload.source === 'string' &&
@@ -243,6 +263,7 @@ const PAYLOAD_RECONSTRUCTORS: {
   'analysis.ping': (p) => ({ sentAt: p.sentAt }),
   'analysis.echo': (p) => ({ text: p.text }),
   'analysis.regex': (p) => ({ source: p.source, flags: p.flags }),
+  'analysis.json': (p) => ({ source: p.source }),
   'exec.regex': (p) => ({ source: p.source, flags: p.flags, subject: p.subject }),
   'exec.spin': (p) => ({ durationMs: p.durationMs }),
 };
@@ -310,6 +331,8 @@ const RESULT_VALIDATORS: {
 
   'analysis.regex': (result): result is RegexAnalysis => isValidRegexAnalysis(result),
 
+  'analysis.json': (result): result is JsonAnalysis => isValidJsonAnalysis(result),
+
   'exec.regex': (result): result is RegexExecResult => isValidRegexExecResult(result),
 };
 
@@ -360,6 +383,12 @@ const RESULT_RECONSTRUCTORS: {
   // own code inside the worker, its shape is asserted by isValidRegexAnalysis,
   // and it is rendered as text rather than executed. Passed through as-is.
   'analysis.regex': (r) => r,
+  // Same reasoning as `analysis.regex`: a bounded tree produced by our own
+  // code, asserted by `isValidJsonAnalysis`, and rendered as text rather than
+  // executed. Rebuilding half a million nodes here would duplicate the parser
+  // and cost more than the parse did. The validator is what stands between a
+  // malformed result and application state.
+  'analysis.json': (r) => r,
   'exec.regex': (r) => ({
     kind: 'regexExec',
     matches: r.matches.map(reconstructMatch),
