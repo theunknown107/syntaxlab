@@ -1209,20 +1209,28 @@ preview deployment" half of the M9 definition of done is **outstanding**.
 | ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
 | Unit tests | ✅ **2 134 passed** (34 files, unchanged — M9 adds no domain logic) |
 | E2E, PWA projects | ✅ **50 passed, 6 skipped** across Chromium, Firefox, WebKit, mobile |
-| E2E, full matrix | ✅ **533 passed, 9 skipped, 4 failed** — see below |
+| E2E, full matrix | **534 passed, 9 skipped, 3 failed** — see below |
 | Production build | ✅ |
 | Bundle | ⚠️ **174.52 KB initial** (target 170, hard 200) · 5.93 KB service worker · 226.00 KB total precache |
 | `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
 | Dependencies added | 1, build-time: `vite-plugin-pwa` |
 | **Regex, JSON, History, Theme** | ✅ **unchanged** |
 
-**The 4 failures are not M9's.** Two are the `json › suggestion can be
-dismissed` flake characterised at M7 and M8 — they pass in isolation. The other
-two are `regex-mobile` execution-timeout tests, and they were verified to fail
-**identically at the M8 commit `a13910e` and with the PWA plugin disabled**,
-while passing on `regex-chromium`. Device-emulation specific, pre-existing, and
-recorded in `13_TEST_PLAN.md` §16 as an open issue against the M4 tests rather
-than quietly carried.
+**The failures are not M9's, and fall into two known groups.**
+
+*Scattered environment flakes.* Across the M9 full runs the failing set changed
+every time — `json-chromium › suggestion can be dismissed`, then
+`regex-firefox › clears the workspace`, then others — never the same test
+twice, and each passes in isolation. That is the distribution characterised at
+M7 and M8: wall-clock-dependent tests sharing one machine, now across 25
+browser projects rather than 14. No retry was added and no timeout raised.
+
+*One consistent, pre-existing failure.* The `regex-mobile` execution-timeout
+tests fail repeatably in isolation. They were verified to fail **identically at
+the M8 commit `a13910e`, and with the PWA plugin disabled**, while passing on
+`regex-chromium`. Device-emulation specific, predates M9, and is recorded in
+`13_TEST_PLAN.md` §16 as an open issue against the M4 tests rather than quietly
+carried.
 
 ### Built
 
