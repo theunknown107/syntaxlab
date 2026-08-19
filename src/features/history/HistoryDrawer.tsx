@@ -261,6 +261,10 @@ function EntryRow({
         <button
           type="button"
           className={styles.open}
+          // Labelled explicitly: without this the accessible name is the whole
+          // row — title, badge, counts and timestamp run together — which is a
+          // sentence to listen to before knowing what the button does.
+          aria-label={`Open ${entry.title}`}
           onClick={() => {
             restoreEntry(entry);
             onOpen();

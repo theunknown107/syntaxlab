@@ -48,9 +48,10 @@ export function HistoryControls(): React.JSX.Element {
           type="button"
           className={styles.headerButton}
           aria-pressed={!enabled}
-          // The label states the current state, not only the action, because
-          // a toggle that reads "Pause" gives no clue whether it is already on.
-          aria-label={enabled ? 'History is on. Pause history.' : 'History is paused. Resume it.'}
+          // The action comes first, then the current state: a toggle labelled
+          // only "Pause" gives no clue whether it is already paused. Leading
+          // with the verb also keeps it distinct from the button beside it.
+          aria-label={enabled ? 'Pause history. History is on.' : 'Resume history. History is paused.'}
           onClick={() => {
             setHistoryEnabled(!enabled);
           }}

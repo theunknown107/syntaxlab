@@ -74,6 +74,21 @@ export default defineConfig({
       use: { ...devices['Pixel 5'], baseURL: 'http://localhost:4173' },
     },
     {
+      name: 'history-chromium',
+      testMatch: /history\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'history-firefox',
+      testMatch: /history\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'history-webkit',
+      testMatch: /history\.spec\.ts/,
+      use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
+    },
+    {
       name: 'workers-chromium',
       testMatch: /workers\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' },
