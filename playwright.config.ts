@@ -34,6 +34,26 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
     },
     {
+      name: 'json-chromium',
+      testMatch: /json\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'json-firefox',
+      testMatch: /json\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'json-webkit',
+      testMatch: /json\.spec\.ts/,
+      use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'json-mobile',
+      testMatch: /json\.spec\.ts/,
+      use: { ...devices['Pixel 5'], baseURL: 'http://localhost:4173' },
+    },
+    {
       name: 'regex-chromium',
       testMatch: /regex\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },

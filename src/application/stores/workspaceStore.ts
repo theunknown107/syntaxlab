@@ -54,6 +54,13 @@ export interface WorkspaceState {
    * dismissed it last week should still be told when they paste JSON today.
    */
   readonly detected: DetectionResult | null;
+  /**
+   * Whether the detected text arrived into an *empty* editor.
+   *
+   * This is what separates a first paste from an edit, and it is the only
+   * situation in which a mode may change on its own (08_UI_UX_SPEC.md §3).
+   */
+  readonly detectedOnEmpty: boolean;
   readonly suggestionDismissed: boolean;
 
   readonly pattern: string;
@@ -98,6 +105,7 @@ const initialState: WorkspaceState = {
   execError: null,
 
   detected: null,
+  detectedOnEmpty: false,
   suggestionDismissed: false,
 
   jsonInput: '',

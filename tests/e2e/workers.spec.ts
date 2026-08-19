@@ -167,7 +167,8 @@ test.describe('main-thread responsiveness', () => {
     // were on the main thread, this click could not be handled at all.
     await page.getByRole('radio', { name: 'JSON' }).click();
     await expect(page.getByRole('radio', { name: 'JSON' })).toBeChecked();
-    await expect(page.getByRole('heading', { name: 'JSON input' })).toBeVisible();
+    // From M6 the JSON mode is the real feature, so its pane is the editor.
+    await expect(page.getByRole('heading', { name: /^JSON/ })).toBeVisible();
 
     // And again after the timeout, termination, and respawn.
     const outcome: Outcome = await page.evaluate(

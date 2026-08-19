@@ -39,7 +39,8 @@ test('switches mode with the keyboard alone', async ({ page }) => {
   await page.keyboard.press('ArrowRight');
 
   await expect(page.getByRole('radio', { name: 'JSON' })).toBeChecked();
-  await expect(page.getByRole('heading', { name: 'JSON input' })).toBeVisible();
+  // From M6 the JSON mode is the real feature, so its pane is the editor.
+  await expect(page.getByRole('heading', { name: /^JSON/ })).toBeVisible();
 });
 
 test('reports no CSP violations during a session', async ({ page }) => {

@@ -147,6 +147,7 @@ export function setJsonInput(jsonInput: string): void {
       // the user is not left staring at an empty pane while they scroll.
       jsonStale: manual && previous.jsonAnalysis !== null,
       detected: detectInput(jsonInput),
+      detectedOnEmpty: previous.jsonInput === '',
     };
   });
 
@@ -239,10 +240,14 @@ export function suggestionFor(state: WorkspaceState): {
   }
   if (detected.type === state.mode) return { show: false, auto: false };
 
-  const otherIsEmpty = state.mode === 'regex' ? state.jsonInput === '' : state.pattern === '';
+  // Auto-select only on a *first* paste into an empty editor, and only when
+  // the mode being switched to has nothing in it either. Switching once
+  // someone has started editing is the trap the spec rules out, and switching
+  // onto work they already have would hide it.
+  const targetIsEmpty = state.mode === 'regex' ? state.jsonInput === '' : state.pattern === '';
   return {
     show: detected.confidence >= SUGGEST,
-    auto: detected.confidence >= AUTO_SELECT && otherIsEmpty,
+    auto: detected.confidence >= AUTO_SELECT && state.detectedOnEmpty && targetIsEmpty,
   };
 }
 
