@@ -41,7 +41,9 @@ function expectNoPollution(): void {
   expect(probe.polluted).toBeUndefined();
   expect(Object.prototype).not.toHaveProperty('polluted');
   expect(Object.prototype).not.toHaveProperty('prototype', expect.anything());
-  expect({}.toString()).toBe('[object Object]');
+  // Called rather than referenced, so this checks the behaviour a replaced
+  // `toString` would change rather than the identity of the function object.
+  expect(Object.prototype.toString.call({})).toBe('[object Object]');
   expect([].constructor).toBe(Array);
   expect(typeof ({} as { valueOf: unknown }).valueOf).toBe('function');
 }
@@ -194,6 +196,7 @@ describe('script payloads are data, never markup', () => {
     '<script>window.__xssCanary=1</script>',
     '<img src=x onerror=alert(1)>',
     '<svg/onload=alert(1)>',
+    // eslint-disable-next-line no-script-url -- a test payload, never navigated to
     'javascript:alert(1)',
     '\\u003cscript\\u003ealert(1)\\u003c/script\\u003e',
   ];

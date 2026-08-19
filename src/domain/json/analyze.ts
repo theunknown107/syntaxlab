@@ -3,13 +3,13 @@ import type {
   DuplicateKeyReport,
   JsonAnalysis,
   JsonNode,
+  JsonPath,
   JsonStats,
   UnsafeNumberReport,
 } from './ast';
 import { explainJson } from './explain';
 import { unsafeNumberReason } from './numbers';
 import { parseJson } from './parser';
-import { pathKey } from './path';
 import { NOTABLE_KEYS, RISKY_KEYS } from './plain';
 import { checkInputLength } from './tokenizer';
 
@@ -31,7 +31,7 @@ import { checkInputLength } from './tokenizer';
 export interface RiskyKeyReport {
   readonly key: string;
   readonly span: SourceSpan;
-  readonly path: string;
+  readonly path: JsonPath;
   /** `dropped`: removed from any plain-value conversion. `notable`: kept. */
   readonly severity: 'dropped' | 'notable';
 }
@@ -71,14 +71,51 @@ export function analyzeJson(source: string): Result<JsonAnalysis> {
 }
 
 /**
- * Errors in source order, limit errors first.
+ * How specific a message is, when two describe the same position.
  *
- * A `LIMIT_EXCEEDED` explains every syntax error that follows it, so burying
- * it under them would be actively misleading.
+ * `UNSUPPORTED` names a construct from another dialect — "Strings must use
+ * double quotes" — which is always more useful than the generic syntax
+ * complaint the same token also produces.
+ */
+function specificity(error: DomainError): number {
+  if (error.code === 'UNSUPPORTED') return 2;
+  if (error.code === 'SYNTAX') return 1;
+  return 0;
+}
+
+/**
+ * One report per position, limit errors first, then source order.
+ *
+ * The scanner and the parser can both have something to say about the same
+ * token: `{a:1}` produced "`a` is not valid JSON" from one and "Object keys
+ * must be quoted strings" from the other. Two complaints about one mistake is
+ * noise, so the most specific survives — and where the codes tie, the later
+ * report wins, because the parser knows what position the token was in and the
+ * scanner does not.
+ *
+ * A `LIMIT_EXCEEDED` explains every syntax error that follows it, so it leads
+ * regardless of where it occurred; burying it under the cascade it caused
+ * would be actively misleading.
  */
 function rankErrors(errors: readonly DomainError[]): DomainError[] {
-  const limits = errors.filter((error) => error.code === 'LIMIT_EXCEEDED');
-  const rest = errors.filter((error) => error.code !== 'LIMIT_EXCEEDED');
+  const best = new Map<number, DomainError>();
+  const unpositioned: DomainError[] = [];
+
+  for (const error of errors) {
+    const at = error.span?.start;
+    if (at === undefined) {
+      unpositioned.push(error);
+      continue;
+    }
+    const existing = best.get(at);
+    if (!existing || specificity(error) >= specificity(existing)) best.set(at, error);
+  }
+
+  const positioned = [...best.entries()].sort(([a], [b]) => a - b).map(([, error]) => error);
+
+  const all = [...unpositioned, ...positioned];
+  const limits = all.filter((error) => error.code === 'LIMIT_EXCEEDED');
+  const rest = all.filter((error) => error.code !== 'LIMIT_EXCEEDED');
   return [...limits, ...rest];
 }
 
@@ -238,7 +275,7 @@ function collectRiskyKey(
 ): void {
   const severity = RISKY_KEYS.has(key) ? 'dropped' : NOTABLE_KEYS.has(key) ? 'notable' : null;
   if (!severity) return;
-  out.push({ key, span, path: pathKey(parent.path), severity });
+  out.push({ key, span, path: parent.path, severity });
 }
 
 /**

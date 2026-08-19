@@ -1,7 +1,6 @@
 import {
   code,
   emphasis,
-  joinClauses,
   list,
   section,
   text,
@@ -10,10 +9,20 @@ import {
   type ExplanationSection,
 } from '../shared/explanation';
 import { assertNever, type DomainError } from '../shared/result';
-import type { JsonNode, JsonNodeType } from './ast';
+import type { JsonNode, JsonNodeType, JsonPath } from './ast';
 import type { JsonFindings } from './analyze';
 import { unsafeNumberDetail } from './numbers';
 import { formatPath } from './path';
+
+/**
+ * A path as a reader wants to see it.
+ *
+ * `$` on its own is opaque next to a message; "the top level" is the same
+ * fact in words. Anything deeper already reads as a path.
+ */
+function pathPhrase(path: JsonPath): ExplanationNode[] {
+  return path.length === 0 ? [text('at the top level')] : [text('at '), code(formatPath(path))];
+}
 
 /**
  * JSON explanation — 03_DOMAIN_MODEL.md §2.4, ADR-011
@@ -42,7 +51,7 @@ const NAME_LIMIT = 10;
 export function explainJson(input: ExplainJsonInput): Explanation {
   const details: ExplanationSection[] = [];
 
-  const structure = structureSection(input.root);
+  const structure = structureSection(input.root, input.findings.stats);
   if (structure) details.push(structure);
 
   const shape = shapeSection(input.root);
@@ -70,9 +79,12 @@ function summarise(input: ExplainJsonInput): ExplanationNode[] {
       text(errors[0]?.message ?? ''),
     ];
 
-    if (root) {
-      // Recovery produced a partial tree, so say what survived rather than
-      // leaving the reader with only the failure.
+    // Only claim a recovery when something substantive actually survived. The
+    // first draft said "the rest was read as a part that could not be read"
+    // for a leading comment, and "read as an empty object" for `{'a':1}`
+    // where the single member had failed. Both overstate what the reader
+    // gets, which is worse than saying nothing.
+    if (root && isSubstantive(root)) {
       problems.push(text(' The rest of the document was read as '), ...describe(root), text('.'));
     }
     return problems;
@@ -80,13 +92,31 @@ function summarise(input: ExplainJsonInput): ExplanationNode[] {
 
   if (!root) return [text('There is nothing to read yet.')];
 
-  const clauses: ExplanationNode[][] = [[text('This is '), ...describe(root)]];
+  const summary: ExplanationNode[] = [text('This is '), ...describe(root)];
 
   if (findings.stats.maxDepth > 2) {
-    clauses.push([text('nested '), emphasis(`${findings.stats.maxDepth} levels`), text(' deep')]);
+    // Written out rather than through `joinClauses`, which places a comma
+    // before the conjunction. That is right for three clauses and wrong for
+    // two.
+    summary.push(text(', nested '), emphasis(`${findings.stats.maxDepth} levels`), text(' deep'));
   }
 
-  return [...joinClauses(clauses, 'and'), text('.')];
+  summary.push(text('.'));
+  return summary;
+}
+
+/** Whether a recovered tree carries enough to be worth describing. */
+function isSubstantive(root: JsonNode): boolean {
+  switch (root.type) {
+    case 'error':
+      return false;
+    case 'object':
+      return root.members.length > 0;
+    case 'array':
+      return root.elements.length > 0;
+    default:
+      return true;
+  }
 }
 
 /** A noun phrase for a node: "an object with 3 properties". */
@@ -108,11 +138,11 @@ function describe(node: JsonNode): ExplanationNode[] {
             ...elementKindPhrase(node.elements),
           ];
     case 'string':
-      return [text('a single string, '), code(truncate(node.value))];
+      return [text('a single string: '), code(truncate(node.value))];
     case 'number':
-      return [text('a single number, '), code(node.raw)];
+      return [text('a single number: '), code(node.raw)];
     case 'boolean':
-      return [text('a single boolean, '), code(String(node.value))];
+      return [text('a single boolean: '), code(String(node.value))];
     case 'null':
       return [text('the value '), code('null')];
     case 'error':
@@ -193,6 +223,11 @@ function shapeSection(root: JsonNode | null): ExplanationSection | null {
     for (const element of root.elements) {
       counts.set(element.type, (counts.get(element.type) ?? 0) + 1);
     }
+
+    // A homogeneous array is already fully described by the summary — "an
+    // array of 5 items, all numbers". Repeating "5 numbers" underneath is the
+    // duplication this section was added to avoid.
+    if (counts.size < 2) return null;
     const items = [...counts].map(([type, count]) => [
       text(countOf(count, typeName(type), pluralType(type))),
     ]);
@@ -204,15 +239,57 @@ function shapeSection(root: JsonNode | null): ExplanationSection | null {
   return null;
 }
 
-/** Size, in the terms a developer checks: how many, how deep, how big. */
-function structureSection(root: JsonNode | null): ExplanationSection | null {
+/**
+ * Size, in the terms a developer actually checks.
+ *
+ * Deliberately *not* a restatement of the summary. The first draft of this
+ * engine read "The document is an object with 3 properties" directly under a
+ * summary saying exactly that — two lines to say one thing is how an
+ * explanation pane becomes a wall of text. What the summary cannot carry is
+ * the shape of the whole document, so that lives here, as one compact line
+ * (08_UI_UX_SPEC.md §7.2).
+ */
+function structureSection(
+  root: JsonNode | null,
+  stats: JsonFindings['stats'],
+): ExplanationSection | null {
   if (!root) return null;
-  return section(
-    'json-structure',
-    'Structure',
-    [text('The document is '), ...describe(root), text('.')],
-    { span: root.span },
-  );
+
+  const parts = [countOf(stats.nodeCount, 'value', 'values')];
+  // A bare scalar has no nesting at all, and "0 levels deep" reads as though
+  // something is missing rather than as a fact about the document.
+  if (stats.maxDepth > 0) {
+    parts.push(`${stats.maxDepth} ${stats.maxDepth === 1 ? 'level' : 'levels'} deep`);
+  }
+  if (stats.totalKeys > 0) parts.push(countOf(stats.totalKeys, 'key', 'keys'));
+  parts.push(formatBytes(stats.byteLength));
+
+  const body: ExplanationNode[] = [text(parts.join(' · '))];
+
+  const types = typeBreakdown(stats);
+  if (types.length > 0) body.push(text(` — ${types.join(', ')}`));
+
+  return section('json-structure', 'Structure', body, { span: root.span });
+}
+
+function typeBreakdown(stats: JsonFindings['stats']): string[] {
+  const entries: [number, string, string][] = [
+    [stats.objectCount, 'object', 'objects'],
+    [stats.arrayCount, 'array', 'arrays'],
+    [stats.stringCount, 'string', 'strings'],
+    [stats.numberCount, 'number', 'numbers'],
+    [stats.booleanCount, 'boolean', 'booleans'],
+    [stats.nullCount, 'null', 'nulls'],
+  ];
+  return entries
+    .filter(([count]) => count > 0)
+    .map(([count, singular, plural]) => countOf(count, singular, plural));
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function findingSections(findings: JsonFindings): ExplanationSection[] {
@@ -230,8 +307,8 @@ function duplicateSection(findings: JsonFindings): ExplanationSection {
     .slice(0, NAME_LIMIT)
     .map((report) => [
       code(truncate(report.key, 32)),
-      text(` appears ${report.occurrences.length} times in `),
-      code(formatPath(report.path)),
+      text(` appears ${report.occurrences.length} times `),
+      ...pathPhrase(report.path),
     ]);
 
   return section(
@@ -254,26 +331,31 @@ function unsafeNumberSection(findings: JsonFindings): ExplanationSection {
     .slice(0, NAME_LIMIT)
     .map((report) => [
       code(report.raw),
-      text(' at '),
-      code(formatPath(report.path)),
+      text(' '),
+      ...pathPhrase(report.path),
       text(' — reads back as '),
       code(String(report.parsed)),
       text('. '),
       text(unsafeNumberDetail(report.reason)),
     ]);
 
-  return section(
-    'json-numbers',
-    'Numbers that change when read',
-    [
-      text(
-        'JavaScript stores every JSON number as a 64-bit float. These do not survive that intact:',
-      ),
-      list(items),
-      text('If these are identifiers, keep them as strings.'),
-    ],
-    { severity: 'warning' },
-  );
+  const body: ExplanationNode[] = [
+    text(
+      'JavaScript stores every JSON number as a 64-bit float. These do not survive that intact:',
+    ),
+    list(items),
+  ];
+
+  // Advice only where it fits. The first draft appended "keep them as strings"
+  // to a negative zero and to an overflow, where it does not apply — and
+  // advice that does not apply teaches readers to skip the section.
+  if (findings.unsafeNumbers.some((report) => report.reason === 'PRECISION_LOSS')) {
+    body.push(text('Where these are identifiers rather than quantities, keep them as strings.'));
+  }
+
+  return section('json-numbers', 'Numbers that change when read', body, {
+    severity: 'warning',
+  });
 }
 
 function riskyKeySection(findings: JsonFindings): ExplanationSection {
@@ -281,8 +363,8 @@ function riskyKeySection(findings: JsonFindings): ExplanationSection {
     .slice(0, NAME_LIMIT)
     .map((report) => [
       code(report.key),
-      text(' in '),
-      code(report.path),
+      text(' '),
+      ...pathPhrase(report.path),
       text(
         report.severity === 'dropped'
           ? ' — kept in the tree, and removed if this document is converted to a JavaScript object.'

@@ -133,18 +133,28 @@ describe('arrays', () => {
   });
 });
 
+/** Walks the tree by key or index, so a deep assertion stays one line. */
+function at(node: JsonNode, ...steps: (string | number)[]): JsonNode {
+  let current = node;
+  for (const step of steps) {
+    const next =
+      typeof step === 'number'
+        ? current.type === 'array'
+          ? current.elements[step]
+          : undefined
+        : current.type === 'object'
+          ? current.members.find((member) => member.key === step)?.value
+          : undefined;
+    if (!next) throw new Error(`nothing at ${String(step)}`);
+    current = next;
+  }
+  return current;
+}
+
 describe('paths', () => {
   it('builds the accessor chain through both containers', () => {
     const node = root('{"user":{"items":[{"name":"x"}]}}');
-    if (node.type !== 'object') throw new Error('wrong');
-    const items = node.members[0]?.value;
-    if (items?.type !== 'object') throw new Error('wrong');
-    const array = items.members[0]?.value;
-    if (array?.type !== 'array') throw new Error('wrong');
-    const first = array.elements[0];
-    if (first?.type !== 'object') throw new Error('wrong');
-
-    expect(formatPath(first.members[0]?.value.path ?? [])).toBe('$.user.items[0].name');
+    expect(formatPath(at(node, 'user', 'items', 0, 'name').path)).toBe('$.user.items[0].name');
   });
 
   it('falls back to bracket notation for keys dot notation cannot express', () => {
