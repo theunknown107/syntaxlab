@@ -439,3 +439,95 @@ Full validation pipeline in `05_SECURITY.md` §10.2. Behaviour summary: merge or
 | Multi-tab | Two contexts writing concurrently; assert consistency and invalidation |
 | Import/export | Round-trip; hostile files per `05_SECURITY.md` §10.2 |
 | Pre-paint theme | Assert no flash: computed background is correct on first paint |
+
+---
+
+## 12. M8 — theme persistence as built
+
+`syntaxlab.theme.v1` holds the whole `ThemePreferences` object as JSON.
+localStorage rather than IndexedDB, for one reason: the theme has to be
+applied **before the first paint**, and an async read cannot do that
+(ADR-007).
+
+### 12.1 The pre-paint sequence
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant BS as theme-bootstrap.js
+    participant LS as localStorage
+    participant R as :root style
+    participant APP as App bundle
+    participant TC as ThemeControls
+
+    B->>BS: blocking <script src>, before the bundle
+    BS->>LS: getItem('syntaxlab.theme.v1')
+    LS-->>BS: string | null
+    alt absent, unparseable, or storage throws
+        BS-->>R: nothing written — tokens.css defaults stand
+    else present
+        BS->>BS: JSON.parse in try/catch
+        BS->>BS: schemaVersion known?
+        BS->>BS: validate each field (reject, never clamp)
+        BS->>R: setProperty for each field that passed
+    end
+    Note over B,R: first paint happens here — correct theme, no flash
+
+    B->>APP: load bundle
+    APP->>LS: readStored() → readTheme()
+    APP->>TC: mount
+    TC->>R: applyTheme(state) — makes the DOM agree with app state
+```
+
+The last step is not redundant. The bootstrap may have written nothing —
+storage blocked by policy, a theme from a newer build, a field that failed —
+and the application must not assume the DOM matches the state it holds.
+
+### 12.2 Why the bootstrap duplicates the validator
+
+`public/theme-bootstrap.js` restates the rules in
+`src/domain/theme/preferences.ts`. It has to: it runs with no module system,
+no build output and no imports.
+
+The duplication is a genuine risk, held in check from both ends:
+
+- the rules are **reject, never clamp**, identical to the domain. A bootstrap
+  that clamped `100000` to `359` while the domain reset it to `135` would
+  paint one theme and replace it a moment later — a flash caused by nothing
+  but disagreement between two copies of one rule.
+- `tests/e2e/theme.spec.ts` drives eighteen hostile payloads through this file
+  in three real browsers and asserts the computed styles.
+
+The file is served verbatim, so every byte — comments included — ships to
+every user. It is **1.64 KB gzipped** and the long rationale lives in
+`09_DESIGN_SYSTEM.md` §11 rather than in the file.
+
+### 12.3 Failure behaviour
+
+| Failure | Behaviour |
+|---|---|
+| Key absent | Defaults. First visit is the normal case, not an error. |
+| Unparseable JSON | Defaults. `readTheme` never throws. |
+| `localStorage` throws on read | Defaults. Private mode and enterprise policy both do this. |
+| `localStorage` throws on write | The theme applies for the session and is not saved. Not reported: the user can see their theme working, and a toast about a preference not persisting is noise. |
+| One field corrupt | That field's default; every other field survives. |
+| `schemaVersion` newer | The whole stored theme is ignored — see `09_DESIGN_SYSTEM.md` §11.2. |
+
+**None of these can affect Regex, JSON or History.** The theme is applied by
+writing custom properties; a failure means the default properties stand.
+
+### 12.4 Writes are debounced, the paint is not
+
+A slider drag repaints on every frame and writes once. Measured: a 21-step
+drag produces **one** `localStorage` write (`12_PERFORMANCE.md` §10.9).
+`flushTheme` runs on `visibilitychange` and `pagehide` so a change made in the
+last 250 ms before the tab closes is not lost. Reset writes immediately —
+it is a deliberate act, not a drag.
+
+### 12.5 Theme and history are separate
+
+Theme is a global preference in localStorage. A `HistoryEntry` has no theme
+field, and `06_DATA_STORAGE.md` §2.1 does not define one. Restoring a history
+entry does not touch the theme, and changing the theme does not rewrite a
+saved analysis. An E2E test plants an entry, changes the theme, and asserts
+that no theme vocabulary appears anywhere in the IndexedDB records.

@@ -340,3 +340,37 @@ browser itself. It does not say the data cannot leave the device — a profile
 can sync and a device can be shared, and a promise we cannot keep is worse
 than no promise. A unit test asserts the absence of "never leave", "100%
 private", "secure" and "encrypted" from that copy.
+
+---
+
+## M8 — the theme trust boundary
+
+Theme customisation adds one boundary: **persisted preferences flowing into
+CSS custom properties.** `localStorage` is writable by anything running in the
+origin and by the user directly, and `style.setProperty` interprets what it is
+given as CSS.
+
+| Vector | Handling |
+|---|---|
+| `red; background: url(https://evil)` in a colour field | Not matched by `/^#[0-9a-fA-F]{6}$/`, discarded, default used. The value is never inspected for badness — it simply is not a hex colour. |
+| `url(...)`, `expression(...)`, `javascript:` | Same mechanism. The allowlist makes the list of blocked shapes open-ended. |
+| `</style><script>` and HTML fragments | Same. Nothing in the feature builds markup from a stored value; there is no `dangerouslySetInnerHTML` anywhere in it. |
+| `#00ff88; --color-bg: red` — a property escape | Rejected: the trailing text makes it fail the pattern. |
+| `NaN`, `Infinity`, `1e400` | Rejected as non-finite, not coerced. |
+| Out-of-range numbers | **Rejected, not clamped.** Clamping invents a value the user never chose. |
+| A hostile enum, e.g. `high"] * { display:none } [x="` | Enum membership, so it becomes `normal`. It would land in an attribute value rather than CSS text in any case. |
+| An unknown preset id | Falls back to the default id; not preserved. |
+| A `schemaVersion` from the future | The whole stored theme is ignored. |
+| A value arriving from our own controls | Revalidated at `setTheme`. The platform guarantees `input[type="color"]` yields `#rrggbb`, but that guarantee is not in this repository and `applyTheme` is a sink. |
+
+**Verified in browsers, not only in unit tests.** `tests/e2e/theme.spec.ts`
+plants eighteen payloads in `localStorage`, reloads, and asserts for each that
+only `#RRGGBB` reached the colour properties, that the angle is still an
+integer with a unit, that no dialog opened and no page error was thrown, that
+no `img[src]` and no inline `<script>` exist, and that the application still
+works. Under the real CSP (`script-src 'self'`, no inline allowance).
+
+What this does **not** claim: that the theme system is unbreakable. It claims
+that the values which reach `setProperty` have matched an explicit pattern,
+that the check is a positive match rather than a filter, and that the
+behaviour is tested in three engines.

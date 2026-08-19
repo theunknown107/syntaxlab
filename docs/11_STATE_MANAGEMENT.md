@@ -312,3 +312,58 @@ pausing in one pauses the other.
 | Corrupt persistence | Poison `localStorage`; assert defaults and no crash |
 | Cross-tab | Two contexts; assert propagation |
 | Hydration | Assert no theme flash; assert app renders before IDB resolves |
+
+---
+
+## M8 — theme state
+
+### The store
+
+```ts
+themeStore: Store<ThemePreferences>
+```
+
+One store, one subscriber. The theme drawer subscribes so its controls can
+show current values; **nothing else in the application does.** That is the
+point of the token architecture: a preset change writes eight custom
+properties and the whole interface follows through the cascade, with no React
+render involved.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Stored: readStored() at module load
+    Stored --> Applied: ThemeControls mount → applyTheme
+
+    Applied --> Applied: selectPreset / updateGradient / updateTheme
+    note right of Applied
+        setTheme:
+        1. readTheme (revalidate)
+        2. store.setState
+        3. applyTheme — synchronous
+        4. debounce 250 ms → localStorage
+    end note
+
+    Applied --> Default: resetTheme
+    note left of Default
+        Applies and persists at once.
+        No reload.
+    end note
+    Default --> Applied: any change
+
+    Applied --> Applied: storage event from another tab → reloadTheme
+    Applied --> [*]: pagehide / visibilitychange → flushTheme
+```
+
+### Cross-tab
+
+Theme lives in localStorage, which broadcasts its own changes. `ThemeControls`
+listens for `storage` on the theme key and re-reads — no `BroadcastChannel`
+and no second message type. Covered end to end with two real tabs.
+
+### Why the preset name is derived, not remembered
+
+`updateGradient` recomputes the preset id from the resulting gradient values
+rather than carrying the previous one forward. A theme that reached `custom`
+by one edit and was edited back to exactly Amber **is** Amber; remembering
+`custom` would leave the drawer marking no preset selected while displaying
+one precisely. The label describes the state, not the route to it.

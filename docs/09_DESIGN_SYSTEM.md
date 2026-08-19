@@ -403,3 +403,182 @@ Inline SVG, authored by us, ~20 icons, ~4 KB total, `currentColor`, 16 px and 20
 **No icon library.** Lucide/Heroicons/Feather via a package pulls in a component wrapper and tree-shaking that works imperfectly, for twenty icons we can inline. This is a straightforward ladder call: the platform (SVG) covers it.
 
 Every icon-only button has an `aria-label` and a tooltip. Icons never carry meaning alone.
+
+---
+
+## 11. M8 — the theme system as built
+
+### 11.1 The pipeline
+
+Four stages, and the boundary between the second and third is the one that
+matters: nothing reaches a CSS custom property without having been rebuilt
+field by field first.
+
+```mermaid
+flowchart LR
+    LS[("localStorage<br/>syntaxlab.theme.v1")]
+    UI["Theme drawer<br/>native inputs"]
+    V{{"readTheme()<br/>domain/theme/preferences.ts"}}
+    ST["themeStore<br/>ThemePreferences"]
+    AP["applyTheme()<br/>style.setProperty"]
+    CSS[("CSS custom properties<br/>on :root")]
+    APP["Every component<br/>reads tokens"]
+
+    LS -->|"untrusted string"| V
+    UI -->|"control value"| V
+    V -->|"valid, rebuilt"| ST
+    ST --> AP
+    AP --> CSS
+    CSS -->|"cascade"| APP
+
+    V -.->|"invalid field<br/>→ that field's default"| V
+
+    classDef boundary stroke-width:3px
+    class V boundary
+```
+
+**No component re-renders when the theme changes.** The drawer subscribes to
+`themeStore` so its own controls can show current values; nothing else does.
+A preset change is one `setProperty` burst and one style recalculation —
+measured at **1.1 ms median** (`12_PERFORMANCE.md` §10.9).
+
+### 11.2 Validation, field by field
+
+`readTheme` is **total**: it has no failure mode and never throws. Each field
+falls back independently, so one corrupt colour costs the user that colour
+rather than the theme they had built.
+
+```mermaid
+flowchart TD
+    IN["unknown value"] --> OBJ{"object?"}
+    OBJ -->|no| DEF["DEFAULT_THEME"]
+    OBJ -->|yes| VER{"schemaVersion<br/>1..CURRENT?"}
+    VER -->|"absent"| FIELDS
+    VER -->|"newer / malformed"| DEF
+    VER -->|"known"| FIELDS["per-field checks"]
+
+    FIELDS --> C1["from / to / accent<br/>/^#[0-9a-fA-F]{6}$/"]
+    FIELDS --> C2["angleDeg<br/>integer 0–359"]
+    FIELDS --> C3["intensity, glow<br/>integer 0–100"]
+    FIELDS --> C4["contrast, motion<br/>enum membership"]
+    FIELDS --> C5["fontScale<br/>one of four steps"]
+    FIELDS --> C6["preset<br/>known id or 'custom'"]
+
+    C1 & C2 & C3 & C4 & C5 & C6 --> OUT["ThemePreferences<br/>rebuilt, no key carried over"]
+    C1 -.->|"fails"| FB["that field's default"]
+    C2 -.->|"fails"| FB
+    C3 -.->|"fails"| FB
+    FB --> OUT
+```
+
+Two decisions worth stating:
+
+**Reject, never clamp.** `angleDeg: 100000` becomes the default 135, not 359.
+Clamping invents a value the user never chose and hides that the data was
+wrong. The pre-paint bootstrap follows the same rule, because a bootstrap that
+clamped where the domain resets would paint one theme and then replace it.
+
+**A theme from a newer build is discarded, not preserved.** This is the
+opposite of the history rule (`06_DATA_STORAGE.md` §7.3), and deliberately so:
+a theme is a preference the user can set again in four clicks, and showing
+them an interface they cannot fix from inside the app is worse than showing
+them the default.
+
+### 11.3 The security boundary
+
+```mermaid
+flowchart TB
+    subgraph untrusted["Untrusted — anything in the origin can write here"]
+        LS[("localStorage")]
+        NOTE["console · XSS · another tab<br/>· a hand-edited profile"]
+    end
+
+    subgraph domain["Domain — the allowlist"]
+        RT["readTheme()"]
+        HEX["/^#[0-9a-fA-F]{6}$/<br/>positive match, not a sanitiser"]
+    end
+
+    subgraph sink["Sink"]
+        SP["style.setProperty()"]
+        DS["dataset.contrast / .motion"]
+    end
+
+    NOTE --> LS
+    LS --> RT
+    RT --> HEX
+    HEX -->|"matched"| SP
+    HEX -->|"matched"| DS
+    HEX -.->|"not matched — discarded"| DROP["default used"]
+    DROP --> SP
+
+    UICTRL["input type=color<br/>input type=range<br/>radio groups"] --> RT
+
+    classDef danger stroke-width:3px
+    class LS,SP danger
+```
+
+**Every path goes through `readTheme`, including our own controls.**
+`setTheme` revalidates rather than trusting its caller: an
+`input[type="color"]` is guaranteed by specification to produce `#rrggbb`, but
+that guarantee lives in a specification and not in this repository, and
+`applyTheme` is an injection sink. Validating at one choke point makes the
+invariant structural instead of something each future caller has to have read.
+
+`red; background: url(https://attacker.example)` is not recognised as hostile
+and stripped. It simply is not `#RRGGBB`, so it is discarded. That is the
+whole mechanism, and it is why the list of payloads it stops is open-ended.
+
+### 11.4 The contrast guard
+
+```mermaid
+flowchart LR
+    PICK["user picks<br/>a primary colour"] --> R["contrastRatio(colour, --gray-900)<br/>WCAG relative luminance"]
+    R --> V{"ratio"}
+    V -->|"≥ 4.5"| P["✓ Passes AA<br/>with the measured ratio"]
+    V -->|"3.0 – 4.5"| L["⚠ Low contrast<br/>+ Lighten it"]
+    V -->|"< 3.0"| F["⛔ Fails accessibility<br/>+ Lighten it"]
+    L --> FIX["lightenToPass()<br/>steps toward white until AA"]
+    F --> FIX
+    FIX --> PICK
+```
+
+**The choice is never blocked.** It is the user's tool; what we owe them is
+the consequence stated plainly and a fix that costs one click. The passing
+state is stated too — silence is indistinguishable from the check not having
+run.
+
+The background is `--gray-900`, the value `--color-surface` resolves to. The
+domain cannot read CSS, so the constant is duplicated in
+`domain/theme/preferences.ts`; a unit test reads `tokens.css` and asserts the
+two agree, because a guard that reports a confident ratio against the wrong
+background is worse than no guard.
+
+### 11.5 What is customisable, and what is not
+
+| Customisable | Fixed |
+|---|---|
+| Preset | Every semantic status colour — success, error, warning, info |
+| Primary gradient colour | The focus ring token |
+| Secondary gradient colour | Surfaces, borders, text colours |
+| Direction (four named) | Spacing, radii, typography scale |
+| Intensity (0–100) | Where the gradient may appear (§4.2) |
+| Glow (0–100) | |
+| Contrast, motion, text size | |
+
+The accent is **derived from the primary colour**, not chosen separately. An
+amber gradient with a green focus ring is incoherent, and one fewer control is
+one fewer way to build an unreadable interface.
+
+Status colours are deliberately not customisable. `05_SECURITY.md` and
+`13_ACCESSIBILITY.md` both depend on an error being visibly an error; letting
+that become a user preference would make an accessibility guarantee optional.
+
+### 11.6 Deviations from §4 as specified
+
+| Specified | As built | Why |
+|---|---|---|
+| Angle as a slider, 0–359 | Four named directions | The stored value is still `angleDeg`, a bounded integer, so the schema and the bootstrap are unchanged. A continuous angle control invites fiddling with a number nobody can name; four directions cover what the gradient is for. |
+| Preset **Cyan**, **Amber** | **Deep Cyan**, **Amber Console** | Display names only. The ids, colours, angles and intensities are exactly §4.3. |
+| Accent as its own control | Derived from the primary colour | See above. |
+| `backgroundDarkness` in the model | Not implemented | Nothing reads it, and no token exists for it. Adding a control for a value with no effect would be theatre. |
+| Self-hosted subsetted `woff2` (§5) | **System stacks only** | The font files are not in the repository and M8 did not add them — fetching typefaces was out of scope and the licensing needs deciding. `tokens.css` says so at the point of definition. Unchanged from M1; recorded here rather than left as a silent gap between §5 and the build. |

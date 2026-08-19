@@ -378,6 +378,40 @@ test('offers a one-click fix for a failing colour', async ({ page }) => {
  * Motion and forced colors
  * ------------------------------------------------------------------ */
 
+test('high contrast mode passes axe on the whole interface', async ({ page }) => {
+  // T-8. The mode itself predates M8; what M8 adds is the control that turns
+  // it on, so this checks the combination the user can now reach.
+  await openDrawer(page);
+  await drawer(page).getByText('High', { exact: true }).click();
+  await closeDrawer(page);
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  expect(results.violations).toEqual([]);
+
+  // And with the drawer open, since that is where the control lives.
+  await openDrawer(page);
+  const inDrawer = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  expect(inDrawer.violations).toEqual([]);
+});
+
+test('a custom theme still passes axe with the analysis panes populated', async ({ page }) => {
+  await page.getByRole('textbox', { name: 'Regular expression' }).fill('(\w+)@(\w+)\.com');
+  await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({ timeout: 10_000 });
+
+  await openDrawer(page);
+  await drawer(page).getByRole('radio', { name: 'Amber Console' }).click();
+  await closeDrawer(page);
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  expect(results.violations).toEqual([]);
+});
+
 test('respects a reduced-motion preference', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();

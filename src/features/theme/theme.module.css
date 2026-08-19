@@ -54,9 +54,12 @@
 
 /* ---- Presets ---- */
 
+/* Wide enough for the longest preset name to fit whole. At 8.5rem the grid
+   fitted three columns and ellipsised "Amber Console", which makes a chip
+   whose entire job is to name a theme stop naming it. */
 .presets {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
   gap: var(--space-2);
 }
 
