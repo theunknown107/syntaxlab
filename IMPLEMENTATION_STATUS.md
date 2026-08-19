@@ -813,7 +813,7 @@ are unchanged, and keep working with storage removed entirely.
 | Typecheck | ✅ clean |
 | ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
 | Unit tests | ✅ **2 070 passed** (32 files, +123 from M6) |
-| E2E | ✅ **366 passed, 3 skipped** across 14 projects · one known environment flake, below |
+| E2E | ✅ **367 passed, 3 skipped** across 14 projects, on the final run · one environment flake recurred once during M7 and is analysed below |
 | Production build | ✅ |
 | Bundle | ✅ **169.29 KB initial** · 19.56 KB workers · 197.75 KB precache |
 | `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
