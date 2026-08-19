@@ -75,6 +75,20 @@ number most likely to be wrong"; it was, by 62 KB.
 
 `npm audit` reports **0 vulnerabilities** with CodeMirror installed.
 
+**M6 added no dependencies.** The tree is virtualised by hand — a fixed row
+height and a slice by scroll offset, which is the arithmetic §3.2 of
+`10_COMPONENT_ARCHITECTURE.md` describes and the reason a windowing library was
+never needed. Search is a walk over the CST. `@codemirror/lang-json` was
+**not** installed: the JSON editor needs error decorations at spans our own
+parser produces, and a second grammar would be a second opinion about where
+those spans are.
+
+The one non-code addition is the **JSONTestSuite corpus** (MIT), vendored as
+test fixtures under `tests/fixtures/jsontestsuite/` with its licence and
+provenance. It is data rather than a dependency — nothing imports it at
+runtime — and §4 of `04_PARSER_ARCHITECTURE.md` names it as the intended
+conformance reference.
+
 **M5 added no dependencies.** The JSON domain is written against the
 platform alone, and `fast-check` — already installed at M3 — drives its
 property suite. No JSON parser library was considered necessary: §6's

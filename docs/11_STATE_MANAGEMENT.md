@@ -175,6 +175,13 @@ sequenceDiagram
     H->>R: save (debounced 2 s, deduped 60 s)
 ```
 
+> **Detection built at M6.** `detected` and `detectedOnEmpty` live in
+> `workspaceStore`. The second field is what separates a *first paste* from an
+> edit, and it is the only condition under which a mode changes on its own —
+> a first draft keyed the auto-switch off the target editor being empty, which
+> allowed the mode to move while someone was mid-edit. `suggestionDismissed`
+> is per session and deliberately not persisted.
+
 ### 5.1 Race handling
 
 > **Built at M4, with two guards rather than one.** The client supersedes an

@@ -544,12 +544,56 @@ The entry chunk itself grew by **0.79 KB** at M5, which is
 `isValidJsonAnalysis` reaching the main thread. It has to: the main thread is
 where a worker result is validated.
 
-### 10.7 Measurement log
+### 10.7 M6 — the JSON interface
+
+Chromium, production build, local preview. M6 is a *rendering* milestone: the
+parser was already off the main thread, so what these measure is whether the
+UI can keep up with it.
+
+| Measurement | Value |
+|---|---|
+| Small document (25 ch) — keystroke to tree | **278 ms** |
+| 100 KB — keystroke to tree | **870 ms** |
+| **One keystroke with 100 KB loaded** | **21 ms** |
+| Expand all — 7 701 rows | **42 ms** |
+| Search across the 100 KB tree | **12 ms** |
+| Scroll the virtualised tree (10 wheel events) | 374 ms (~37 ms each) |
+| Format (100 KB) | 46 ms |
+| Minify (100 KB) | 80 ms |
+| 1 MB — paste to manual prompt | **184 ms** (no parse attempted) |
+| 1 MB — analyse on demand | **427 ms** |
+| **Rows rendered out of 7 701** | **42** |
+
+Read these correctly. The two "keystroke to tree" figures are dominated by the
+**debounce**, which is 150 ms for a small document and 600 ms for a large one
+(§3.2) — the parse itself is 0.08 ms and 5.1 ms respectively (§10.6). What the
+numbers actually show is that nothing *else* is in the path.
+
+**The row that matters most is the last one.** A fully expanded 100 KB document
+is 7 701 rows and the DOM holds **42** of them. Virtualisation above 500 rows
+is the second of two defences; the first is that collapsed branches are never
+flattened at all, so a collapsed document of any size costs one row.
+
+**Editing stays responsive with a large document loaded**: a keystroke is
+21 ms, because the editor is uncontrolled inside CodeMirror and React holds a
+debounced mirror (10_COMPONENT_ARCHITECTURE.md §7.4).
+
+**Search reads the model, not the DOM** — 12 ms across a document whose
+rendered rows are a few dozen. A DOM scrape would have been both slower and
+wrong, since it would only have found what happened to be on screen.
+
+**A 1 MB document does not parse on a keystroke at all.** Above
+`manualAnalyzeBytes` (500 KB) the debounce is not armed; the paste costs
+184 ms of editor work and then waits for the user. That is the documented
+behaviour, not a performance workaround.
+
+### 10.8 Measurement log
 
 | Date | Milestone | Initial JS (gz) | CSS (gz) | Total (gz) | Notes |
 |---|---|---|---|---|---|
 | 2026-08-18 | M1 | 48.30 KB | 3.30 KB | 53.55 KB | Shell only. **No CodeMirror** — see §10.2 |
 | 2026-08-18 | M2 | 49.52 KB | 3.30 KB | 54.78 KB | + worker chunks (separate, not initial) |
+| 2026-08-19 | M6 | **158.12 KB** | 5.86 KB | 185.50 KB | + the JSON feature: +7.30 KB initial JS, worker chunks unchanged. |
 | 2026-08-19 | M5 | **150.82 KB** | 5.17 KB | 177.51 KB | Initial JS +0.79 KB (the JSON result validator reaches the main thread); worker chunks 19.56 KB. **The metric changed here** — see §10.6.1. |
 | 2026-08-18 | M4 | **162.54 KB** | 5.17 KB | 169.66 KB | **CodeMirror arrives.** Entry chunk 47.05 → 148.79 KB; CodeMirror is 88.03 KB of that, measured directly. Within the 170 KB target. |
 | 2026-08-18 | M3 | 59.54 KB | 3.30 KB | 64.79 KB | Entry chunk **47.05 KB**, unchanged by M3. The +10.64 KB is the analysis-worker chunk, which now carries the regex domain (34.6 KB raw). `check-size.mjs` counts every JS asset toward "initial JS", so the worker chunks are charged to the budget even though the browser fetches them separately — deliberately conservative. |

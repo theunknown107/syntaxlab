@@ -220,6 +220,47 @@ of which every existing test passed:
 | ", and" joining a two-clause summary | Written out; `joinClauses` is right for three |
 | "a single string, hello" | A colon reads better before a quoted value |
 
+### Implemented at M6
+
+| Suite | Count | Status |
+|---|---|---|
+| **JSONTestSuite conformance** | **644** | ✅ **J-2 passed** |
+| Unit — JSON UI view models | 51 | ✅ |
+| E2E — JSON workspace, ×4 targets | 32 | ✅ |
+| **Total after M6** | **1 947 unit, 298 E2E (3 skipped)** | ✅ |
+
+**J-2 is closed with evidence.** The published corpus is vendored under
+`tests/fixtures/jsontestsuite/` with its MIT licence: 95/95 `y_` accepted,
+188/188 `n_` rejected, 35 `i_` classified in the test as data. Every one of the
+318 verdicts matches `JSON.parse` on the same decoded text.
+
+**The corpus is checksummed, after a real incident.** A `prettier --write` run
+over the repository reformatted the fixtures as ordinary JSON and *repaired*
+twelve of them — `[2.e3]` became `[2e3]`, `["",]` became `[""]` — and the file
+count was unchanged, so the count assertion passed while the suite had been
+silently weakened. A SHA-256 manifest now guards the contents, and
+`.prettierignore` excludes the directory. The manifest is the gate; the ignore
+rule is the convention.
+
+**Defects found by M6 testing** (all fixed):
+
+| Found by | Defect |
+|---|---|
+| E2E | The auto-select rule keyed off the *target* editor being empty, so a mode could switch while the user was mid-edit |
+| Unit | `\bword\b` detected as "unknown" — a shorthand escape is near-conclusive evidence of a pattern |
+| Conformance | The corpus had been corrupted by a formatter (above) |
+| **Manual review** | Three wording and marking defects — see below |
+
+**The manual pass** read seventeen documents as a user would: small, deep,
+mixed, long strings, Unicode, duplicate keys, precision loss, negative zero,
+overflow, malformed, partial recovery, prototype-pollution and XSS payloads.
+
+| Defect | Fix |
+|---|---|
+| The status line read "1 keys" and "1 values" | Singularised |
+| Two duplicate occurrences on one line both read "line 1" | Line **and column**, so the jump targets differ |
+| A node from error recovery was marked only by colour | It carries the words "could not be read" |
+
 ### Tooling
 
 | Layer | Tool | Why |

@@ -243,6 +243,48 @@ no longer describes what is on screen.
 
 ### 7.2 JSON
 
+> **Built at M6.** The flow, and where it differs from this specification.
+
+```mermaid
+flowchart LR
+    E["JSON editor"] -->|"debounced under 500 KB"| W["analysis.json<br/>analysis worker"]
+    E -->|"500 KB–5 MB: Analyze button"| W
+    W --> V["validated JsonAnalysis"]
+    V --> VM["view model:<br/>rows · matches · status · excerpts"]
+    VM --> T["Tree"]
+    VM --> P["Problems"]
+    VM --> F["Findings"]
+    VM --> S["Status line"]
+    P -->|"click a position"| E
+    F -->|"click a line"| E
+    T -->|"select a node"| E
+    T --> PATH["Path + copy"]
+    V --> FMT["Format / Minify<br/><i>from the CST</i>"]
+    FMT --> E
+
+    classDef worker fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class W worker
+```
+
+**Formatting reads the CST, never `JSON.stringify(JSON.parse(text))`.** That
+round trip rewrites `1e5` as `100000`, reorders integer-like keys, and drops
+duplicates — three things this product exists to show rather than hide.
+
+| Spec | Built | Why |
+|---|---|---|
+| Tree virtualised "above 500 visible rows" | As specified — and **collapsed branches are never flattened at all** | The cheaper win comes first: a collapsed 500 000-node document costs one row, before virtualisation is involved. |
+| "Expand-to-depth-N" | Built as the **default view** (depth 2) rather than a control | Two levels is what orients a reader; a control for it is furniture until someone asks. |
+| Errors show "a caret excerpt of the offending line" | As specified, **windowed** | A minified document is one 4 000-character line, and the excerpt would have been the error message. |
+| Stats as "a single compact line" | As specified | `Valid · 5 values · depth 2 · 2 keys · 17 bytes` |
+| Search "filters the tree" | **Highlights and steps** rather than filtering | Filtering hides the context that makes a match meaningful. Matches are marked in place, counted, and stepped through with the ancestors expanded. |
+| Duplicate keys | Every occurrence in the tree, each marked, each with its own jump target | The domain keeps them all; hiding them in the UI would undo that. |
+
+**Not built:** the JSON toolbar's `Copy` for formatted output separately from
+the editor's `Copy` (the editor holds the formatted text after Format, so one
+control does both), and expand-to-depth as a user control.
+
+### 7.2.1 Original specification
+
 **Input pane**
 - CodeMirror with JSON highlighting, bracket matching, code folding, and error squiggles at exact positions
 - Toolbar: `Format` (2/4/tab), `Minify`, `Copy`

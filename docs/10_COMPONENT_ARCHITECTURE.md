@@ -41,6 +41,42 @@
         └── <StatusBar/>                ✅ M1  polite live region
 ```
 
+### Built at M6
+
+```
+<Workspace>                              ✅ M4  mode switch
+├── <RegexWorkspace/>                    ✅ M4
+└── <JsonWorkspace>                      ✅ M6
+    ├── <ErrorBoundary scope="input">
+    │   └── <InputColumn>
+    │       ├── Panel "JSON" → <CodeEditor showLineNumbers/>
+    │       ├── <JsonToolbar/>       indent · format · minify
+    │       ├── <JsonManualPrompt/>  conditional, over 500 KB
+    │       ├── status line
+    │       └── Panel "Problems" → <JsonErrors/>
+    └── <ErrorBoundary scope="analysis">
+        └── <TreeColumn>
+            ├── Panel "Findings"  → <JsonFindings/>
+            └── Panel "Structure"
+                ├── <JsonSearch/>
+                ├── <JsonSelected/>   path + copy
+                └── <JsonTree/>       virtualised above 500 rows
+
+<ModeSuggestion/>                        ✅ M6  conditional, between header and main
+```
+
+**`<JsonTree>` is feature-local rather than the shared `<TreeView>`**, and that
+is a deviation with a reason rather than a shortcut. The two trees differ in
+both ways that matter: the regex AST is a nested structure of a few dozen
+rows, while the JSON tree is *pre-flattened* — so duplicate-key and
+precision annotations are computed once, outside React — and can be hundreds
+of thousands of rows. One component serving both would mean the regex tree
+paying for virtualisation it never needs, or the JSON tree re-flattening on
+every render. `Panel`, `Button`, `Badge`, `CopyButton`, `CodeEditor` and
+`ErrorBoundary` are all shared as intended.
+
+`<JsonPlaceholder>` was deleted; JSON is a real feature now.
+
 ### Built at M4
 
 ```

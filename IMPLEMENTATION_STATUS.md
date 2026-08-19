@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M5 complete → M6 next (awaiting approval)
+**Current milestone:** M6 complete → M7 next (awaiting approval)
 **Last updated:** 2026-08-19
 
 > Living document, updated at the end of every milestone. The architecture
@@ -31,8 +31,8 @@
 | M3 | Regex domain | ✅ **Complete** |
 | M4 | Regex UI + safe execution | ✅ **Complete** |
 | M5 | JSON domain | ✅ **Complete** |
-| M6 | JSON UI | ⬜ Next |
-| M7 | History and storage | ⬜ |
+| M6 | JSON UI | ✅ **Complete** |
+| M7 | History and storage | ⬜ Next |
 | M8 | Theme customisation | ⬜ |
 | M9 | PWA and offline | ⬜ |
 | M10 | Accessibility and security hardening | ⬜ |
@@ -626,6 +626,178 @@ escalation path requires a demonstrated correctness problem, and none appeared.
 
 ---
 
+## M6 — objective and outcome
+
+**Objective:** the complete JSON user experience, and the JSONTestSuite
+conformance precheck that M5 had left open.
+
+**Outcome:** met. **J-2 is closed with evidence**, the JSON workspace is built
+on the M4 shell, and the regex product is unchanged.
+
+### The precheck — acceptance criterion J-2
+
+The M5 report claimed differential agreement with `JSON.parse` and never
+claimed J-2. The criterion was genuinely open: the repository held no
+published conformance corpus.
+
+**Result, on the first run, with no parser changes:**
+
+| Category | Files | Result |
+|---|---|---|
+| `y_*` — must be accepted | 95 | ✅ **95 accepted** |
+| `n_*` — must be rejected | 188 | ✅ **188 rejected** |
+| `i_*` — implementation-defined | 35 | ✅ **35 classified in the test as data** |
+| Verdicts matching `JSON.parse` on the same decoded text | 318 | ✅ **318** |
+
+The corpus is vendored from `nst/JSONTestSuite` under its MIT licence, with
+provenance recorded — not fetched, because a gate that depends on a network
+call is not a gate. `04_PARSER_ARCHITECTURE.md` §8 already named it as the
+intended reference, so it is the approved corpus rather than arbitrary
+material.
+
+**The `i_` outcomes, stated rather than left implicit.** Thirty-two accept and
+three reject. Numbers beyond a double are accepted *and then reported* as
+OVERFLOW or PRECISION_LOSS — rejecting them would contradict RFC 8259 and
+saying nothing would be the silent corruption §4.3 exists to prevent. Lone
+surrogates are accepted and preserved (J-I5). Invalid UTF-8 is accepted because
+`TextDecoder` has already substituted U+FFFD before any JavaScript parser sees
+text. The three rejections are UTF-16 documents, which are mojibake when
+decoded as UTF-8.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
+| Unit tests | ✅ **1 947 passed** (27 files, +695 from M5) |
+| E2E | ✅ **295 passed, 3 skipped** across 11 projects |
+| Production build | ✅ |
+| Bundle | ✅ **158.12 KB initial** · 19.56 KB workers · 185.50 KB precache |
+| `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
+| Banned-API scan | ✅ none |
+| **Regex product (M4)** | ✅ **unchanged and green** |
+
+### Built
+
+```
+src/domain/json/format.ts        prettify and minify, from the CST
+src/domain/shared/detect.ts      mode detection, cheap and unsure of itself
+src/application/json/            orchestration, debounce, manual mode, formatting
+src/features/json/               workspace, tree, panels, view model, styles
+src/app/ModeSuggestion.tsx       the suggestion bar
+```
+
+`<JsonPlaceholder>` was deleted. Shared with regex: `CodeEditor`, `Panel`,
+`Button`, `Badge`, `CopyButton`, `ErrorBoundary`, the two-column layout, the
+store and the worker client.
+
+### The decisions that carry the most weight
+
+**Formatting reads the CST**, never `JSON.stringify(JSON.parse(text))`. That
+round trip rewrites `1e5` as `100000`, reorders integer-like keys, and drops
+duplicates — the three things this product exists to surface. Strings are
+emitted from `raw` for the same reason. Format and Minify are **disabled, not
+hidden**, on an invalid document, with the reason beside them.
+
+**Two defences keep a large tree responsive, and the cheaper comes first.**
+Collapsed branches are never flattened, so a collapsed 500 000-node document
+costs one row. Virtualisation above 500 rows is the second. Measured: a fully
+expanded 100 KB document is **7 701 rows with 42 in the DOM**.
+
+**Search reads the model, not the DOM.** A scrape would find only what is
+expanded *and* on screen — for a virtualised list, a few dozen rows — so the
+answer would depend on the scroll position.
+
+**Duplicate keys stay visible**, every occurrence, each marked and each with
+its own jump target. The wording says which one JavaScript reads without
+pretending the parser collapsed them.
+
+### Performance — measured
+
+| Measurement | Value |
+|---|---|
+| One keystroke with 100 KB loaded | **21 ms** |
+| Expand all — 7 701 rows | **42 ms** |
+| Search across the 100 KB tree | **12 ms** |
+| Format / minify (100 KB) | 46 ms / 80 ms |
+| 1 MB — paste to manual prompt | **184 ms**, no parse attempted |
+| 1 MB — analyse on demand | **427 ms** |
+| Rows rendered out of 7 701 | **42** |
+
+The keystroke-to-tree figures (278 ms small, 870 ms at 100 KB) are dominated
+by the deliberate debounce; the parse itself is 0.08 ms and 5.1 ms.
+
+### Bundle
+
+| | M5 | M6 | Delta |
+|---|---|---|---|
+| Initial JS | 150.82 KB | **158.12 KB** | +7.30 KB |
+| Worker chunks | 19.56 KB | 19.56 KB | — |
+| CSS | 5.17 KB | 5.86 KB | +0.69 KB |
+| Total precache | 177.51 KB | 185.50 KB | +7.99 KB |
+
+Within the 170 KB target and 42 KB under the hard budget. No dependency was
+added: the tree is virtualised by hand and search is a walk over the CST.
+
+### Defects found and fixed during M6
+
+| Found by | Defect |
+|---|---|
+| **Conformance suite** | A `prettier --write` run had reformatted the fixtures and *repaired* twelve `n_` cases — `[2.e3]` → `[2e3]`, `["",]` → `[""]`. The file count was unchanged, so the existing count assertion passed while the suite was silently weakened. Corpus restored; a SHA-256 manifest now guards contents, verified by deliberately corrupting a fixture and confirming the failure. |
+| E2E | The auto-select rule keyed off the *target* editor being empty, so a mode could switch while the user was mid-edit. It now requires a first paste into an empty editor. |
+| Unit | `\bword\b` detected as "unknown". A `\d`, `\w`, `\s` or `\b` is near-conclusive evidence of a pattern. |
+| E2E | Two M1-era assertions still expected the placeholder heading "JSON input". |
+| **Manual review** | Three wording and marking defects — below. |
+
+### Manual review
+
+Seventeen documents read as a user would read them: small, deep, mixed, long
+strings, Unicode, duplicate keys, precision loss, negative zero, overflow,
+malformed, partial recovery, prototype-pollution and XSS payloads.
+
+| Defect | Fix |
+|---|---|
+| The status line read "1 keys" and "1 values" | Singularised |
+| Two duplicate occurrences on one line both read "line 1" | Line **and column**, so the jump targets differ |
+| A node from error recovery was marked only by colour | It carries the words "could not be read" |
+
+### Security
+
+| Assertion | Evidence |
+|---|---|
+| No JSON parsing on the main thread | The only parser is in `domain/json/`, reached through `analysis.json`. No local fallback exists. |
+| Prototype-pollution payloads stay inert | E2E through the real worker: members survive structured clone as an array, `'polluted' in Object.prototype` is false |
+| Hostile keys render as keys | `__proto__` and `constructor` appear as ordinary tree rows |
+| XSS payloads render as text | Script, image and `javascript:` payloads through keys, values, errors and search; no element created, no dialog |
+| Raw-HTML props | Still banned by lint and by the CI grep |
+
+### Dependencies added at M6
+
+**None.** The one non-code addition is the JSONTestSuite corpus (MIT), as test
+fixtures. `@codemirror/lang-json` was **not** installed: the editor needs
+decorations at spans our own parser produces, and a second grammar would be a
+second opinion about where those are.
+
+### Deviations at M6
+
+| # | Deviation | Reason |
+|---|---|---|
+| D14 | **`<JsonTree>` is feature-local, not the shared `<TreeView>`** | The regex AST is nested and a few dozen rows; the JSON tree is pre-flattened and can be hundreds of thousands. One component for both would make the regex tree pay for virtualisation or this one re-flatten every render. Every other primitive is shared. |
+| D15 | **Search highlights and steps rather than filtering** | Filtering hides the context that makes a match meaningful. Matches are marked in place, counted, and stepped through with ancestors expanded. |
+| D16 | **Expand-to-depth is the default view, not a control** | Depth 2 is what orients a reader; a control for it is furniture until someone asks for it. |
+| D17 | **`@codemirror/lang-json` not installed** | See above. Error decorations come from our parser's spans. |
+
+### Known limitations at M6
+
+- **No JSON explanation panel.** The domain produces one (`JsonAnalysis.explanation`) and the UI does not render it: the status line, findings and tree already answer what the explanation says, and showing both would be the duplication the M5 review removed from the explanation itself. Queued for reconsideration at M11.
+- **No syntax highlighting inside the JSON editor** — only error decorations. Colour lives in the tree, which is the primary object on this screen.
+- **The split is still not resizable**, and mobile stacks rather than using tabs. M11, as at M4.
+- **Search is capped at 500 matches.** A query matching more says how many it found up to the cap; there is no "load more".
+- **One flaky E2E observed**: `workers-firefox › actually processes the payload` failed once under full parallel load and passed on every isolated and subsequent full run. Not reproduced; recorded rather than dismissed.
+
+---
+
 ## Dependencies added at M1
 
 **Runtime: 2.** `react` and `react-dom`, both pinned exactly at 18.3.1.
@@ -752,5 +924,6 @@ Violating any of these is a defect, not a shortcut.
 | M1 | ✅ | ✅ | ✅ 47 | ✅ 7 | ✅ | ✅ 0 vulns | 48.30 KB JS gz — excludes CodeMirror |
 | M2 | ✅ | ✅ | ✅ 107 | ✅ 38 | ✅ | ✅ 0 vulns | R-10 checkpoint passed on Chromium, Firefox, WebKit |
 | M3 | ✅ | ✅ | ✅ 715 | ✅ 53 | ✅ | ✅ 0 vulns | R-01 regex checkpoint passed; `regexpp` not needed; domain coverage 97.70% |
+| M6 | ✅ | ✅ | ✅ 1 947 | ✅ 295 (3 skipped) | ✅ | ✅ 0 vulns | **J-2 passed** — JSONTestSuite 95/188/35; JSON UI; bundle 158.12 KB |
 | M5 | ✅ | ✅ | ✅ 1 252 | ✅ 167 (3 skipped) | ✅ | ✅ 0 vulns | JSON domain; 4 000-document differential; coverage 97.5%; bundle metric corrected |
 | M4 | ✅ | ✅ | ✅ 859 | ✅ 146 (3 skipped) | ✅ | ✅ 0 vulns | **Bundle checkpoint passed — 162.54 KB vs 170 KB target.** CodeMirror measured at 88 KB, not the ~150 KB estimated |

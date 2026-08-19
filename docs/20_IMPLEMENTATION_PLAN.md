@@ -193,7 +193,7 @@
 
 ---
 
-### M6 — JSON UI, explanation, testing *(1.5–2 days)*
+### M6 — JSON UI, explanation, testing *(1.5–2 days)* — ✅ **COMPLETE**
 
 **Dependencies:** M4 (reuses `CodeEditor`, `TreeView`), M5.
 

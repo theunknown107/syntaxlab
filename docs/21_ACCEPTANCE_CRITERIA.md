@@ -50,7 +50,7 @@
 | # | Criterion | Verification |
 |---|---|---|
 | J-1 | Valid JSON produces a correct tree with types and child counts | Unit + I5 |
-| J-2 | **JSONTestSuite: all `y_*` accepted, all `n_*` rejected, `i_*` outcomes documented** | Conformance suite |
+| J-2 | **JSONTestSuite: all `y_*` accepted, all `n_*` rejected, `i_*` outcomes documented** | ✅ **PASSED at M6** — 95/95, 188/188, 35 classified in `tests/unit/json/conformance.test.ts`; corpus vendored with a checksum manifest |
 | J-3 | **Differential: validity verdict matches `JSON.parse` on every corpus input** | Property |
 | J-4 | Errors give exact line, column, caret excerpt, and an actionable hint | Unit + I6 |
 | J-5 | Clicking an error jumps the cursor to that position | I6 |
