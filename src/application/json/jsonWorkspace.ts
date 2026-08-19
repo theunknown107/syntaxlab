@@ -4,6 +4,7 @@ import { detectInput, AUTO_SELECT, SUGGEST } from '@/domain/shared/detect';
 import { formatJson, minifyJson, type IndentStyle } from '@/domain/json/format';
 import type { WorkerError } from '@/infrastructure/workers/protocol';
 import { getAnalysisClient } from '@/infrastructure/workers/workers';
+import { scheduleCapture } from '../history/capture';
 import {
   workspaceStore,
   type WorkspaceFailure,
@@ -116,6 +117,9 @@ async function runAnalysis(): Promise<void> {
       jsonError: null,
       jsonStale: false,
     }));
+    // Only a *valid* document is eventually recorded; capture itself decides
+    // that (06_DATA_STORAGE.md §4.1).
+    scheduleCapture();
     return;
   }
 
