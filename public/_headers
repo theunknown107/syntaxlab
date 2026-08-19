@@ -21,3 +21,27 @@
 
 /theme-bootstrap.js
   Cache-Control: public, max-age=0, must-revalidate
+
+# The service worker runs in its own context with its own CSP, taken from the
+# headers on this response — it does not inherit the page's. The site-wide
+# policy above sets `connect-src 'none'`, which is right for the page (it makes
+# no requests) and fatal here: Workbox precaches by calling fetch() during
+# install, so under that policy the worker silently never activates and no
+# asset is ever cached. Measured, A/B, on the real build.
+#
+# This is a *narrower* policy for a different context, not a relaxation of the
+# page's. The worker needs exactly two things: to importScripts its own Workbox
+# chunk, and to fetch same-origin assets it is about to cache. Everything else
+# stays denied — there is no style, image, font or frame in a service worker.
+/sw.js
+  Content-Security-Policy: default-src 'none'; script-src 'self'; connect-src 'self'
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Imported by sw.js via importScripts, so it needs the same execution context
+# rules. Content-hashed, therefore safe to cache immutably.
+/workbox-*.js
+  Content-Security-Policy: default-src 'none'; script-src 'self'; connect-src 'self'
+  Cache-Control: public, max-age=31536000, immutable
+
+/manifest.webmanifest
+  Cache-Control: public, max-age=0, must-revalidate

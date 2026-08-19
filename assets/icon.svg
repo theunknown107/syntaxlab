@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SyntaxLab">
+  <!--
+    The source of truth for the PWA icons — 07_PWA_OFFLINE.md §6.
+
+    Authored here rather than taken from an icon set: 09_DESIGN_SYSTEM.md §15
+    specifies inline authored SVG and no icon library, and the identity is the
+    product's own. The colours are the *default* theme tokens, deliberately —
+    the manifest is a static build artefact and a splash screen cannot follow a
+    runtime theme (§6).
+
+    The mark is `/…/` — the regex literal delimiters that frame the pattern
+    input in the application itself, with a caret between them. It says what
+    the product is without spelling out a word that would be illegible at
+    48 px.
+
+    Rendered to PNG by scripts/make-icons.mjs.
+  -->
+  <rect width="512" height="512" fill="#0a0e0c" />
+
+  <!-- Slashes: the regex delimiters. -->
+  <g stroke="#00ff88" stroke-width="26" stroke-linecap="round" fill="none">
+    <path d="M150 138 L106 374" />
+    <path d="M406 138 L362 374" />
+  </g>
+
+  <!-- The caret, in the deep gradient stop, so the mark carries both ends of
+       the brand gradient rather than a single flat green. -->
+  <path
+    d="M196 300 L256 212 L316 300"
+    stroke="#1fbf6b"
+    stroke-width="30"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>

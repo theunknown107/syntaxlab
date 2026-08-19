@@ -1,0 +1,95 @@
+/*
+ * Offline and update indication — 07_PWA_OFFLINE.md §5
+ *
+ * Calm on purpose. Being offline is a normal state for this application, so
+ * none of this uses the error treatment.
+ */
+
+.chip {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+/* Never red. Offline is not an error, and the word beside it carries the
+   meaning anyway — the dot is decoration. */
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: var(--color-text-muted);
+  border-radius: var(--radius-full);
+}
+
+.banner,
+.toast {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--color-border-accent);
+  background-color: var(--color-accent-subtle);
+}
+
+.toast {
+  justify-content: flex-start;
+  gap: var(--space-4);
+  color: var(--color-text-secondary);
+}
+
+.text {
+  flex: 1 1 20rem;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.primary,
+.action {
+  min-height: var(--control-height-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.primary {
+  color: var(--color-text-inverse);
+  background-image: var(--gradient-primary);
+  background-color: var(--color-accent);
+  border-color: transparent;
+  font-weight: var(--weight-medium);
+}
+
+.action {
+  color: var(--color-text);
+  background-color: var(--color-surface);
+}
+
+.action:hover,
+.primary:hover {
+  border-color: var(--color-border-strong);
+}
+
+/* Forced colors replaces the palette; the accent-tinted surface stops meaning
+   anything, so the banner is separated by a border instead. */
+@media (forced-colors: active) {
+  .banner,
+  .toast {
+    border-bottom-width: 2px;
+  }
+}

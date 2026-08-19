@@ -21,7 +21,8 @@
     "analyze": "ANALYZE=1 vite build",
     "size": "node scripts/check-size.mjs",
     "measure:history": "node scripts/measure-history.mjs",
-    "measure:theme": "node scripts/measure-theme.mjs"
+    "measure:theme": "node scripts/measure-theme.mjs",
+    "icons": "node scripts/make-icons.mjs"
   },
   "license": "MIT",
   "private": true,
@@ -64,6 +65,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0",
     "vite": "^7.3.6",
+    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^3.2.7"
   }
 }

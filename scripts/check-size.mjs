@@ -23,6 +23,15 @@ const DIST = 'dist';
  * chunk and the theme bootstrap. Worker chunks are *not* part of it — they are
  * fetched on first analysis, after paint — and are budgeted separately.
  *
+ * At M9 the same correction was needed again, for the same reason. `sw.js` and
+ * `workbox-*.js` are service-worker files: the page never executes either. The
+ * service worker is registered after `load`, and the Workbox chunk is
+ * `importScripts`-ed inside the worker's own context. Counting them as initial
+ * page JS named a load that does not happen — it inflated the figure by
+ * 7.37 KB the moment the PWA layer landed, while the entry chunk itself did
+ * not grow. They are budgeted separately below and remain inside "Total
+ * precache", which is the honest everything-at-once number.
+ *
  * Until M5 this summed every `.js` file under one "Initial JS" label. That was
  * deliberately conservative while the worker chunks were 1 KB stubs, and it
  * stopped being conservative and started being wrong once they carried two
@@ -33,12 +42,20 @@ const DIST = 'dist';
 const BUDGETS = {
   initial: { hard: 200 * 1024, target: 170 * 1024, label: 'Initial JS' },
   workers: { hard: 120 * 1024, target: 80 * 1024, label: 'Worker chunks' },
+  serviceWorker: { hard: 30 * 1024, target: 15 * 1024, label: 'Service worker' },
   css: { hard: 20 * 1024, target: 15 * 1024, label: 'CSS' },
+  icons: { hard: 60 * 1024, target: 40 * 1024, label: 'Icons + manifest' },
   total: { hard: 2 * 1024 * 1024, target: 1.5 * 1024 * 1024, label: 'Total precache' },
 };
 
 /** Worker chunks are emitted as `assets/<name>.worker-<hash>.js`. */
 const isWorkerChunk = (path) => /\.worker-[\w-]+\.js$/.test(path);
+
+/** The generated service worker and the Workbox runtime it imports. */
+const isServiceWorker = (path) => /(^|[/\\])(sw\.js|workbox-[\w-]+\.js)$/.test(path);
+
+/** Manifest and PWA icons — precached, but never page JS. */
+const isPwaAsset = (path) => /\.(png|webmanifest)$/.test(path);
 
 const kb = (bytes) => `${(bytes / 1024).toFixed(2)} KB`;
 
@@ -73,9 +90,14 @@ async function main() {
     measured.filter(predicate).reduce((total, file) => total + file.gzip, 0);
 
   const actual = {
-    initial: sum((file) => file.path.endsWith('.js') && !isWorkerChunk(file.path)),
+    initial: sum(
+      (file) =>
+        file.path.endsWith('.js') && !isWorkerChunk(file.path) && !isServiceWorker(file.path),
+    ),
     workers: sum((file) => isWorkerChunk(file.path)),
+    serviceWorker: sum((file) => isServiceWorker(file.path)),
     css: sum((file) => file.path.endsWith('.css')),
+    icons: sum((file) => isPwaAsset(file.path)),
     total: measured.reduce((total, file) => total + file.gzip, 0),
   };
 

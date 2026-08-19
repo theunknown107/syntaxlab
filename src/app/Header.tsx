@@ -1,4 +1,5 @@
 import { HistoryControls } from '@/features/history/HistoryControls';
+import { OfflineChip } from '@/features/pwa/PwaStatus';
 import { ThemeControls } from '@/features/theme/ThemeControls';
 
 import { ModeSelector } from './ModeSelector';
@@ -29,6 +30,7 @@ export function Header(): React.JSX.Element {
           <ModeSelector />
         </nav>
 
+        <OfflineChip />
         <HistoryControls />
         <ThemeControls />
       </div>

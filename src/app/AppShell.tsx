@@ -1,4 +1,5 @@
 import { HistoryNotice } from '@/features/history/HistoryControls';
+import { PwaProvider, UpdateBanner } from '@/features/pwa/PwaStatus';
 
 import { Header } from './Header';
 import { ModeSuggestion } from './ModeSuggestion';
@@ -23,7 +24,9 @@ export function AppShell(): React.JSX.Element {
         Skip to content
       </a>
 
+      <PwaProvider />
       <Header />
+      <UpdateBanner />
       <HistoryNotice />
       <ModeSuggestion />
 
