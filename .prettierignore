@@ -1,4 +1,5 @@
 dist
+.tmp
 coverage
 node_modules
 playwright-report

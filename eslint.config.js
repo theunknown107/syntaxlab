@@ -30,6 +30,9 @@ export default tseslint.config(
   {
     ignores: [
       'dist',
+      // Build output copied for the update-lifecycle E2E suite, which needs a
+      // second servable copy it can rewrite. Not source.
+      '.tmp',
       'coverage',
       'node_modules',
       'playwright-report',
