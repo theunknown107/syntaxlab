@@ -74,7 +74,6 @@ export interface ThemePreferences {
 export interface ThemePreset {
   readonly id: string;
   readonly name: string;
-  readonly description: string;
   readonly from: HexColor;
   readonly to: HexColor;
   readonly angleDeg: number;
@@ -93,7 +92,6 @@ export interface ThemePreset {
 const MATRIX: ThemePreset = {
   id: 'matrix',
   name: 'Matrix',
-  description: 'The SyntaxLab default. Hacker green on near-black.',
   from: '#00ff88',
   to: '#003d1f',
   angleDeg: 135,
@@ -105,7 +103,6 @@ export const PRESETS: readonly ThemePreset[] = [
   {
     id: 'emerald',
     name: 'Emerald',
-    description: 'Deeper, softer green. Less signal, more surface.',
     from: '#10b981',
     to: '#064e3b',
     angleDeg: 120,
@@ -114,7 +111,6 @@ export const PRESETS: readonly ThemePreset[] = [
   {
     id: 'cyan',
     name: 'Deep Cyan',
-    description: 'Cool and clinical.',
     from: '#22d3ee',
     to: '#0e4f5c',
     angleDeg: 145,
@@ -123,7 +119,6 @@ export const PRESETS: readonly ThemePreset[] = [
   {
     id: 'amber',
     name: 'Amber Console',
-    description: 'Warm terminal amber.',
     from: '#fbbf24',
     to: '#78350f',
     angleDeg: 130,
@@ -132,7 +127,6 @@ export const PRESETS: readonly ThemePreset[] = [
   {
     id: 'mono',
     name: 'Mono',
-    description: 'Almost no colour at all.',
     from: '#9aada3',
     to: '#1f2a24',
     angleDeg: 180,

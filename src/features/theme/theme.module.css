@@ -1,0 +1,300 @@
+/*
+ * Theme drawer — 09_DESIGN_SYSTEM.md §4
+ *
+ * Every value is a token. The drawer that customises the theme must itself be
+ * built from the theme, or a user who picks amber gets an amber application
+ * with a green settings panel.
+ */
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.section {
+  padding-bottom: var(--space-5);
+}
+
+.section + .section {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+.sectionTitle {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---- Presets ---- */
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: var(--space-2);
+}
+
+.preset {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.preset:hover {
+  border-color: var(--color-border-strong);
+}
+
+.presetActive {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent-subtle);
+}
+
+/* A selected preset must not be marked by colour alone. */
+.presetActive .presetName::after {
+  content: ' ✓';
+  color: var(--color-accent-text);
+}
+
+.swatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.presetName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customBadge {
+  grid-column: 1 / -1;
+  font-size: var(--text-xs);
+  color: var(--color-accent-text);
+}
+
+/* ---- Fields ---- */
+
+.field {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+
+.colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.colors .field {
+  flex: 1 1 10rem;
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/*
+ * The native colour input. Sized and framed to match the other controls; the
+ * swatch itself is the browser's, which is the point — it is the picker the
+ * user already knows how to operate.
+ */
+.colorInput {
+  width: 3rem;
+  height: var(--control-height-sm);
+  padding: 2px;
+  cursor: pointer;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.range {
+  width: 55%;
+  accent-color: var(--color-accent);
+}
+
+.fieldset {
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  border: 0;
+}
+
+.legend {
+  padding: 0;
+  font-size: var(--text-sm);
+}
+
+.directions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.chip {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+.chip:hover {
+  border-color: var(--color-border-strong);
+}
+
+/* The chip wraps a visually hidden radio, so the focus ring has to be drawn
+   from the input's state onto the label. */
+.chip:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.chipActive {
+  color: var(--color-accent-text);
+  background-color: var(--color-accent-subtle);
+  border-color: var(--color-border-accent);
+}
+
+.chipActive::after {
+  content: ' ✓';
+}
+
+/* ---- Contrast guard ---- */
+
+.contrast {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-text);
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-sm);
+}
+
+.fix,
+.close,
+.reset {
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.fix:hover,
+.close:hover,
+.reset:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+.reset:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+/* ---- Footer ---- */
+
+.footer {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.current {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/*
+ * Forced-colors mode replaces our palette entirely. The swatches lose their
+ * meaning there — they are pure decoration — so they are hidden rather than
+ * left as identical grey rectangles pretending to be different.
+ */
+@media (forced-colors: active) {
+  .swatch {
+    display: none;
+  }
+
+  .presetActive,
+  .chipActive {
+    border: 2px solid;
+  }
+}
+
+.headerButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height-sm);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.headerButton:hover {
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+}

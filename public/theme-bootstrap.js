@@ -13,21 +13,12 @@
  * against a strict pattern — an allowlist, not a sanitiser. Anything that does
  * not match is discarded and the default is used (03_DOMAIN_MODEL.md §7.1).
  *
- * ---
+ * This file duplicates the rules in `src/domain/theme/preferences.ts` and MUST
+ * agree with them exactly — reject, never clamp. Why, and how the two are kept
+ * together, is in 09_DESIGN_SYSTEM.md §4.6.
  *
- * This file deliberately **duplicates** the rules in
- * `src/domain/theme/preferences.ts`, because it must run with no module
- * system, no build output and no imports. The duplication is a real risk, so
- * the two are held together from both ends:
- *
- *   - the rules here are *reject*, never clamp, exactly as the domain does.
- *     A bootstrap that clamped 100000 to 359 while the domain reset it to 135
- *     would paint one theme and then replace it — a flash caused by nothing
- *     but disagreement.
- *   - `tests/e2e/theme.spec.ts` drives real hostile values through this file
- *     in a real browser and asserts the computed styles.
- *
- * Plain JS, no build step, kept under 1 KB.
+ * This file is served verbatim, so every byte here — comments included — is
+ * shipped to every user. Keep it short.
  */
 (function bootstrapTheme() {
   'use strict';
@@ -43,7 +34,7 @@
       if (!raw) return null;
       var parsed = JSON.parse(raw);
       return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
-    } catch (error) {
+    } catch {
       // Corrupt, unparseable, or storage unavailable (private mode, policy).
       // A bad stored value must never stop the application loading.
       return null;
@@ -56,16 +47,16 @@
     }
   }
 
-  /** An integer inside [min, max]. Rejected, never clamped — see the note above. */
+  /** An integer inside [min, max]. Rejected, never clamped. */
   function readInt(value, min, max) {
     if (typeof value !== 'number' || !isFinite(value)) return null;
     var rounded = Math.round(value);
     return rounded >= min && rounded <= max ? rounded : null;
   }
 
-  function applyInt(property, value, min, max, suffix) {
-    var parsed = readInt(value, min, max);
-    if (parsed !== null) root.style.setProperty(property, String(parsed) + (suffix || ''));
+  function applyAngle(property, value) {
+    var parsed = readInt(value, 0, 359);
+    if (parsed !== null) root.style.setProperty(property, String(parsed) + 'deg');
   }
 
   /** 0–100 stored, written as the 0–1 fraction the tokens expect. */
@@ -81,10 +72,12 @@
   var theme = readStored();
   if (!theme) return;
 
-  // A theme written by a newer build is not applied. Guessing at a schema we
-  // do not know could paint an interface the user cannot fix from inside the
-  // app; the default is always usable. Absent means pre-versioning data.
-  if (theme.schemaVersion !== undefined && readInt(theme.schemaVersion, 1, SCHEMA_VERSION) === null) {
+  // A theme from a newer build is not applied: the default is always usable,
+  // a guessed one may not be. Absent means pre-versioning data.
+  if (
+    theme.schemaVersion !== undefined &&
+    readInt(theme.schemaVersion, 1, SCHEMA_VERSION) === null
+  ) {
     return;
   }
 
@@ -92,7 +85,7 @@
   applyHex('--gradient-from', gradient.from);
   applyHex('--gradient-to', gradient.to);
   applyHex('--color-accent', theme.accent);
-  applyInt('--gradient-angle', gradient.angleDeg, 0, 359, 'deg');
+  applyAngle('--gradient-angle', gradient.angleDeg);
   applyFraction('--gradient-intensity', gradient.intensity);
   applyFraction('--glow-intensity', theme.glowIntensity);
 
