@@ -247,6 +247,14 @@
   cursor: not-allowed;
 }
 
+/* The passing state is quiet: it confirms without competing with the controls
+   around it. The warning keeps the amber treatment above. */
+.contrastPass {
+  color: var(--color-text-secondary);
+  background-color: transparent;
+  border-color: var(--color-border);
+}
+
 /* ---- Footer ---- */
 
 .footer {

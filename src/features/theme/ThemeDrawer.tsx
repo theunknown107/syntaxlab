@@ -236,11 +236,25 @@ function Gradient({ theme }: { readonly theme: ThemePreferences }): React.JSX.El
  * consequence visible and the fix one click, which is the difference between
  * respecting a preference and shipping an unreadable interface.
  */
-function ContrastNote({ color }: { readonly color: string }): React.JSX.Element | null {
+function ContrastNote({ color }: { readonly color: string }): React.JSX.Element {
   const verdict = verdictFor(color);
-  if (verdict === 'pass') return null;
-
   const ratio = contrastRatio(color, SURFACE_HEX).toFixed(1);
+
+  // The passing state is stated, not left silent. A user who has just dragged
+  // a colour towards the edge needs to know they are still inside it — and
+  // "no warning" is indistinguishable from "the check did not run".
+  if (verdict === 'pass') {
+    return (
+      <p className={`${styles.contrast} ${styles.contrastPass}`} role="status">
+        <span>
+          {/* The tick is doubled by the words: colour and glyph both carry it,
+              so neither is the only channel (08_UI_UX_SPEC.md §12.1). */}
+          ✓ Passes AA ({ratio}:1 against the interface background)
+        </span>
+      </p>
+    );
+  }
+
   return (
     <p className={styles.contrast} role="status">
       <span>

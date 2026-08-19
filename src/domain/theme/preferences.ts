@@ -289,8 +289,16 @@ export function contrastRatio(a: HexColor, b: HexColor): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-/** The surface the accent is judged against — `--color-surface` at rest. */
-export const SURFACE_HEX = '#0d1117';
+/**
+ * The surface the accent is judged against.
+ *
+ * This is `--color-surface` at rest, which resolves to `--gray-900` in
+ * `styles/tokens.css`. It is duplicated here because the domain cannot read
+ * CSS, and `tests/unit/theme/preferences.test.ts` asserts the two agree so the
+ * duplication cannot drift — a guard measuring against the wrong background is
+ * worse than no guard, because it reports confidently.
+ */
+export const SURFACE_HEX = '#101613';
 
 export type ContrastVerdict = 'pass' | 'low' | 'fail';
 

@@ -354,12 +354,23 @@ test('a custom theme does not destroy focus visibility', async ({ page }) => {
   expect(outline).not.toBe('0px');
 });
 
+test('confirms a passing colour rather than staying silent', async ({ page }) => {
+  await openDrawer(page);
+  // The default green passes comfortably.
+  await expect(drawer(page).getByText(/Passes AA/)).toBeVisible();
+
+  await drawer(page).getByLabel('Primary colour').fill('#0a2a1a');
+  await expect(drawer(page).getByText(/Passes AA/)).toBeHidden();
+  await expect(drawer(page).getByText(/Fails accessibility/)).toBeVisible();
+});
+
 test('offers a one-click fix for a failing colour', async ({ page }) => {
   await openDrawer(page);
   await drawer(page).getByLabel('Primary colour').fill('#0a2a1a');
   await drawer(page).getByRole('button', { name: 'Lighten it' }).click();
 
   await expect(drawer(page).getByText(/Fails accessibility/)).toBeHidden();
+  await expect(drawer(page).getByText(/Passes AA/)).toBeVisible();
   expect(await token(page, '--gradient-from')).toMatch(/^#[0-9a-fA-F]{6}$/);
 });
 
