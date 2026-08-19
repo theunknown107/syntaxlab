@@ -274,11 +274,18 @@ export default tseslint.config(
      `features/regex/viewModel.ts` is included for the same reason: it is the
      presentation-side exhaustive switch over the same node union, and the
      exhaustiveness is precisely what stops a new node type rendering as a
-     blank row. */
+     blank row.
+
+     The validators are included on a related argument. A validator is a
+     linear sequence of independent guards over untrusted data, so its branch
+     count measures how *thorough* the check is, not how hard the code is to
+     follow — and a limit that discourages one more guard at a trust boundary
+     is a limit pointed the wrong way. */
   {
     files: [
       'src/domain/regex/**/*.ts',
       'src/domain/json/**/*.ts',
+      'src/domain/history/validate.ts',
       'src/features/regex/viewModel.ts',
     ],
     rules: { complexity: 'off', 'max-depth': ['warn', 4] },

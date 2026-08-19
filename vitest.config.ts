@@ -1,7 +1,12 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
+import pkg from './package.json' with { type: 'json' };
+
 export default defineConfig({
+  // Mirrors the `define` in vite.config.ts, so a build-time constant is not
+  // undefined under test and a code path that reads it can be exercised.
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig } from 'vite';
 
+import pkg from './package.json' with { type: 'json' };
+
 /**
  * Bundle analysis is opt-in (`npm run analyze`) so ordinary builds stay fast
  * and never emit stats.html into dist/.
@@ -10,6 +12,9 @@ import { defineConfig } from 'vite';
 const analyze = process.env.ANALYZE === '1';
 
 export default defineConfig({
+  // Stamped in at build time so an export file records which build wrote it,
+  // rather than the app importing package.json into the bundle.
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   plugins: [
     react(),
     ...(analyze ? [visualizer({ filename: 'stats.html', gzipSize: true, brotliSize: true })] : []),
