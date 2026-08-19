@@ -363,16 +363,30 @@ export function angleFor(id: DirectionId): number {
   return (DIRECTIONS.find((direction) => direction.id === id) ?? DIRECTIONS[0]).angleDeg;
 }
 
+/**
+ * The preset these gradient values *are*, or `'custom'`.
+ *
+ * Answered from the values alone, never from what the theme currently claims
+ * to be. A theme that reached `'custom'` by one edit and was then edited back
+ * to exactly Amber is Amber; saying otherwise would leave the drawer marking
+ * no preset as selected while displaying one exactly.
+ */
+export function presetIdFor(gradient: ThemePreferences['gradient']): string {
+  const match = PRESETS.find(
+    (preset) =>
+      gradient.from === preset.from &&
+      gradient.to === preset.to &&
+      gradient.angleDeg === preset.angleDeg &&
+      gradient.intensity === preset.intensity,
+  );
+  return match?.id ?? 'custom';
+}
+
 /** Whether a theme still matches the preset it claims. */
 export function matchesPreset(theme: ThemePreferences): boolean {
   const preset = presetById(theme.preset);
   if (preset === null) return false;
-  return (
-    theme.gradient.from === preset.from &&
-    theme.gradient.to === preset.to &&
-    theme.gradient.angleDeg === preset.angleDeg &&
-    theme.gradient.intensity === preset.intensity
-  );
+  return presetIdFor(theme.gradient) === preset.id;
 }
 
 export function isDefaultTheme(theme: ThemePreferences): boolean {

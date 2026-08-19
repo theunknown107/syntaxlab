@@ -1,7 +1,7 @@
 import {
   DEFAULT_THEME,
-  matchesPreset,
   presetById,
+  presetIdFor,
   readTheme,
   themeFromPreset,
   type ThemePreferences,
@@ -126,19 +126,24 @@ export function selectPreset(id: string): void {
   });
 }
 
-/** Applies one change to the gradient, marking the theme custom if it diverges. */
+/**
+ * Applies one change to the gradient.
+ *
+ * The preset name is re-derived from the resulting values rather than carried
+ * forward, so it describes what the theme *is*. Editing away from Amber names
+ * the theme custom; editing exactly back to Amber names it Amber again.
+ */
 export function updateGradient(patch: Partial<ThemePreferences['gradient']>): void {
   const current = themeStore.getState();
   const gradient = { ...current.gradient, ...patch };
-  const next: ThemePreferences = {
+  setTheme({
     ...current,
     gradient,
     // The accent follows the start colour, so the focus ring and the gradient
     // are always the same hue family.
     accent: gradient.from,
-    preset: current.preset,
-  };
-  setTheme({ ...next, preset: matchesPreset(next) ? next.preset : 'custom' });
+    preset: presetIdFor(gradient),
+  });
 }
 
 export function updateTheme(patch: Partial<ThemePreferences>): void {
