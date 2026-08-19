@@ -773,7 +773,7 @@ downloads, the other is what sits on disk afterwards.
 | Total precache (gzipped transfer) | 197.75 KB | 226.00 KB | +28.25 KB |
 | Precache on disk (uncompressed) | — | 663.97 KB | new |
 
-**The PWA layer cost 1.44 KB of initial JS.** That is the registration module,
+**The PWA layer cost 1.48 KB of initial JS.** That is the registration module,
 the store, the status components and the startup helpers. `workbox-window` was
 deliberately not used — the plugin's registration helper would have added
 several kilobytes for a lifecycle narrower than the one it offers.

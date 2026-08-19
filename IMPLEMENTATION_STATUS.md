@@ -1345,7 +1345,7 @@ predates Vite 7). devDependency. Its runtime helper is deliberately unused.
 | # | Deviation | Reason |
 |---|---|---|
 | D32 | **`vite-plugin-pwa` 1.3.0, not `^0.20`** | `^0.20` does not support Vite 7. |
-| D33 | **Registration is hand-written against the platform API** | The plugin's helper adds `workbox-window` to the bundle for a lifecycle wider than the one we want. Kept the layer to 1.44 KB. |
+| D33 | **Registration is hand-written against the platform API** | The plugin's helper adds `workbox-window` to the bundle for a lifecycle wider than the one we want. Kept the layer to 1.48 KB. |
 | D34 | **No `share_target`, `file_handlers`, `protocol_handlers`** | As `07_PWA_OFFLINE.md` §6 already specifies. |
 | D35 | **No cron shortcut in the manifest** | The mode does not exist in V1.0; promising it in metadata is the defect a disabled tab would be. |
 | D36 | **`upgrade-insecure-requests` is dropped by the local header server** | Test-harness only; production sends it. Every directive governing the worker is served as production serves it. |
