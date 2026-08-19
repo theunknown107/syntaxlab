@@ -19,7 +19,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "analyze": "ANALYZE=1 vite build",
-    "size": "node scripts/check-size.mjs"
+    "size": "node scripts/check-size.mjs",
+    "measure:history": "node scripts/measure-history.mjs"
   },
   "license": "MIT",
   "private": true,
