@@ -1,0 +1,409 @@
+/*
+ * History — 09_DESIGN_SYSTEM.md §7
+ *
+ * The drawer is a flex column with one scrolling region: the list. The header,
+ * the filters and the footer stay put, so "Clear all" does not scroll away
+ * from a user halfway down four hundred entries.
+ */
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.close,
+.headerButton,
+.filter,
+.rowAction,
+.linkAction,
+.dangerLink,
+.noticeButton,
+.undoAction {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.close:hover,
+.headerButton:hover,
+.filter:hover,
+.rowAction:hover,
+.linkAction:hover:not(:disabled),
+.noticeButton:hover,
+.undoAction:hover {
+  background-color: var(--color-surface-raised);
+  border-color: var(--color-border);
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.search {
+  width: 100%;
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.filter {
+  border-color: var(--color-border);
+}
+
+.filterActive {
+  color: var(--color-accent-text);
+  border-color: var(--color-border-accent);
+  background-color: var(--color-accent-subtle);
+}
+
+.sort {
+  margin-left: auto;
+}
+
+.select {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.count {
+  margin: 0;
+  padding: var(--space-2) var(--space-4) 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ---- The list ---- */
+
+.list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.row:hover {
+  background-color: var(--color-surface-raised);
+}
+
+.open {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.rowTitle {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.truncated {
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+}
+
+.rowActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}
+
+.rowAction {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.rowAction[aria-pressed='true'] {
+  color: var(--color-accent-text);
+  border-color: var(--color-border-accent);
+}
+
+.rename {
+  display: flex;
+  flex: 1;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.renameField {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-accent);
+  border-radius: var(--radius-sm);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-5) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+/* ---- Notices ---- */
+
+.note,
+.warning,
+.error {
+  margin: var(--space-2) var(--space-4) 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+
+.note {
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  background-color: var(--color-surface-raised);
+}
+
+.warning {
+  color: var(--color-text);
+  border-color: var(--color-warning);
+  background-color: var(--color-warning-bg);
+}
+
+.error {
+  color: var(--color-text);
+  border-color: var(--color-error);
+  background-color: var(--color-error-bg);
+}
+
+.errorTitle,
+.errorHint {
+  margin: 0;
+}
+
+.errorHint {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+}
+
+/* ---- Footer ---- */
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.privacy {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.footerActions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.transfer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.linkAction {
+  border-color: var(--color-border);
+}
+
+.linkAction:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.transferMessage {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.dangerLink {
+  color: var(--color-error);
+  border-color: var(--color-border);
+}
+
+.dangerLink:hover:not(:disabled) {
+  color: var(--color-text);
+  background-color: var(--color-error-bg);
+  border-color: var(--color-error);
+}
+
+.dangerLink:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+/* ---- Undo ---- */
+
+.undo {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  border-top: 1px solid var(--color-border-accent);
+  background-color: var(--color-accent-subtle);
+}
+
+.undoText {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undoAction {
+  color: var(--color-accent-text);
+  border-color: var(--color-border-accent);
+  font-weight: var(--weight-medium);
+}
+
+/* ---- Header controls ---- */
+
+.controlsGroup {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.headerButton {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: var(--control-height-sm);
+  border-color: var(--color-border);
+}
+
+.headerButton[aria-pressed='true'] {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+.countPill {
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+/* ---- First-run notice ---- */
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-accent);
+  background-color: var(--color-accent-subtle);
+}
+
+.noticeText {
+  flex: 1 1 20rem;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.noticeActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.noticeButton {
+  border-color: var(--color-border);
+  background-color: var(--color-surface);
+}

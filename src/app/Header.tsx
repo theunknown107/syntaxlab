@@ -1,13 +1,16 @@
+import { HistoryControls } from '@/features/history/HistoryControls';
+
 import { ModeSelector } from './ModeSelector';
 import styles from './Header.module.css';
 
 /**
  * Application header — 08_UI_UX_SPEC.md §6
  *
- * M1 ships the wordmark and the mode selector. The history, theme, and help
- * controls arrive with the features they open (M7, M8, M10). Rendering them
- * now as inert buttons would be exactly the "disabled affordance" the UX spec
- * rules out (§2.1): a control that does nothing reads as broken, not pending.
+ * M1 shipped the wordmark and the mode selector; M7 adds the history controls.
+ * The theme and help controls arrive with the features they open (M8, M10).
+ * Rendering them now as inert buttons would be exactly the "disabled
+ * affordance" the UX spec rules out (§2.1): a control that does nothing reads
+ * as broken, not pending.
  */
 export function Header(): React.JSX.Element {
   return (
@@ -23,6 +26,8 @@ export function Header(): React.JSX.Element {
         <nav className={styles.nav} aria-label="Analysis mode">
           <ModeSelector />
         </nav>
+
+        <HistoryControls />
       </div>
     </header>
   );

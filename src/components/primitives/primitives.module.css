@@ -166,3 +166,82 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ---- Modal surfaces (M7) ---- */
+
+/*
+ * Native <dialog>. The ::backdrop pseudo-element is the browser's own overlay,
+ * so nothing here has to manage a stacking context or scroll lock.
+ */
+.drawer,
+.confirm {
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 0;
+}
+
+.drawer::backdrop,
+.confirm::backdrop {
+  background-color: rgb(0 0 0 / 0.55);
+}
+
+.drawer {
+  /* Anchored to the right edge, full height: a drawer, not a centred box. */
+  width: min(30rem, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 0 0 auto;
+  border-width: 0 0 0 1px;
+}
+
+@media (width <= 40rem) {
+  .drawer {
+    width: 100vw;
+    border-left-width: 0;
+  }
+}
+
+.confirm {
+  width: min(28rem, calc(100vw - 2 * var(--space-4)));
+  margin: auto;
+  border-radius: var(--radius-lg);
+}
+
+.confirmBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.confirmTitle {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.confirmText {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.confirmActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.danger {
+  color: var(--color-text);
+  background-color: var(--color-error-bg);
+  border-color: var(--color-error);
+  font-weight: var(--weight-medium);
+}
+
+.danger:hover:not(:disabled) {
+  background-color: var(--color-error);
+  color: var(--color-text-inverse);
+  border-color: var(--color-error);
+}

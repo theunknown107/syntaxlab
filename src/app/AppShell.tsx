@@ -1,3 +1,5 @@
+import { HistoryNotice } from '@/features/history/HistoryControls';
+
 import { Header } from './Header';
 import { ModeSuggestion } from './ModeSuggestion';
 import { StatusBar } from './StatusBar';
@@ -22,6 +24,7 @@ export function AppShell(): React.JSX.Element {
       </a>
 
       <Header />
+      <HistoryNotice />
       <ModeSuggestion />
 
       <main id="main" className={styles.main} tabIndex={-1}>
