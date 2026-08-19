@@ -285,6 +285,19 @@ interface UnsafeNumberReport {
 
 `UnsafeNumberReport` earns its place: `{"id": 9007199254740993}` round-trips through `JSON.parse` as `9007199254740992`. Silently corrupted IDs are a real production bug that no other JSON viewer flags.
 
+> **Built at M5**, as specified, with two additions recorded rather than made
+> silently:
+>
+> - **`JsonAnalysis` gained no fields.** Keys that JavaScript treats specially
+>   (`__proto__`, `constructor`, `prototype`) are surfaced through the
+>   *explanation* as a `warning` section rather than through a new report
+>   array. The explanation is already where §4.3's other findings are
+>   presented to the user, and a new field would have been schema drift for
+>   something M6 renders the same way.
+> - **`toPlainValue` returns `{ value, droppedKeys }`** rather than a bare
+>   value, so a caller can say that `__proto__` was removed instead of the data
+>   vanishing silently.
+
 ### 4.4 Invariants
 
 | # | Invariant |

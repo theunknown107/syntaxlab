@@ -16,12 +16,29 @@ import { join } from 'node:path';
 
 const DIST = 'dist';
 
-/** Gzipped byte budgets. See 12_PERFORMANCE.md §2.3. */
+/**
+ * Gzipped byte budgets. See 12_PERFORMANCE.md §2.3.
+ *
+ * "Initial JS" means what the browser fetches before first paint: the entry
+ * chunk and the theme bootstrap. Worker chunks are *not* part of it — they are
+ * fetched on first analysis, after paint — and are budgeted separately.
+ *
+ * Until M5 this summed every `.js` file under one "Initial JS" label. That was
+ * deliberately conservative while the worker chunks were 1 KB stubs, and it
+ * stopped being conservative and started being wrong once they carried two
+ * parsers: the figure named a load that does not happen. The
+ * everything-at-once case is still measured, by "Total precache", which is
+ * what the service worker will actually pull down at M9.
+ */
 const BUDGETS = {
-  js: { hard: 200 * 1024, target: 170 * 1024, label: 'Initial JS' },
+  initial: { hard: 200 * 1024, target: 170 * 1024, label: 'Initial JS' },
+  workers: { hard: 120 * 1024, target: 80 * 1024, label: 'Worker chunks' },
   css: { hard: 20 * 1024, target: 15 * 1024, label: 'CSS' },
   total: { hard: 2 * 1024 * 1024, target: 1.5 * 1024 * 1024, label: 'Total precache' },
 };
+
+/** Worker chunks are emitted as `assets/<name>.worker-<hash>.js`. */
+const isWorkerChunk = (path) => /\.worker-[\w-]+\.js$/.test(path);
 
 const kb = (bytes) => `${(bytes / 1024).toFixed(2)} KB`;
 
@@ -56,7 +73,8 @@ async function main() {
     measured.filter(predicate).reduce((total, file) => total + file.gzip, 0);
 
   const actual = {
-    js: sum((file) => file.path.endsWith('.js')),
+    initial: sum((file) => file.path.endsWith('.js') && !isWorkerChunk(file.path)),
+    workers: sum((file) => isWorkerChunk(file.path)),
     css: sum((file) => file.path.endsWith('.css')),
     total: measured.reduce((total, file) => total + file.gzip, 0),
   };

@@ -173,6 +173,53 @@ the surrounding prose with no boundary, "any of a literal ]" as a sentence, and
 `.` and `-` described two different ways in the same class. Fifteen fixtures
 now pin the corrected wordings, each naming the defect it guards against.
 
+### Implemented at M5
+
+| Suite | Count | Status |
+|---|---|---|
+| Unit — JSON parser structure and errors | 59 | ✅ |
+| Unit — differential vs `JSON.parse` | 166 | ✅ |
+| Unit — golden corpus, human-reviewed | 68 | ✅ |
+| Unit — prototype pollution and hostile content | 51 | ✅ |
+| Unit — worker protocol, paths and numbers | 32 | ✅ |
+| Property / fuzz | 17 properties | ✅ |
+| E2E — JSON through the real worker, ×3 engines | 7 | ✅ |
+| **Total after M5** | **1 252 unit, 167 E2E (3 skipped)** | ✅ |
+
+**Coverage of `src/domain/json`: 97.5% statements, 91.0% branch** — above the
+documented ≥95% gate.
+
+**The differential suite states what it proves.** Validity and values against
+`JSON.parse`, across a curated corpus and 4 000 generated and mutated
+documents. It is explicitly silent on positions (the oracle has none), on
+duplicate keys (we differ by design), and on diagnostic quality (we report
+more, and more specifically, on purpose). Those are covered by unit and
+property tests instead.
+
+**Defects found by these tests during M5** (all fixed):
+
+| Found by | Defect |
+|---|---|
+| Golden corpus | The scanner and the parser both reported `{a:1}`, so one mistake produced two errors |
+| Coverage | `isValidJsonAnalysis` had no tests at all — 3% covered, on the module that stands between a malformed worker result and application state |
+| Coverage | `EMPTY_STATS` was exported and imported by nothing |
+| **Human review** | Eight wording defects — see below |
+
+**The human review is the part a test suite cannot do.** Thirty documents
+across every category were read as a user would read them. Eight defects, each
+of which every existing test passed:
+
+| Defect | Fix |
+|---|---|
+| The Structure section restated the summary verbatim | It now carries what the summary cannot: counts, depth, keys, size |
+| "0 levels deep" for a bare scalar | Depth omitted where there is no nesting |
+| The array breakdown repeated a homogeneous summary | Shown only for mixed arrays |
+| `$` appeared raw in findings | "at the top level" where the path is empty |
+| "keep them as strings" followed a negative zero and an overflow | Advice only where it applies |
+| "the rest was read as a part that could not be read" | No recovery is claimed unless something substantive survived |
+| ", and" joining a two-clause summary | Written out; `joinClauses` is right for three |
+| "a single string, hello" | A colon reads better before a quoted value |
+
 ### Tooling
 
 | Layer | Tool | Why |

@@ -498,6 +498,109 @@ Prettify and minify operate **on the CST**, not by `JSON.stringify(JSON.parse(x)
 
 ---
 
+### 3.8 As built at M5
+
+```mermaid
+flowchart LR
+    T["JSON text"] --> S{"≤ 5 MB?"}
+    S -->|no| X["LIMIT_EXCEEDED<br/>no parse attempted"]
+    S -->|yes| C["Scanner — single pass<br/>line/column tracked"]
+    C --> P["Parser — explicit stack<br/><i>never recursion</i>"]
+    P --> F["One walk:<br/>stats · duplicates · numbers · risky keys"]
+    F --> E["Explainer → ExplanationNode[]"]
+    E --> A["JsonAnalysis"]
+    X --> A
+
+    classDef danger fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    class X danger
+```
+
+**The CST is the representation, and that is the security decision.** Object
+members are an ordered array of `{key, value}` pairs, so a user key never
+becomes a real object key anywhere in the product:
+
+```mermaid
+flowchart TD
+    K["User key<br/><code>__proto__</code>"] --> Q{"Where does it go?"}
+    Q -->|"Record&lt;string, JsonNode&gt;<br/><i>not what we build</i>"| BAD["A real object key.<br/>Every later merge, spread<br/>or lookup is a vector."]
+    Q -->|"JsonMember[]<br/><i>what we build</i>"| OK["An ordinary string in an array.<br/>It names nothing in the runtime."]
+    OK --> PV["toPlainValue, when a plain value<br/>is genuinely needed"]
+    PV --> N["Object.create(null) + defineProperty<br/>__proto__ dropped and reported"]
+
+    classDef danger fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class BAD danger
+    class OK,N safe
+```
+
+`__proto__` is *dropped* by `toPlainValue` rather than merely made an own
+property. The null prototype and `defineProperty` already make the write safe
+where it happens — but the value leaves there, and `Object.assign` onto an
+ordinary object does use assignment, which consults the target's prototype
+chain. Dropping at the boundary is what makes the guarantee survive its
+consumers. A test drives exactly that path.
+
+This is a strong structural defence, not a proof of impossibility. It removes
+the vectors this parser creates and says nothing about code elsewhere that
+builds objects some other way.
+
+#### The number policy, stated exactly
+
+Both representations are kept: `raw` is the text the user wrote, `value` is
+the IEEE-754 double. Nothing here claims arbitrary precision, because the
+runtime cannot provide it.
+
+A number is reported as unsafe when it would **mislead a reader**, decided by
+an exact comparison rather than a digit-count heuristic: the source text and
+the double's own shortest representation are each reduced to a normalised
+`digits × 10^exponent` form and compared.
+
+| Input | Reported | Why |
+|---|---|---|
+| `9007199254740993` | `PRECISION_LOSS` | Reads back as `…9992`. The case that corrupts identifiers. |
+| `1e400` | `OVERFLOW` | Becomes `Infinity`. |
+| `-0` | `NEGATIVE_ZERO` | Compares equal to `0` and is written back as `0`. |
+| `0.1` | **nothing** | Not exactly representable in binary, but round-trips to `0.1`. |
+| `1e5` | **nothing** | A formatting difference, not a loss. |
+
+Flagging the last two would put a warning on nearly every document and teach
+users to ignore the one that matters.
+
+#### The duplicate-key policy, stated exactly
+
+Every occurrence is kept in the CST with its own span, and reported. Nothing
+is collapsed (J-I4). `JSON.parse` keeps the last occurrence and tells nobody;
+which one a consumer sees is genuinely ambiguous across languages — some take
+the first, some reject the document — so the useful answer is "there are two,
+here is where each one is." `toPlainValue` then applies the same last-wins
+rule the platform does, so the plain value and `JSON.parse` agree.
+
+#### JSON path
+
+A **structural** path, not a query language: it names one node's position in
+one document. No filtering, no wildcards, no recursive descent.
+
+Two notations, because developers paste them into different places: `$.user.items[0]`
+reads well, and `$["user"]["items"][0]` is always valid whatever the key
+contains. Dot notation is used only for keys matching `[A-Za-z_$][A-Za-z0-9_$]*`;
+everything else falls back to brackets. Keys are quoted character by character
+rather than through `JSON.stringify`, so control characters and lone surrogates
+are escaped explicitly — the same reason the parser does not use `JSON.parse`.
+
+#### What differential testing against `JSON.parse` proves
+
+| Claim | Established? |
+|---|---|
+| Our validity verdict matches the platform | ✅ Corpus × 2, plus 4 000 generated and mutated documents |
+| Our values match after unescaping and conversion | ✅ Same corpus, compared structurally |
+| Our positions are correct | ❌ The oracle has none. Covered by unit and property tests. |
+| Our error messages are right | ❌ Engine-specific and unstable in the platform. We report more, and more specifically, by design. |
+| Our duplicate-key handling matches | ❌ We differ deliberately — only the last-wins plain value is compared. |
+
+If the verdicts disagree, we are wrong. That is the rule (J-I1).
+
+---
+
 ## 4. Cron parser — **V1.1**, standard 5-field only
 
 > **This entire section is a V1.1 specification.** No cron code is written during V1.0. It is documented now so the V1.1 scope is locked and cannot creep.

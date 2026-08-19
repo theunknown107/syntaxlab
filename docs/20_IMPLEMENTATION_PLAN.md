@@ -168,7 +168,7 @@
 
 ---
 
-### M5 — JSON domain *(1.5–2 days)*
+### M5 — JSON domain *(1.5–2 days)* — ✅ **COMPLETE**
 
 **Objective:** JSON parsing, fully tested, no UI.
 

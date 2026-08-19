@@ -75,6 +75,14 @@ number most likely to be wrong"; it was, by 62 KB.
 
 `npm audit` reports **0 vulnerabilities** with CodeMirror installed.
 
+**M5 added no dependencies.** The JSON domain is written against the
+platform alone, and `fast-check` — already installed at M3 — drives its
+property suite. No JSON parser library was considered necessary: §6's
+escalation path requires a demonstrated correctness problem first, and the
+custom parser agrees with `JSON.parse` across the corpus and 4 000 generated
+and mutated documents. `@codemirror/lang-json` remains scheduled for M6, where
+there is an editor to highlight.
+
 **M3 added one dev dependency: `fast-check`**, which §3 already approves as
 "the highest-value test dependency in the project". It drives the property and
 differential suites. No runtime dependency was added, and **`regexpp` was not

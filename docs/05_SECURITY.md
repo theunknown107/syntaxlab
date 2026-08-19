@@ -290,7 +290,7 @@ Layer ③ is the one that matters: **the worker never trusts its caller.** If a 
 
 | Control | Detail |
 |---|---|
-| **CST uses arrays, not objects** | JSON object members are `{key, value}[]`. Attacker keys never become real object keys. This is the primary defence and it is structural. |
+| **CST uses arrays, not objects** — ✅ **built and tested at M5** | JSON object members are `{key, value}[]`. Attacker keys never become real object keys. This is the primary defence and it is structural. |
 | `Object.create(null)` for any derived map | `toPlainValue()` and any lookup map are prototype-less. |
 | Explicit dangerous-key rejection | `__proto__`, `constructor`, `prototype` are skipped when building plain values, and their presence is *reported to the user as a finding* — useful information, not just a silent block. |
 | No recursive merge, anywhere | Imported and stored objects are **reconstructed field-by-field** through a validator, never `{...defaults, ...untrusted}`. Deep-merge utilities are banned by lint. |

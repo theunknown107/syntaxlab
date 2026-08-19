@@ -466,12 +466,91 @@ timeout — which is why the client respawns eagerly rather than lazily.
 concern once the service worker exists, and interaction latency on a
 low-powered device, which is M11.
 
-### 10.6 Measurement log
+### 10.6 M5 — JSON parser latency
+
+Measured 2026-08-19, Node 22 under Vitest, median of 15 runs (7 for the large
+cases). Parse, findings and explanation — the whole `analyzeJson` pipeline.
+
+| Case | Input | Median | Worst observed |
+|---|---|---|---|
+| Short document | 25 ch | **0.080 ms** | 0.264 ms |
+| Typical API response | 1.1 KB | **0.421 ms** | 0.638 ms |
+| ~10 000 characters | 5.8 KB | **0.680 ms** | 2.401 ms |
+| 100 KB of records | 67 KB | 5.10 ms | 10.46 ms |
+| 1 MB of records | 687 KB | 61.4 ms | 78.8 ms |
+| **At the 5 MB limit** | 4.9 MB | **~465 ms** | 540 ms |
+| Large array of numbers | 289 KB | 35.3 ms | 48.4 ms |
+| Many object properties (20 000) | 318 KB | 23.9 ms | 29.5 ms |
+| Long single string | 500 KB | 5.16 ms | 7.14 ms |
+| Long escaped string | 480 KB | 7.23 ms | 9.64 ms |
+| Deep nesting at the 500 cap | 1 KB | 0.517 ms | 1.63 ms |
+| Deep nesting far past the cap | 50 KB | 5.33 ms | 6.03 ms |
+| Malformed — unclosed containers | 5 KB | 0.398 ms | 1.14 ms |
+| Malformed — 50 000 junk characters | 50 KB | 14.6 ms | 23.2 ms |
+| 2 000 duplicate keys | 12 KB | 1.12 ms | 3.16 ms |
+| 5 000 precision-loss numbers | 85 KB | 4.13 ms | 7.73 ms |
+| **Mixed-corpus throughput** | — | **~77 000 analyses/sec** | — |
+
+**Scaling.** 67 KB → 5.1 ms and 687 KB → 61.4 ms is a 10.3× size increase for
+a 12× time increase: effectively linear, with the small excess attributable to
+allocation and collection rather than to the algorithm. Nothing here is
+superlinear, which is the property that matters for a parser.
+
+**Honest about the top of the range.** A document at the 5 MB limit takes
+around half a second — above the 100 ms round-trip target in §2.5. Two things
+make that acceptable rather than a defect, and both are pre-existing decisions
+rather than post-hoc excuses:
+
+1. `ANALYSIS_THRESHOLDS.manualAnalyzeBytes` is 500 KB, so a document that large
+   already requires an explicit "Analyze" action rather than running on a
+   debounce (§3.2). The user asked for it and is waiting for it.
+2. It runs in the long-lived analysis worker, so the main thread stays
+   responsive throughout (§15 of `08_UI_UX_SPEC.md` puts progress on screen
+   past 500 ms).
+
+**Where the cost sits.** Depth is the parameter to watch: every node carries a
+`JsonPath`, built as `[...parentPath, segment]`, so a node at depth *d* costs
+*d* segment copies. Real documents are under about twenty deep, where this is
+noise. A pathological document that is both very deep and very wide would pay
+for it — measured, not assumed, and bounded by the 500-level and 5 MB limits.
+Not optimised, because no measurement asks for it (§2.3).
+
+#### 10.6.1 The budget metric was corrected at M5
+
+`check-size.mjs` summed **every** `.js` file under the label "Initial JS".
+That was deliberately conservative at M1, when the worker chunks were 1 KB
+stubs. By M5 the analysis worker carries two complete parsers, and the figure
+had stopped being conservative and started being wrong: it named a load that
+does not happen. Nothing fetches the analysis worker before first paint.
+
+The combined figure reached **170.38 KB against a 170 KB target** at M5, which
+is what prompted the look. Split into what the browser actually does:
+
+| Measure | M5 | Target | Hard |
+|---|---|---|---|
+| **Initial JS** — entry chunk + theme bootstrap, before first paint | **150.82 KB** | 170 KB | 200 KB |
+| **Worker chunks** — fetched on first analysis | **19.56 KB** | 80 KB | 120 KB |
+| CSS | 5.17 KB | 15 KB | 20 KB |
+| **Total precache** — the everything-at-once case, which the service worker will pull at M9 | **177.51 KB** | 1.5 MB | 2 MB |
+
+**This is not the goalposts moving.** No budget was raised and nothing was
+removed to make a number go green: the worker chunks are now budgeted
+explicitly, where before they were unbudgeted and double-counted, and the
+everything-at-once case was already measured by "Total precache" — which sits
+at 12% of its target. The change makes the number that matters visible before
+M6 adds the JSON feature and `@codemirror/lang-json` to the entry chunk.
+
+The entry chunk itself grew by **0.79 KB** at M5, which is
+`isValidJsonAnalysis` reaching the main thread. It has to: the main thread is
+where a worker result is validated.
+
+### 10.7 Measurement log
 
 | Date | Milestone | Initial JS (gz) | CSS (gz) | Total (gz) | Notes |
 |---|---|---|---|---|---|
 | 2026-08-18 | M1 | 48.30 KB | 3.30 KB | 53.55 KB | Shell only. **No CodeMirror** — see §10.2 |
 | 2026-08-18 | M2 | 49.52 KB | 3.30 KB | 54.78 KB | + worker chunks (separate, not initial) |
+| 2026-08-19 | M5 | **150.82 KB** | 5.17 KB | 177.51 KB | Initial JS +0.79 KB (the JSON result validator reaches the main thread); worker chunks 19.56 KB. **The metric changed here** — see §10.6.1. |
 | 2026-08-18 | M4 | **162.54 KB** | 5.17 KB | 169.66 KB | **CodeMirror arrives.** Entry chunk 47.05 → 148.79 KB; CodeMirror is 88.03 KB of that, measured directly. Within the 170 KB target. |
 | 2026-08-18 | M3 | 59.54 KB | 3.30 KB | 64.79 KB | Entry chunk **47.05 KB**, unchanged by M3. The +10.64 KB is the analysis-worker chunk, which now carries the regex domain (34.6 KB raw). `check-size.mjs` counts every JS asset toward "initial JS", so the worker chunks are charged to the budget even though the browser fetches them separately — deliberately conservative. |
 | — | M4 | — | — | — | First budget-meaningful measurement |

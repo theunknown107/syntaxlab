@@ -123,6 +123,7 @@ graph TB
 | B1 | Editor → application | Oversized input, hostile content | Size limits ×3 layers, no execution |
 | B2 | Main thread → worker | Malformed payload, oversized transfer | Worker re-validates; never trusts its caller |
 | B2′ | Main thread → worker | Unknown wire keys riding into the worker | **Payloads are reconstructed field by field at M4**, not only validated. The envelope was already rebuilt; the payload was passed through by reference, so the guarantee was half true. |
+| B2″ | User JSON → application data | Prototype pollution via `__proto__`, `constructor`, `prototype` keys | **Structural, built at M5**: object members are an ordered array of pairs, so a user key never becomes a real object key. `toPlainValue` uses `Object.create(null)` + `defineProperty` and drops `__proto__`, because the value outlives that function and `Object.assign` does use setters. Verified through parse, conversion, assign, spread and `structuredClone`. |
 | B3 | Worker → main thread | Malformed response, id confusion | Envelope validation, id matching, unknown ops discarded, **and per-operation result validation added at M3** — a successful response is checked by value, not accepted on a TypeScript cast |
 | B4 | IndexedDB → domain | Tampering, corruption, version confusion | Validate on read, quarantine failures, preserve unknown versions |
 | B5 | localStorage → theme | **CSS injection** | Strict hex/enum/range allowlist |

@@ -2,8 +2,8 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M4 complete → M5 next (awaiting approval)
-**Last updated:** 2026-08-18
+**Current milestone:** M5 complete → M6 next (awaiting approval)
+**Last updated:** 2026-08-19
 
 > Living document, updated at the end of every milestone. The architecture
 > package in [`docs/`](docs/) remains the source of truth; this file records
@@ -30,8 +30,8 @@
 | M2 | Worker infrastructure | ✅ **Complete** |
 | M3 | Regex domain | ✅ **Complete** |
 | M4 | Regex UI + safe execution | ✅ **Complete** |
-| M5 | JSON domain | ⬜ Next |
-| M6 | JSON UI | ⬜ |
+| M5 | JSON domain | ✅ **Complete** |
+| M6 | JSON UI | ⬜ Next |
 | M7 | History and storage | ⬜ |
 | M8 | Theme customisation | ⬜ |
 | M9 | PWA and offline | ⬜ |
@@ -447,6 +447,185 @@ let two grammars disagree about spans the explanation already refers to.
 
 ---
 
+## M5 — objective and outcome
+
+**Objective:** a complete JSON domain, so M6 can consume a trustworthy
+structured result without putting parsing or normalisation into React.
+
+**Outcome:** met. No JSON UI was built. The parser agrees with `JSON.parse` on
+every input in the corpus and on 4 000 generated and mutated documents, and
+the prototype-pollution defence holds structurally.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
+| Unit tests | ✅ **1 252 passed** (25 files, +393 from M4) |
+| E2E | ✅ **167 passed, 3 skipped** — the M4 regex suite unchanged, +7 JSON |
+| Coverage — `src/domain/json` | ✅ **97.5% stmt / 91.0% branch** (gate ≥95%) |
+| Production build | ✅ 1.56 s |
+| Bundle | ✅ **150.82 KB initial** · 19.56 KB workers · 177.51 KB precache |
+| `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
+| Banned-API scan | ✅ none |
+| Regex product | ✅ unchanged and green |
+
+### Built
+
+```
+src/domain/json/          2 214 lines
+  tokenizer.ts   single pass, line/column, strict RFC 8259, named near-misses
+  parser.ts      iterative with an explicit stack, panic-mode recovery
+  ast.ts         CST discriminated union, members as an ordered array
+  path.ts        structural paths, dot and bracket, explicit key escaping
+  numbers.ts     exact precision-loss detection
+  plain.ts       prototype-safe conversion to a plain value
+  analyze.ts     the pipeline, and one walk for every finding
+  explain.ts     CST → ExplanationNode[]
+  validate.ts    runtime shape guard at the worker boundary
+```
+
+`analysis.json` runs on the **long-lived** analysis worker. Not the disposable
+one: JSON parsing is our own bounded code, and a regex execution timeout must
+never destroy an unrelated parse. An E2E test asserts both operations coexist
+on that thread.
+
+### The two decisions that carry the most weight
+
+**The parser is iterative, with an explicit stack.** `[[[[…]]]]` costs one byte
+per level, so recursion dies at a few thousand levels with a `RangeError` that
+is unattributable inside a worker. **200 000 open brackets** now returns a
+clean `LIMIT_EXCEEDED` — asserted in a unit test and again through a real
+worker.
+
+**Object members are an ordered array of `{key, value}` pairs, never a
+`Record`.** A user key therefore never becomes a real object key anywhere in
+the product. `toPlainValue` uses `Object.create(null)` and `defineProperty`,
+and *drops* `__proto__` rather than merely making it an own property — the
+null prototype makes the write safe where it happens, but the value leaves
+there, and `Object.assign` onto an ordinary object does use assignment. A test
+drives exactly that path.
+
+**This is a strong structural defence, not a proof.** It removes the vectors
+this parser creates and says nothing about code elsewhere that builds objects
+some other way.
+
+### Policies, stated exactly
+
+| Policy | Behaviour |
+|---|---|
+| **Dialect** | Strict RFC 8259. Comments, trailing commas, single quotes, unquoted keys, `NaN`/`Infinity`/`undefined` are errors — each with a message naming the rule and a hint, never "unexpected token". |
+| **Duplicate keys** | Every occurrence kept with its own span and reported. Never collapsed. `toPlainValue` then applies the platform's last-wins rule, so the plain value and `JSON.parse` agree. |
+| **Numbers** | Both representations kept: `raw` as written, `value` as an IEEE-754 double. No claim of arbitrary precision. |
+| **Unsafe numbers** | Flagged only when a reader would be misled, by exact comparison: `9007199254740993` → `PRECISION_LOSS`, `1e400` → `OVERFLOW`, `-0` → `NEGATIVE_ZERO`. `0.1` and `1e5` are **not** flagged — they round-trip, and a warning on every document teaches users to ignore it. |
+| **Strings** | Lone surrogates preserved, raw control characters rejected, invalid escapes reported rather than repaired. |
+| **Paths** | Structural, not a query language. Dot notation only for `[A-Za-z_$][A-Za-z0-9_$]*`; brackets otherwise, with keys escaped character by character. |
+
+### Differential results — and what they prove
+
+| Claim | Established? |
+|---|---|
+| Validity matches `JSON.parse` | ✅ curated corpus × 2 + **4 000** generated and mutated documents |
+| Values match after unescaping and conversion | ✅ same corpus, compared structurally |
+| Positions are correct | ❌ the oracle has none — unit and property tests instead |
+| Error messages are right | ❌ engine-specific in the platform; we report more, by design |
+| Duplicate-key handling matches | ❌ we differ deliberately |
+
+### Property and fuzz results
+
+17 properties, seed `20260819`, 400 runs each. Parser always terminates and
+never throws — on arbitrary text, on punctuation soup, on every prefix of a
+valid document, and on ten adversarial shapes including 100 000 open brackets.
+Spans stay inside the source, a parent contains its children, a key span lies
+inside its member span, the reported line matches the newlines before the
+offset, a path is the accessor chain to the node carrying it, stats agree with
+the tree, limits hold, and nothing in the runtime is mutated whatever the keys
+are. **No counterexample found.**
+
+### Performance — measured
+
+| Case | Median |
+|---|---|
+| Short document | **0.080 ms** |
+| Typical API response (1.1 KB) | **0.421 ms** |
+| ~10 000 characters | **0.680 ms** |
+| 1 MB of records | 61.4 ms |
+| **At the 5 MB limit** | **~465 ms** (540 ms worst) |
+| Malformed — 50 000 junk characters | 14.6 ms |
+| Throughput | ~77 000 analyses/sec |
+
+Effectively linear: 67 KB → 5.1 ms and 687 KB → 61.4 ms is 10.3× size for 12×
+time. **The top of the range is stated rather than hidden:** a 5 MB document
+takes about half a second, above the 100 ms target — acceptable because
+`manualAnalyzeBytes` is 500 KB, so a document that large already needs an
+explicit action, and because it runs in a worker with the main thread free.
+
+### The bundle metric was corrected, not relaxed
+
+The combined "Initial JS" figure reached **170.38 KB against a 170 KB
+target**, which prompted a look at what it was counting. `check-size.mjs`
+summed every `.js` file — conservative at M1 when the worker chunks were 1 KB
+stubs, and simply wrong by M5, because it named a load that does not happen.
+
+Split into what the browser actually does: **150.82 KB initial**, 19.56 KB
+worker chunks, 177.51 KB total precache. No budget was raised and nothing was
+removed; the worker chunks are now budgeted explicitly where before they were
+double-counted, and the everything-at-once case was already covered by "Total
+precache" at 12% of its target. Recorded in `12_PERFORMANCE.md` §10.6.1.
+
+### Defects found and fixed during M5
+
+| Found by | Defect |
+|---|---|
+| Golden corpus | The scanner and the parser both reported `{a:1}`, so one mistake produced two errors. Errors are now deduplicated per position — most specific wins — and sorted into source order. |
+| Coverage | `isValidJsonAnalysis` had **no tests at all** (3% covered) — on the module standing between a malformed worker result and application state |
+| Coverage | `EMPTY_STATS` was exported and imported by nothing |
+| Bundle check | The "Initial JS" metric measured a load that does not happen |
+| **Human review** | **Eight wording defects**, listed below |
+
+### Explanation review — the part tests cannot do
+
+Thirty documents across every required category were read as a user would read
+them. Eight defects, each of which every existing test passed:
+
+| Defect | Fix |
+|---|---|
+| The Structure section restated the summary verbatim | It now carries what the summary cannot: counts, depth, keys, size |
+| "0 levels deep" for a bare scalar | Depth omitted where there is no nesting |
+| The array breakdown repeated a homogeneous summary | Shown only for mixed arrays |
+| `$` appeared raw in findings | "at the top level" where the path is empty |
+| "keep them as strings" followed a negative zero and an overflow | Advice only where it applies |
+| "the rest was read as a part that could not be read" | No recovery claimed unless something substantive survived |
+| ", and" joining a two-clause summary | Written out; `joinClauses` is right for three |
+| "a single string, hello" | A colon reads better before a quoted value |
+
+**68 golden fixtures** now pin the reviewed wording.
+
+### Dependencies added at M5
+
+**None.** The JSON domain is written against the platform alone; `fast-check`
+was already installed at M3. No JSON parser library was needed — §6's
+escalation path requires a demonstrated correctness problem, and none appeared.
+
+### Deviations at M5
+
+| # | Deviation | Reason |
+|---|---|---|
+| D11 | **`JsonAnalysis` gained no field for risky keys** | `__proto__`, `constructor` and `prototype` are surfaced through the *explanation* as a `warning` section instead. That is already where §4.3's other findings reach the user, and a new array would be schema drift for something M6 renders the same way. |
+| D12 | **`toPlainValue` returns `{ value, droppedKeys }`** | The domain doc says `__proto__` is skipped. Returning what was skipped means a caller can say so rather than the data vanishing silently. |
+| D13 | **The bundle metric was split** | See above. The instrument was measuring a load that does not happen. |
+
+### Known limitations at M5
+
+- **No JSON UI.** Editor, tree, format, minify, path panel and stats line are all M6. Nothing in the shell renders a `JsonAnalysis`.
+- **A leading comment cascades into a second error.** `// x\n{"a":1}` reports the comment (correctly, first) and then "more content after the end", because the invalid token became the root. The leading message is the actionable one; suppressing the cascade would need the parser to retry after an unsupported token, which risks differential disagreement for a cosmetic gain.
+- **`toPlainValue` recurses.** Safe because the parser has already capped depth at 500 before this ever runs, but it is not independently bounded.
+- **Formatting (prettify/minify) is not built.** `04_PARSER_ARCHITECTURE.md` §3.7 specifies it on the CST; it belongs with the toolbar that triggers it, at M6.
+- **Path building is O(depth) per node.** Fine for real documents; a pathological deep-and-wide document would pay for it. Measured, bounded by the limits, and not optimised because no measurement asks for it.
+
+---
+
 ## Dependencies added at M1
 
 **Runtime: 2.** `react` and `react-dom`, both pinned exactly at 18.3.1.
@@ -573,4 +752,5 @@ Violating any of these is a defect, not a shortcut.
 | M1 | ✅ | ✅ | ✅ 47 | ✅ 7 | ✅ | ✅ 0 vulns | 48.30 KB JS gz — excludes CodeMirror |
 | M2 | ✅ | ✅ | ✅ 107 | ✅ 38 | ✅ | ✅ 0 vulns | R-10 checkpoint passed on Chromium, Firefox, WebKit |
 | M3 | ✅ | ✅ | ✅ 715 | ✅ 53 | ✅ | ✅ 0 vulns | R-01 regex checkpoint passed; `regexpp` not needed; domain coverage 97.70% |
+| M5 | ✅ | ✅ | ✅ 1 252 | ✅ 167 (3 skipped) | ✅ | ✅ 0 vulns | JSON domain; 4 000-document differential; coverage 97.5%; bundle metric corrected |
 | M4 | ✅ | ✅ | ✅ 859 | ✅ 146 (3 skipped) | ✅ | ✅ 0 vulns | **Bundle checkpoint passed — 162.54 KB vs 170 KB target.** CodeMirror measured at 88 KB, not the ~150 KB estimated |
