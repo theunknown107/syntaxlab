@@ -13,6 +13,7 @@ import {
   historyStore,
   refresh,
   resumeCapture,
+  touchEntry,
 } from '@/application/history/historyStore';
 import {
   DEFAULT_SETTINGS,
@@ -20,6 +21,7 @@ import {
   updateSettings,
 } from '@/application/stores/settingsStore';
 import { workspaceStore } from '@/application/stores/workspaceStore';
+import type { HistoryEntry } from '@/domain/history/entry';
 import type { JsonAnalysis } from '@/domain/json/ast';
 import type { RegexAnalysis } from '@/domain/regex/ast';
 import { EMPTY_FLAGS } from '@/domain/regex/ast';
@@ -384,5 +386,29 @@ describe('an explicit analyse', () => {
     // Only the microtasks the save itself needs, not the two-second timer.
     await vi.advanceTimersByTimeAsync(0);
     expect(await savedInputs()).toEqual(['ab+c']);
+  });
+});
+
+describe('restoring an entry', () => {
+  it('records that it was opened, without writing a second entry', async () => {
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      mode: 'regex',
+      pattern: 'ab+c',
+      analysis: regexAnalysis('ab+c'),
+    }));
+    await captureNow();
+    await refresh();
+
+    const saved = historyStore.getState().page.entries[0];
+    expect(saved?.openCount).toBe(1);
+
+    await touchEntry(saved as HistoryEntry);
+    await refresh();
+
+    const reopened = historyStore.getState().page.entries;
+    expect(reopened).toHaveLength(1);
+    expect(reopened[0]?.openCount).toBe(2);
+    expect(reopened[0]?.lastOpenedAt).toBeGreaterThanOrEqual(saved?.lastOpenedAt ?? 0);
   });
 });

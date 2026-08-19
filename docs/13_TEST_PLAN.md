@@ -654,3 +654,57 @@ Where SyntaxLab deliberately does not support something, the correct behaviour i
 | Oversized input | Rejected before parsing, with the actual size shown | S-7 |
 
 A refusal that is vague ("invalid input") fails these tests just as surely as a wrong parse would.
+
+
+---
+
+## 14. M7 — history
+
+### What runs where, and why
+
+happy-dom provides no IndexedDB. Rather than add a fake-IDB dependency, the
+split is:
+
+| Layer | Where | What it proves |
+|---|---|---|
+| Domain — validate, query, title, transfer | Unit | Every rule about what a record may be |
+| Repository — dedupe, pruning, quota, degradation | Unit, against a **controllable backend** | The *policy*, including every failure a real database can produce on demand |
+| IndexedDB wiring | **E2E, real browsers** | That the policy is actually reaching disk |
+| Presentation | Unit, pure functions | The wording |
+
+The controllable backend (`tests/unit/history/fakeBackend.ts`) can be told to
+throw a `QuotaExceededError` once, or on every write. That is the only
+practical way to test "storage filled up" — you cannot reliably fill a real
+browser's quota in a test, and a test that tried would be slow and flaky.
+
+**Both backends share one implementation of the rules.** The memory fallback is
+the same `HistoryStore` over a different backend, so the path that gets the
+least manual testing behaves identically to the one that gets the most.
+
+### The E2E suite — 22 tests × 3 browsers
+
+Real IndexedDB, production build, real CSP. Beyond the happy path:
+
+| Test | What would otherwise go unnoticed |
+|---|---|
+| Survives a reload | That this is storage, not session state |
+| A stored `<img src=x onerror=...>` renders as text | That nothing in the round trip through disk builds markup |
+| A corrupt record planted directly in the database | That one bad record does not take the list down, and is set aside rather than deleted |
+| A record with `schemaVersion: 99` and `type: 'cron'` | That an old build does not destroy a newer build's data — the record is read back **off disk** to prove it survived |
+| `indexedDB` removed before any app code runs | That regex and JSON still work, and that the UI says history is not being saved |
+| Two tabs | That a save in one reaches the other, and pausing in one pauses the other |
+| Focus after 12 Tab presses | That the modal actually traps focus |
+
+### Defects the tests found
+
+| Found by | Defect |
+|---|---|
+| Unit | `schemaVersion: 1.5` was classified as data from a newer build — kept and hidden — when it is corruption. The future check now requires an integer. |
+| E2E | The history button's accessible name collided with the pause toggle's. The pause label now leads with its verb. |
+| E2E | An entry row's accessible name was the entire row read as one sentence. Rows now carry explicit labels. |
+| **Reading the spec against the build** | Four drifts: a missing compound index, a `meta` record shaped for its caller rather than the store, an explicit Analyze that still waited two seconds, and quota exhaustion that retried a failing write after every analysis for the rest of the session. |
+
+### What is deliberately not tested
+
+- **A real `QuotaExceededError` from a real browser.** Filling a browser's quota takes minutes and the threshold varies by machine. The error is injected instead, and the code path from the error to the UI is fully covered.
+- **Eviction under storage pressure.** Not triggerable on demand. It is disclosed in the UI copy instead, and that copy is asserted.

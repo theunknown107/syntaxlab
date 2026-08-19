@@ -65,6 +65,21 @@ export function relativeTime(timestamp: number, now: number = Date.now()): strin
   });
 }
 
+/**
+ * What an empty list should say.
+ *
+ * Three different situations, three different sentences. "No results" when
+ * history is paused would leave a user wondering why analysing something
+ * changes nothing (08_UI_UX_SPEC.md §8).
+ */
+export function emptyMessage(filtered: boolean, paused: boolean): string {
+  if (filtered) return 'No entries match that search or filter.';
+  if (paused) {
+    return 'History is paused, so nothing new is being saved. Resume it from the header or below.';
+  }
+  return 'Analyses you work on are saved here automatically, a couple of seconds after they settle.';
+}
+
 /** What the list header says, including whether a filter is hiding anything. */
 export function countLabel(page: HistoryPage, filtered: boolean): string {
   const shown = page.entries.length;

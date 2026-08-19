@@ -307,3 +307,36 @@ This model is re-reviewed when any of the following happens:
 - A new storage mechanism is added
 - A security issue is reported
 - Annually, regardless
+
+
+---
+
+## M7 — the storage boundary
+
+History adds one trust boundary the product did not have: **data crossing back
+from disk into the running application.**
+
+| Vector | Handling |
+|---|---|
+| A record edited through devtools | `readEntry` reconstructs every field explicitly. A spread would carry whatever the record contained; nothing is cast. |
+| `__proto__` in a stored record or an import file | Records are rebuilt field by field, so no key from the source is ever assigned. `parseImportText` additionally drops `__proto__` in a `JSON.parse` reviver, before the object exists. |
+| A stored title containing markup | Rendered as a React text child. The feature contains no `dangerouslySetInnerHTML`, and an E2E test round-trips `<img src=x onerror=alert(1)>` through the real database and asserts no element is created. |
+| A crafted import file | Size-capped before parsing (20 MB), entry-capped (10 000), envelope-validated, then every record through the same `readEntry` as a database record. One validation path, not two that can drift. |
+| A `searchText` that disagrees with the entry | Recomputed on read, never trusted. A stored value that disagreed would make an entry unfindable. |
+| A hostile timestamp | `NaN`, `Infinity`, negative and absurd-future values are rejected. An unsortable timestamp corrupts list order rather than merely looking odd. |
+| An unbounded `tags` array | Filtered to strings, capped at 20. |
+| A record from a newer build | Kept, hidden and reported — never deleted. Destroying forward data is the more damaging failure. |
+
+**What history stores is itself a privacy decision.** Regex *test subjects* are
+never persisted: that field is the one most likely to hold real production
+data. Analysis results are not persisted either — they are recomputable in
+milliseconds, and storing them would duplicate the sensitive content. There is
+no field for either in `HistoryEntry`, so neither can be added by accident.
+
+**The claims made to the user are bounded to what the architecture enforces.**
+The copy says history is stored in this browser, is sent to no server, is
+readable by anyone with access to the profile, and can be cleared by the
+browser itself. It does not say the data cannot leave the device — a profile
+can sync and a device can be shared, and a promise we cannot keep is worse
+than no promise. A unit test asserts the absence of "never leave", "100%
+private", "secure" and "encrypted" from that copy.

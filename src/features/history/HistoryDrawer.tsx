@@ -10,6 +10,7 @@ import {
   rename,
   setPinned,
   setPinnedOnly,
+  resetDatabase,
   resumeCapture,
   setSearch,
   setSort,
@@ -17,7 +18,7 @@ import {
   undoRemove,
   type HistoryState,
 } from '@/application/history/historyStore';
-import { restoreEntry } from '@/application/history/restore';
+import { restoreEntry, wouldOverwrite } from '@/application/history/restore';
 import { setHistoryEnabled } from '@/application/history/capture';
 import { settingsStore } from '@/application/stores/settingsStore';
 import { useStore } from '@/components/hooks/useStore';
@@ -28,6 +29,7 @@ import type { HistoryEntry, StorageError } from '@/domain/history/entry';
 import { HistoryTransfer } from './HistoryTransfer';
 import {
   countLabel,
+  emptyMessage,
   errorNote,
   integrityNotes,
   NOT_DURABLE_NOTE,
@@ -156,11 +158,8 @@ export function HistoryDrawer({ open, onClose }: HistoryDrawerProps): React.JSX.
           ))}
         </ul>
 
-        {state.page.total === 0 && !filtered ? (
-          <p className={styles.empty}>
-            Analyses you work on are saved here automatically, a couple of seconds after they
-            settle. Nothing is saved while history is paused.
-          </p>
+        {state.page.total === 0 ? (
+          <p className={styles.empty}>{emptyMessage(filtered, !enabled)}</p>
         ) : null}
 
         <footer className={styles.footer}>
@@ -252,6 +251,21 @@ function Notices({ state }: { readonly state: HistoryState }): React.JSX.Element
 
       {state.error !== null ? <ErrorNote error={state.error} /> : null}
 
+      {state.error?.code === 'CORRUPT' ? (
+        <p className={styles.note}>
+          <button
+            type="button"
+            className={styles.dangerLink}
+            onClick={() => {
+              void resetDatabase();
+            }}
+          >
+            Reset history database
+          </button>{' '}
+          — this discards whatever the database still holds. Nothing else does this on its own.
+        </p>
+      ) : null}
+
       {integrityNotes(state.page).map((note) => (
         <p key={note} className={styles.note}>
           {note}
@@ -302,7 +316,13 @@ function EntryRow({
   readonly onOpen: () => void;
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false);
+  const [confirmingOpen, setConfirmingOpen] = useState(false);
   const summary = summarise(entry);
+
+  const open = (): void => {
+    restoreEntry(entry);
+    onOpen();
+  };
 
   return (
     <li className={styles.row}>
@@ -322,8 +342,11 @@ function EntryRow({
           // sentence to listen to before knowing what the button does.
           aria-label={`Open ${entry.title}`}
           onClick={() => {
-            restoreEntry(entry);
-            onOpen();
+            // Asking only when something would actually be lost. Prompting on
+            // every open would make the common case — restoring into an empty
+            // editor — cost a click for nothing.
+            if (wouldOverwrite(entry)) setConfirmingOpen(true);
+            else open();
           }}
         >
           {/* User text, rendered as a text child. React escapes it; nothing
@@ -369,6 +392,19 @@ function EntryRow({
           Delete
         </IconButton>
       </div>
+
+      <ConfirmDialog
+        open={confirmingOpen}
+        onClose={() => {
+          setConfirmingOpen(false);
+        }}
+        onConfirm={open}
+        title="Replace what is in the editor?"
+        confirmLabel="Open this entry"
+      >
+        The editor holds something different from this entry. Opening it replaces that text. If it
+        was analysed successfully it is already saved here; if it was not, it will be lost.
+      </ConfirmDialog>
     </li>
   );
 }

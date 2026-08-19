@@ -270,3 +270,45 @@ export function toStorageError(error: unknown): StorageError {
     'Your work is unaffected — this only concerns the saved list.',
   );
 }
+
+/**
+ * Deletes the database outright — 06_DATA_STORAGE.md §6.3
+ *
+ * The escape hatch from a database that will not open. It exists *only* as an
+ * explicit user action: a corrupt file may still be the only copy of what
+ * someone wrote, so nothing here runs on its own. Everything else in this
+ * codebase quarantines rather than deletes; this is the one place a user can
+ * say "give up on it", and they have to say it.
+ */
+export async function deleteDatabase(): Promise<Result<void, StorageError>> {
+  if (typeof indexedDB === 'undefined') return ok(undefined);
+
+  return new Promise<Result<void, StorageError>>((resolve) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => {
+      resolve(ok(undefined));
+    };
+    request.onblocked = () => {
+      resolve(
+        err(
+          storageError(
+            'BLOCKED',
+            'Another SyntaxLab tab still has the history database open.',
+            'Close the other tabs, then try again.',
+          ),
+        ),
+      );
+    };
+    request.onerror = () => {
+      resolve(
+        err(
+          storageError(
+            'UNKNOWN',
+            'The history database could not be removed.',
+            'Clearing site data for this page in your browser settings will do the same thing.',
+          ),
+        ),
+      );
+    };
+  });
+}

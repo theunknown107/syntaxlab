@@ -137,6 +137,32 @@ interface HistoryState {
 
 An in-memory projection of IndexedDB. IDB is authoritative; the store is a render cache. Refreshed on: drawer open, any write, and a `BroadcastChannel` message from another tab.
 
+**As built at M7** the shape differs from the sketch above, in ways worth recording:
+
+```ts
+interface HistoryState {
+  page: HistoryPage;              // entries + total + integrity counts
+  status: 'idle' | 'loading' | 'ready' | 'failed';
+  error: StorageError | null;
+  durable: boolean;               // false ⇒ this session only, and the UI says so
+  search: string;
+  typeFilter: HistoryType | null;
+  pinnedOnly: boolean;
+  pendingUndo: HistoryEntry | null;
+  captureSuspended: boolean;      // storage filled up; capture stopped, with a reason
+  usage: number | null;           // origin-wide estimate, null where unreported
+  quota: number | null;
+}
+```
+
+- **`page` rather than `entries` + `total`.** The two are computed together and are never meaningfully apart; splitting them invites a render where the count and the list disagree. `HistoryPage` also carries `fromNewerVersion` and `quarantined`, which the drawer must surface — see `06_DATA_STORAGE.md` §7.3.
+- **`status` rather than `loading`.** A boolean cannot distinguish "not opened yet" from "opened and failed", and those need different things on screen.
+- **`durable` rather than `storageAvailable`.** Storage can be available and still not be keeping anything: the memory fallback works, it is just not durable. That is the distinction the user needs stated.
+- **`captureSuspended` rather than `quotaWarning`.** A warning is something to look at; this is a behaviour change — nothing new is being saved — so it is named for what it does and cleared only by an explicit user action.
+- **The query fields live in the store, not in a `query` object**, because each is set by its own control and a nested object would be replaced wholesale on every keystroke.
+
+The repository itself holds the entry set in memory and writes through. At the 500-entry cap that is affordable, and it is what lets search filter as the user types without a database round trip per keystroke.
+
 ### 4.3 `themeStore` and `settingsStore`
 
 Both write through to `localStorage` on change (debounced 300 ms), and both validate on read at startup. `themeStore` additionally calls `applyTheme()` on every change to push CSS custom properties.
@@ -245,6 +271,17 @@ Nothing in steps 6–7 blocks first paint. Every one of them can fail without pr
 | Editor content | None | Independent per tab, by design — two tabs are two workspaces |
 | First-run notice | `storage` event | Acknowledging in one tab suppresses it in the others |
 | DB upgrade | IDB `versionchange` | Old tabs close their connection and prompt a reload |
+
+**Implemented at M7, with one deliberate detail:** the `history-changed`
+message carries *no payload*. The receiving tab drops its cached repository
+and re-reads from the database. Sending the entry would be faster and would
+also create a second path by which a record reaches application state — one
+that skips `readEntry`. There is one validation path, and it is the one that
+reads from disk.
+
+Both mechanisms are covered end to end across two real tabs
+(`tests/e2e/history.spec.ts`): a save in one tab appears in the other, and
+pausing in one pauses the other.
 
 ---
 

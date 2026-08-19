@@ -415,3 +415,62 @@ All lazy boundaries use `React.lazy` + `Suspense` with a skeleton matching the f
 | Visual | Playwright screenshots of key states, default theme only (custom-theme snapshots are noise) |
 
 Queries are by **role and accessible name**, never by test id or class. A test that cannot find a button by its accessible name has found a real accessibility bug.
+
+
+---
+
+## M7 — the history components, as built
+
+```
+Header
+├── ModeSelector
+└── HistoryControls            open + pause, both always visible
+    └── HistoryDrawer
+        ├── Notices            durability, suspension, errors, integrity counts
+        ├── EntryRow ×N        open · pin · rename · delete
+        │   └── RenameForm     replaces the row's open button in place
+        ├── UndoBar            5 s, dismissible
+        ├── HistoryTransfer    export · import
+        └── ConfirmDialog      clear-all
+
+AppShell
+└── HistoryNotice              first-run banner, non-blocking
+```
+
+### Modal surfaces are the platform's
+
+`Drawer` and `ConfirmDialog` are both a native `<dialog>` opened with
+`showModal()`. That one call supplies the focus trap, Escape handling,
+inertness of the rest of the page for assistive technology, the backdrop, and
+focus restoration to whatever opened it. A hand-rolled modal is several hundred
+lines reimplementing exactly that list, and it is the part nobody retests after
+the first release.
+
+Two details are not free and are handled explicitly:
+
+- **Backdrop click** is attached with `addEventListener` on the element rather
+  than a JSX `onClick`. A modal `<dialog>` fills the viewport, so a click whose
+  target *is* the dialog element missed the panel — but expressing that as a
+  click handler on a non-interactive element is what the a11y lint rules
+  correctly object to. The listener form says the same thing without pretending
+  a `<div>` is a button.
+- **Children render only while open**, so the drawer's contents are not in the
+  accessibility tree — and not focusable — when it is shut.
+
+### Accessible names are given, not accumulated
+
+An entry row contains a title, a badge, a metadata line and a timestamp. Left
+alone, the row button's accessible name is all of that read as one sentence
+before the user learns what the button does. Each row button therefore carries
+an explicit `aria-label`: `Open /ab+c/g`, `Pin /ab+c/g`, `Delete /ab+c/g`. The
+detail stays visible and readable; it is simply not the button's name.
+
+This was found by an E2E test failing on a strict-mode locator violation — the
+same ambiguity a screen-reader user would have heard.
+
+### The view model holds the wording
+
+`features/history/viewModel.ts` is pure and unit-tested, because the defects
+this feature produces are sentences rather than crashes: "1 entries", a count
+that says "0 more", or a privacy claim the architecture cannot enforce. Those
+are testable only if they are not embedded in JSX.

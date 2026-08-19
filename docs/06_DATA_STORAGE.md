@@ -41,7 +41,21 @@ Not used: cookies (no server), `sessionStorage` (no requirement), OPFS (no file-
 | `by-opened` | `lastOpenedAt` | no | "Recently used" ordering |
 | `by-type` | `type` | no | Filter by regex/json/cron |
 | `by-type-created` | `['type','createdAt']` | no | Filtered list without a full scan — the compound index is what keeps filtering O(results) instead of O(all) |
-| `by-pinned` | `pinned` | no | Pinned-first rendering and prune exemption |
+| ~~`by-pinned`~~ | ~~`pinned`~~ | — | **Not created.** See below. |
+
+**`by-pinned` cannot exist as specified.** `pinned` is a boolean, and IndexedDB
+rejects booleans as keys: the index would be created successfully and then
+silently contain no records at all, which is worse than not having it. Pinned
+ordering and prune exemption are done in `queryEntries` and `selectForPruning`
+instead. Storing `pinned` as `0 | 1` purely to make it indexable was rejected —
+it would put a storage detail into the domain model to serve an index nothing
+currently reads.
+
+**The other four indices are created but not yet read.** The repository loads
+the whole store — capped at 500 entries — and filters in memory, which measures
+at 27 ms for a search across 500 records and 33 ms across 1 000. They are
+declared now because adding an index later needs a version bump and an upgrade
+path, and an unused index on a store this size costs nothing measurable.
 
 **Record shape:** `HistoryEntry` as defined in `03_DOMAIN_MODEL.md` §6.
 
@@ -58,7 +72,13 @@ Not used: cookies (no server), `sessionStorage` (no requirement), OPFS (no file-
 | `dbSchemaVersion` | number | Migration tracking independent of IDB's own version |
 | `lastPrunedAt` | number | Rate-limits pruning work |
 | `entryCount` | number | Cheap count without a full scan |
-| `quarantine` | `QuarantinedRecord[]` | Records that failed validation, retained for export/debug |
+| `quarantine` | `QuarantinedRecord[]` | Records that failed validation, retained for export/debug — **implemented at M7**, bounded to the most recent 50 |
+
+`dbSchemaVersion`, `lastPrunedAt` and `entryCount` are **not written at M7**.
+Each exists to avoid a full scan, and the M7 repository does a full read at
+startup by design, so all three would be state that can only fall out of sync
+with the thing it is caching. They become worth writing if the cap rises far
+enough to make the full read expensive.
 
 ### 2.3 Why two stores and not more
 
@@ -214,7 +234,7 @@ The `Turn history off` action in the notice matters: a user who reads the notice
 |---|---|
 | Every keystroke | ❌ Never |
 | Debounced auto-analysis succeeding | ✅ Yes, debounced a further 2 s so a user typing through several valid states produces one entry |
-| Explicit Analyze click | ✅ Yes, immediately |
+| Explicit Analyze click | ✅ Yes, immediately — **implemented**: an explicit analyse is the user saying they are done, so there is no pause left to wait for |
 | Analysis failing with a syntax error | ❌ No — a half-typed regex is not worth remembering |
 | Restoring an existing entry | ✅ Updates `lastOpenedAt` and `openCount` only |
 | History paused | ❌ Never |
@@ -260,6 +280,15 @@ Always. `localStorage` is attacker-writable and its values go into CSS. Detailed
 
 We do not rely on `navigator.storage.estimate()` for correctness — it is an estimate, is coarse in some browsers, and is deliberately fuzzed in others. It is used only to display a usage bar and to trigger early pruning.
 
+**As built at M7:** the entry cap and the per-entry cap are enforced, and
+`QuotaExceededError` drives pruning. The **soft 50 MB budget is not enforced**
+and the estimate is shown but does not trigger anything. Pruning on a fuzzed
+number would mean deleting a user's entries because of a figure the browser
+declined to be precise about; `QuotaExceededError` is the one signal that is
+not a guess, and it arrives in time to act on. The estimate is displayed in
+the drawer, worded as approximate, because "how much is this using?" is a
+reasonable question even when the answer is imprecise.
+
 ### 6.2 Pruning
 
 Triggered on: entry count > 500, estimated usage > 50 MB, or a `QuotaExceededError`.
@@ -270,9 +299,9 @@ Order: unpinned entries only, oldest `lastOpenedAt` first, in a single transacti
 
 | Failure | User-visible behaviour |
 |---|---|
-| `QuotaExceededError` | Prune → retry once → toast "History storage is full. Older entries were removed. Auto-save is now off." + a persistent header indicator |
+| `QuotaExceededError` | Prune → retry once → **capture suspends** with the reason and an explicit *Resume saving* control in the drawer. Implemented at M7; the message is in the drawer rather than a toast, because there is no toast system and a message about storage belongs beside the storage. |
 | IDB unavailable | Startup notice "History is unavailable in this browser mode. Everything else works." Memory repository takes over. |
-| DB fails to open (corrupt) | Notice + memory mode + an explicit **Reset history database** action. **We never auto-delete.** |
+| DB fails to open (corrupt) | Notice + memory mode + an explicit **Reset history database** action. **We never auto-delete.** Implemented at M7: the action appears only on a `CORRUPT` error, states that it discards what the database still holds, and is the single place in the feature that destroys data it cannot show the user first. |
 | Upgrade blocked by another tab | "Close other SyntaxLab tabs to finish updating." Retry on `versionchange`. |
 | Write fails mid-transaction | IDB transactions are atomic; the entry simply is not saved. Toast, no partial state. |
 
@@ -388,6 +417,14 @@ Full validation pipeline in `05_SECURITY.md` §10.2. Behaviour summary: merge or
 ---
 
 ## 11. Testing
+
+> **Built at M7.** Where the implementation departs from this document, the
+> departure is recorded inline above rather than by quietly editing the
+> specification. In summary: `by-pinned` cannot exist (booleans are not IDB
+> keys), three `meta` keys are not written because nothing reads them, the soft
+> byte budget is not enforced, and `idb` was not adopted
+> (`16_DEPENDENCIES.md` §2.3).
+
 
 | Area | Test |
 |---|---|

@@ -11,6 +11,7 @@ import type {
 } from '@/domain/history/entry';
 import { buildEnvelope } from '@/domain/history/transfer';
 import { storageUsage } from '@/infrastructure/browser/capabilities';
+import { deleteDatabase } from '@/infrastructure/storage/db';
 import { createHistoryRepository } from '@/infrastructure/storage/historyRepository';
 
 import { createStore } from '../stores/createStore';
@@ -338,6 +339,34 @@ export async function clearAll(): Promise<boolean> {
 /* ------------------------------------------------------------------ *
  * Transfer
  * ------------------------------------------------------------------ */
+
+/**
+ * Removes a database that cannot be opened, and starts again.
+ *
+ * Offered only when the database is genuinely unreadable, and only on an
+ * explicit action — see `deleteDatabase`. This is the one operation in the
+ * feature that destroys data without being able to show the user what it is
+ * destroying, which is exactly why it is not automatic.
+ */
+export async function resetDatabase(): Promise<boolean> {
+  const result = await deleteDatabase();
+  if (!result.ok) {
+    historyStore.setState((previous) => ({ ...previous, error: result.error }));
+    return false;
+  }
+
+  repository = null;
+  opening = null;
+  historyStore.setState((previous) => ({
+    ...previous,
+    page: EMPTY_PAGE,
+    error: null,
+    captureSuspended: false,
+  }));
+  await refresh();
+  announce();
+  return true;
+}
 
 /** Re-reads the browser's storage estimate. Cheap, and only when asked. */
 export async function refreshUsage(): Promise<void> {

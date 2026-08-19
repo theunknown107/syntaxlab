@@ -349,6 +349,23 @@ control does both), and expand-to-depth as a user control.
 - **History status is mirrored in settings**, not only in the header: current state (on/paused), entry count, approximate storage used, and the same pause, export, import, and clear-all actions. A user looking for "where is my data" should find the whole answer in one place.
 - Storage-unavailable state explains the situation and confirms the rest of the app still works
 
+### As built at M7 — where the interface differs from the sketch, and why
+
+| # | Specification | As built | Reason |
+|---|---|---|---|
+| 1 | Filter chips `[All][Regex][JSON][Cron]` | `[All][Regex][JSON][Pinned]` | There is no cron in V1.0, and a chip for it would be the "disabled affordance" §2.1 rules out. Pinned is a chip rather than a separate toggle because it filters the same list the others do. |
+| 2 | Search debounced 150 ms | **Not debounced** | Measured: 27 ms to search 500 entries, 33 ms at 1 000 (`12_PERFORMANCE.md` §10.8). A 150 ms delay would be the only latency in the interaction. Reinstate if the cap rises. |
+| 3 | "Delete shows a 5-second undo toast **before committing**" | The delete commits immediately; undo re-adds through the validated import path | Deferring the write means a tab closed during the five seconds silently resurrects something the user deleted. Deleting now and offering the entry back is the same affordance with the opposite failure mode. |
+| 4 | Undo as a toast | An inline bar at the foot of the drawer | There is no toast system, and a message about a row belongs in the list that row was in. |
+| 5 | `⟳ Restore` button per row | The row itself opens; the explicit buttons are pin, rename and delete | The spec's own next line asks that restore never be ambiguous. Making the row the restore target and giving the *destructive* actions the explicit buttons achieves that with one fewer control per row. |
+| 6 | "… 48 more" | "3 of 1,200 entries" | Says the same thing and also says what is on screen. |
+| 7 | `Learn more ↗` on the first-run notice | Not present | It would link to the help dialog, which arrives at M10. A link to nothing is worse than no link. |
+| 8 | Settings mirror | Lives in the drawer footer | SyntaxLab has no settings dialog until the theme work. The whole answer to "where is my data" is in one place, which is what the requirement asks for; it is simply the drawer. |
+
+Everything else in §8 is built as specified, including the confirmation before
+a restore replaces different editor content, the three distinct empty states,
+and the storage-unavailable notice.
+
 ---
 
 ## 9. First-run history notice
@@ -376,6 +393,12 @@ Shown once, on first visit, **before any analysis is saved**. This is the UX hal
 | Later access | Full text lives in the help dialog and in settings |
 
 **Wording rules:** say *"in this browser"*, never *"saved forever"* or *"your data is safe"*. Mention that the browser may clear storage. Do not use the word "privacy" as a reassurance — describe the behaviour and let the user judge.
+
+**Built at M7**, with the wording rules enforced by a unit test rather than by
+review alone: `tests/unit/history/viewModel.test.ts` asserts that the storage
+copy contains no "never leave", "100% private", "secure" or "encrypted", and
+that it does say where the data lives, that no server receives it, that anyone
+with the browser profile can read it, and that the browser may clear it.
 
 ---
 

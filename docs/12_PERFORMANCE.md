@@ -611,3 +611,43 @@ behaviour, not a performance workaround.
 | *(V1.1)* Timezone handling for cron | Adds to the cron chunk | V1.1 supports browser-local and UTC only, so no zone list is shipped at all |
 | Font loading | FOUT | Metric-matched fallback, preload, `swap` |
 | Worker startup on first analysis | ~30 ms one-off delay | Spawn on idle after first paint |
+
+
+---
+
+### 10.8 M7 — history at scale
+
+Chromium, production build, local preview, median of three runs, via
+`npm run measure:history` (`scripts/measure-history.mjs`). The database is
+seeded with real records and read through the real code path.
+
+| Entries | Open the drawer | Search |
+|---|---|---|
+| 0 | 48 ms | 6 ms |
+| 100 | 82 ms | 14 ms |
+| 500 *(the cap)* | 98 ms | 27 ms |
+| 1 000 | 101 ms | 33 ms |
+
+Budgets: 200 ms to open, 100 ms to search. Both are met with room to spare at
+twice the cap.
+
+**1 000 is measured although the cap is 500** because a store can exceed the
+cap transiently — after an import, before the next save trims it — and that is
+the slowest read the drawer can face.
+
+**Why the full read is affordable.** The repository loads every record on first
+use and filters in memory. The alternative, cursor-based paging over the
+indices, would produce a second implementation of "what the list shows" that
+can disagree with the first. The numbers above are what justifies not doing
+that: the curve from 500 to 1 000 entries is 3 ms of open time. Revisit if the
+cap rises past a few thousand — `06_DATA_STORAGE.md` §2.1 says the same.
+
+**Bundle cost of the whole milestone: +9.66 KB gzipped** (158.84 → 168.50 KB
+initial, and +1.09 KB CSS), for the domain, the repository, the store, the
+drawer, transfer, and the two modal primitives. No dependency was added; `idb`
+was planned and dropped (`16_DEPENDENCIES.md` §2.3).
+
+Initial JS now sits **1.5 KB under the 170 KB target** and 31 KB under the hard
+budget. That is tight enough to be worth stating plainly: M8 has very little
+headroom before the target needs a deliberate decision rather than an
+incidental one.

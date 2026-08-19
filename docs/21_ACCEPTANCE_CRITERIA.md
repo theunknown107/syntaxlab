@@ -93,34 +93,34 @@
 
 | # | Criterion | Verification |
 |---|---|---|
-| H-1 | A successful analysis creates an entry with the correct title and metadata | I10 |
-| H-2 | Restoring returns the exact original input | I11, E5 |
-| H-3 | Restoring updates `lastOpenedAt` and `openCount` | I11 |
-| H-4 | Search filters by title and input content | E5 |
-| H-5 | Filtering by type returns only that type | Unit |
-| H-6 | Pinned entries sort first and are exempt from pruning | Unit |
-| H-7 | Rename persists | Unit |
-| H-8 | Delete removes the entry and offers a 5-second undo | E5 |
-| H-9 | Clear-all confirms with a count, then wipes | E5 |
-| H-10 | **Auto-capture is ON by default** | Unit |
-| H-11 | **The first-run notice appears once, before any entry is saved, and does not block the UI** | E5 + manual |
-| H-12 | **"Turn history off" in the notice disables capture immediately** | I12 |
-| H-13 | The notice does not reappear after acknowledgement | Unit |
-| H-14 | **Pause history writes nothing** | I12 |
-| H-15 | The paused state is visible in the header, clickable to resume, and survives reload | Manual |
-| H-16 | **History status is mirrored in settings** (state, count, storage used, same actions) | Manual |
-| H-17 | Duplicate analyses within 60 s update rather than duplicate | Unit |
-| H-18 | Quota exceeded triggers prune → retry → notify → disable auto-capture | I15 |
-| H-19 | Storage unavailable → memory mode, notice, **app fully functional** | I16 |
-| H-20 | Corrupted records are quarantined; the list still renders | I17 |
-| H-21 | Records with a higher `schemaVersion` are preserved and hidden, never deleted | Unit |
-| H-22 | Export produces a valid versioned envelope | I14 |
-| H-23 | Import validates fully and reports imported/skipped counts | I14 |
-| H-24 | Hostile import files are rejected with a specific reason | Security §7.7 |
-| H-25 | Changes propagate to other open tabs | I22 |
-| H-26 | **Regex test strings are not persisted** | Code review + unit |
-| H-27 | **Analysis results are not persisted** | Code review + unit |
-| H-28 | **No UI or copy promises indefinite persistence**; eviction is disclosed | Copy review |
+| H-1 | A successful analysis creates an entry with the correct title and metadata | ✅ **M7** — unit + E2E |
+| H-2 | Restoring returns the exact original input | ✅ **M7** — E2E. Exact under the 100 000-char cap; a longer input is stored truncated **and flagged**, and the row says so |
+| H-3 | Restoring updates `lastOpenedAt` and `openCount` | ✅ **M7** — unit + E2E |
+| H-4 | Search filters by title and input content | ✅ **M7** — E2E |
+| H-5 | Filtering by type returns only that type | ✅ **M7** — unit |
+| H-6 | Pinned entries sort first and are exempt from pruning | ✅ **M7** — unit + E2E; `selectForPruning` cannot return a pinned entry at any pressure |
+| H-7 | Rename persists | ✅ **M7** — unit + E2E, including reindexing for search |
+| H-8 | Delete removes the entry and offers a 5-second undo | ✅ **M7** — E2E; the entry is verified still present after a reload |
+| H-9 | Clear-all confirms with a count, then wipes | ✅ **M7** — E2E; the dialog names the count |
+| H-10 | **Auto-capture is ON by default** | ✅ **M7** — unit |
+| H-11 | **The first-run notice appears once, before any entry is saved, and does not block the UI** | ✅ **M7** — E2E |
+| H-12 | **"Turn history off" in the notice disables capture immediately** | ✅ **M7** — E2E |
+| H-13 | The notice does not reappear after acknowledgement | ✅ **M7** — E2E |
+| H-14 | **Pause history writes nothing** | ✅ **M7** — unit + E2E, including a capture already waiting when the user pauses |
+| H-15 | The paused state is visible in the header, clickable to resume, and survives reload | ✅ **M7** — E2E |
+| H-16 | **History status is mirrored in settings** (state, count, storage used, same actions) | ✅ **M7** — in the history drawer, which is the only settings surface that exists at M7 |
+| H-17 | Duplicate analyses within 60 s update rather than duplicate | ✅ **M7** — unit |
+| H-18 | Quota exceeded triggers prune → retry → notify → disable auto-capture | ✅ **M7** — unit. Capture suspends with a stated reason and an explicit resume, rather than retrying a failing write after every analysis |
+| H-19 | Storage unavailable → memory mode, notice, **app fully functional** | ✅ **M7** — E2E with `indexedDB` removed before any application code runs |
+| H-20 | Corrupted records are quarantined; the list still renders | ✅ **M7** — E2E against the real database |
+| H-21 | Records with a higher `schemaVersion` are preserved and hidden, never deleted | ✅ **M7** — unit + E2E; the record is read back off disk to prove it survived |
+| H-22 | Export produces a valid versioned envelope | ✅ **M7** — unit + E2E |
+| H-23 | Import validates fully and reports imported/skipped counts | ✅ **M7** — unit |
+| H-24 | Hostile import files are rejected with a specific reason | ✅ **M7** — unit |
+| H-25 | Changes propagate to other open tabs | ✅ **M7** — E2E across two real tabs, for both history and the pause setting |
+| H-26 | **Regex test strings are not persisted** | ✅ **M7** — unit asserts a subject containing card-like digits never reaches a record |
+| H-27 | **Analysis results are not persisted** | ✅ **M7** — `HistoryEntry` has no field for one |
+| H-28 | **No UI or copy promises indefinite persistence**; eviction is disclosed | ✅ **M7** — unit asserts the wording, E2E asserts it is shown |
 
 ---
 

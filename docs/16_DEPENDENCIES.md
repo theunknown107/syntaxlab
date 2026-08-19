@@ -27,13 +27,13 @@
 | `@codemirror/state`, `/view`, `/commands`, `/language` | **Required** | Editor core | M1 |
 | `@codemirror/lang-json` | **Required** | JSON highlighting (lazy chunk) | M5 |
 | `@lezer/highlight` | **Required** | Syntax highlighting primitives | M1 |
-| `idb` | **Required** | IndexedDB promise wrapper | M7 |
+| `idb` | ~~Required~~ **Not adopted** | IndexedDB promise wrapper | M7 — see §2.3 |
 | `vite-plugin-pwa` | **Required** | Service worker generation | M9 |
 | `@codemirror/search` | **Optional** | Editor find UI. We already build a CST we can search. **Adopt only if the hand-rolled path proves worse**, and it is the first thing dropped if the bundle is over target. | M6 |
 | `@js-temporal/polyfill` | **Deferred** | Only if V1.1 named-timezone support is approved (Q-09). V1.1 as specified needs `Intl` only. | — |
 | `zod` | **Avoid unless justified** | Hand-written validators cover ~6 shapes. Revisit if the count roughly doubles or a validation bug reaches production (Q-13). | — |
 
-**Total required runtime dependencies for V1.0: 4 packages** (React pair, CodeMirror set, `idb`, `vite-plugin-pwa`).
+**Total required runtime dependencies for V1.0: 3 packages** (React pair, CodeMirror set, `vite-plugin-pwa`). `idb` was planned and, at M7, **not adopted** — §2.3 records the reversal and its reasoning.
 
 ### 1.2 Installed at M1 — actual
 
@@ -82,6 +82,12 @@ never needed. Search is a walk over the CST. `@codemirror/lang-json` was
 **not** installed: the JSON editor needs error decorations at spans our own
 parser produces, and a second grammar would be a second opinion about where
 those spans are.
+
+**M7 removed one from the plan and added none.** History runs on the platform
+IndexedDB API — see the reversal in §2.3 — and the modal surfaces are the
+native `<dialog>` element, which supplies the focus trap, Escape handling,
+page inertness and focus restoration that a modal library exists to provide.
+Cross-tab sync is `BroadcastChannel` plus the `storage` event.
 
 The one non-code addition is the **JSONTestSuite corpus** (MIT), vendored as
 test fixtures under `tests/fixtures/jsontestsuite/` with its licence and
@@ -176,11 +182,15 @@ A dependency failing any criterion needs a written exception in the PR, not a sh
 
 ---
 
-### 2.3 `idb`
+### 2.3 `idb` — planned, then **not adopted at M7**
+
+> **Decision reversed at M7.** The original assessment below stands as written;
+> what changed is that the work turned out smaller than the assessment assumed.
+> The reversal is recorded after it.
 
 | | |
 |---|---|
-| **Class** | **Required** |
+| **Class** | ~~Required~~ **Not adopted** |
 | **Version** | ^8 |
 | **Size** | ~1.2 KB gz *(estimate)* |
 | **Licence** | ISC |
@@ -192,6 +202,37 @@ A dependency failing any criterion needs a written exception in the PR, not a sh
 **Why:** raw IndexedDB is an event/callback API with genuinely tricky transaction-lifetime semantics (a transaction auto-closes if you `await` a non-IDB promise inside it — a bug that is silent and intermittent). A hand-rolled wrapper would be roughly the same size and less battle-tested. This is the one case where the dependency is smaller *and* safer than doing it ourselves.
 
 **Alternatives:** raw IDB (more code, more bugs); Dexie (~25 KB — a full query layer we do not need); localForage (~9 KB, abstracts away the indices we rely on); `idb-keyval` (too simple — no indices, and indices are what make the history list fast).
+
+#### The M7 reversal
+
+Building M7 established two things the Phase 1 assessment could not know.
+
+**The wrapper is thirty lines, not a library.** `src/infrastructure/storage/db.ts`
+promisifies exactly three things — a request, a transaction's completion, and
+an open — and nothing else in the file is generic. The estimate that "a
+hand-rolled wrapper would be roughly the same size" was right; the conclusion
+drawn from it was not, because equal size does not mean equal cost. One is a
+file in this repository that the type-checker sees and the tests exercise; the
+other is a package that has to be audited, updated, and trusted with the only
+copy of the user's saved work.
+
+**The transaction-lifetime hazard is handled directly, and visibly.** The
+concern was real: a transaction closes when the microtask queue drains, so an
+`await` on a non-IDB promise inside one aborts it silently. Every helper in
+`db.ts` therefore completes its transaction before it resolves, and the file
+says so at the top. A wrapper would have hidden that hazard rather than
+removing it — and hiding it is what makes it silent when it eventually bites.
+
+**What tipped the balance** is that this dependency would sit on the path of
+the user's persisted data. `05_SECURITY.md` treats stored records as hostile
+input; adding a third-party package between that input and its validation is
+the opposite direction of travel. The bundle saving (~1.2 KB) is real but was
+not the deciding factor.
+
+**What would reverse this again:** a second schema version with a non-trivial
+upgrade, cursor-based paging over the indices, or a third store. Any of those
+makes the wrapper genuinely generic, and at that point the argument above
+stops holding.
 
 ---
 
@@ -308,7 +349,7 @@ Each fallback is a **contained** change because the domain layer is isolated beh
 | Licence | Packages | Compatible with a permissive release |
 |---|---|---|
 | MIT | React, CodeMirror, vite-plugin-pwa, most dev tooling | ✅ |
-| ISC | idb | ✅ |
+| ISC | ~~idb~~ *(not adopted)* | — |
 | Apache-2.0 | Some transitive tooling | ✅ |
 | BSD-3 | Some transitive tooling | ✅ |
 
@@ -334,7 +375,7 @@ Filled in at **Milestone 1**, from `rollup-plugin-visualizer` on a production bu
 |---|---|---|---|---|
 | react + react-dom | ~45 KB | — | — | — |
 | @codemirror/* (core + view + lang) | ~150 KB | — | — | — |
-| idb | ~1.2 KB | — | — | — |
+| ~~idb~~ *(not adopted at M7)* | — | — | — | — |
 | vite-plugin-pwa runtime | ~2 KB | — | — | — |
 | **Initial bundle total** | **~198 KB** | — | — | — |
 

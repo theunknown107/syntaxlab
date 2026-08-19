@@ -221,6 +221,25 @@ A bad SW persists across reloads; users can be stuck on a broken version.
 
 **Residual:** real and accepted (RR-08). We cannot reliably detect secrets, and a false "no secrets found" would be worse than no check.
 
+**Status at M7 — every mitigation is now built, and one is stronger than planned.**
+
+| Mitigation | As built |
+|---|---|
+| First-run notice before anything is saved | Non-blocking banner in the shell, with `Got it` and `Turn history off`. The capture delay means nothing is written for at least two seconds after a first successful analysis, so the notice genuinely precedes the first write. |
+| Immediate opt-out | `Turn history off` pauses capture in the same click and persists it. Covered E2E. |
+| Pause in the header and in settings | Header control plus the mirror in the drawer, which is the only settings surface at M7. |
+| Test strings and results not stored | **Structurally, not by discipline:** `HistoryEntry` has no field for either, so neither can be added by accident. A unit test analyses a subject containing card-like digits and asserts they never reach a record. |
+| Per-entry delete with undo, clear-all | Both built; the delete is real and immediate, so closing the tab during the undo window cannot resurrect it. |
+| Plain disclosure | Worded to what the architecture enforces, and **unit-tested for the absence** of "never leave", "100% private", "secure" and "encrypted". |
+
+**One thing the plan did not anticipate.** History captures the regex
+*pattern*, which can itself encode a secret — a pattern written to match one
+specific token contains that token. Nothing in the design prevents this and
+nothing detects it; the mitigation remains the same as for any other content
+the user chooses to save: it is visible in the list, individually deletable,
+and capture can be paused before pasting. Recorded here rather than left as an
+unstated assumption.
+
 ---
 
 ### R-19 — V1.0 perceived as incomplete 🟠 9 · V1.0 · **NEW**

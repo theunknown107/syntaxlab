@@ -2,7 +2,7 @@ import type { HistoryEntry } from '@/domain/history/entry';
 
 import { setJsonInput } from '../json/jsonWorkspace';
 import { setPattern } from '../regex/regexWorkspace';
-import { setMode } from '../stores/workspaceStore';
+import { setMode, workspaceStore } from '../stores/workspaceStore';
 import { markCaptured } from './capture';
 import { touchEntry } from './historyStore';
 
@@ -17,6 +17,19 @@ import { touchEntry } from './historyStore';
  * compromise — it means a restored entry is explained by the build the user is
  * running now, rather than by whatever produced it months ago.
  */
+/**
+ * Whether opening this entry would discard something the user has in the editor.
+ *
+ * Only the editor the entry would land in matters: restoring a regex does not
+ * touch the JSON pane. Identical content is not a loss, and empty is not a
+ * loss, so neither prompts (08_UI_UX_SPEC.md §8).
+ */
+export function wouldOverwrite(entry: HistoryEntry): boolean {
+  const state = workspaceStore.getState();
+  const current = entry.type === 'regex' ? state.pattern : state.jsonInput;
+  return current.trim() !== '' && current !== entry.input;
+}
+
 export function restoreEntry(entry: HistoryEntry): void {
   // The text about to appear in the editor came *from* history, so the
   // analysis it triggers must not write it straight back as a new entry.

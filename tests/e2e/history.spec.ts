@@ -63,6 +63,7 @@ test('records an analysis and restores it', async ({ page }) => {
 
   await patternField(page).fill('');
   await openDrawer(page);
+  // The editor is empty, so opening does not have to ask.
   await drawer(page).getByRole('button', { name: 'Open /ab+c/g' }).click();
 
   await expect(drawer(page)).toBeHidden();
@@ -430,4 +431,41 @@ test('the storage note discloses eviction rather than promising permanence', asy
   const note = drawer(page).getByText(/not sent to any server/);
   await expect(note).toBeVisible();
   await expect(note).toContainText('Browsers can clear site storage on their own');
+});
+
+test('asks before an entry replaces different text in the editor', async ({ page }) => {
+  await captureAndOpen(page, 'ab+c');
+  await closeDrawer(page);
+
+  await patternField(page).fill('something+else');
+  await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible();
+  await openDrawer(page);
+  await drawer(page).getByRole('button', { name: 'Open /ab+c/g' }).click();
+
+  const confirm = page.getByRole('dialog', { name: 'Replace what is in the editor?' });
+  await expect(confirm).toBeVisible();
+
+  // Cancelling leaves the editor exactly as it was.
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await closeDrawer(page);
+  await expect(patternField(page)).toHaveText('something+else');
+
+  await openDrawer(page);
+  await drawer(page).getByRole('button', { name: 'Open /ab+c/g' }).click();
+  await page.getByRole('button', { name: 'Open this entry' }).click();
+  await expect(patternField(page)).toHaveText('ab+c');
+});
+
+test('an empty list says why it is empty', async ({ page }) => {
+  await openDrawer(page);
+  await expect(drawer(page).getByText(/saved here automatically/)).toBeVisible();
+
+  await drawer(page)
+    .getByRole('searchbox', { name: 'Search history' })
+    .fill('nothing matches this');
+  await expect(drawer(page).getByText(/No entries match/)).toBeVisible();
+  await drawer(page).getByRole('searchbox', { name: 'Search history' }).fill('');
+
+  await drawer(page).getByRole('button', { name: 'Pause saving' }).click();
+  await expect(drawer(page).getByText(/History is paused/)).toBeVisible();
 });
