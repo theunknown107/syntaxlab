@@ -286,6 +286,7 @@ export default tseslint.config(
       'src/domain/regex/**/*.ts',
       'src/domain/json/**/*.ts',
       'src/domain/history/validate.ts',
+      'src/domain/theme/preferences.ts',
       'src/features/regex/viewModel.ts',
     ],
     rules: { complexity: 'off', 'max-depth': ['warn', 4] },
