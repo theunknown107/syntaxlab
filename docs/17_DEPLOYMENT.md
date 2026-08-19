@@ -331,3 +331,30 @@ This is a direct consequence of the no-backend decision. Any proposal to add ser
 | Self-hosted | Server to maintain, for zero benefit |
 
 GitHub Pages is disqualified specifically by the CSP requirement. That is worth noting because it is otherwise the obvious "simplest" choice, and the security model is what rules it out.
+
+
+---
+
+## M9 — what deployment must now get right
+
+### Headers
+
+`public/_headers` gained three blocks. All three matter, and one is a
+correctness requirement rather than an optimisation:
+
+| Path | Header | Why |
+|---|---|---|
+| `/sw.js` | `Content-Security-Policy: default-src 'none'; script-src 'self'; connect-src 'self'` | **Required.** A worker takes its CSP from its own script's headers. Under the site-wide `connect-src 'none'` it cannot precache and silently never activates. |
+| `/sw.js` | `Cache-Control: public, max-age=0, must-revalidate` | A cached service worker is an un-updatable application. |
+| `/workbox-*.js` | Same CSP; `immutable` caching | `importScripts`-ed into the worker context. Content-hashed, so it may be cached forever. |
+| `/manifest.webmanifest` | `max-age=0, must-revalidate` | |
+
+Verifying this on a preview deployment before promotion is not optional. A
+broken service worker is the most expensive bug class this application can
+ship, because it self-persists across reloads — `07_PWA_OFFLINE.md` §4.4.
+
+### Rollback
+
+Unchanged from §4.4 and still correct: redeploy the previous build; clients
+pick up the reverted worker on their next update check. There is no in-app
+rollback, because a page cannot install an older worker.

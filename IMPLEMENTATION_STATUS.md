@@ -2,8 +2,8 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M8 complete → M9 next (awaiting approval)
-**Last updated:** 2026-08-19
+**Current milestone:** M9 complete → M10 next (awaiting approval)
+**Last updated:** 2026-08-20
 
 > Living document, updated at the end of every milestone. The architecture
 > package in [`docs/`](docs/) remains the source of truth; this file records
@@ -34,8 +34,8 @@
 | M6 | JSON UI | ✅ **Complete** |
 | M7 | History and storage | ✅ **Complete** |
 | M8 | Theme customisation | ✅ **Complete** |
-| M9 | PWA and offline | ⬜ Next |
-| M10 | Accessibility and security hardening | ⬜ |
+| M9 | PWA and offline | ✅ **Complete** |
+| M10 | Accessibility and security hardening | ⬜ Next |
 | M11 | Performance measurement | ⬜ |
 | M12 | Integration, E2E, release QA | ⬜ |
 | M13 | V1.0 release | ⬜ |
@@ -1188,6 +1188,177 @@ icon set were each considered and rejected — `16_DEPENDENCIES.md`.
 - **T-15 has no automated check.** That the gradient appears in at most four places is a visual review, as the criterion specifies.
 - **No light theme.** Deferred at V1.2+ by §8.3, untouched.
 - **The syntax palette does not follow the accent.** Deliberate: it is an editor palette, and tying it to a user accent would make token colours collide.
+
+---
+
+## M9 — objective and outcome
+
+**Objective:** make SyntaxLab genuinely offline-capable — not "has a manifest",
+but "the network is cut and every analysis still runs".
+
+**Outcome:** met for the offline guarantee. O-1 to O-11 pass against a real
+service worker with the network genuinely disabled. Two items are qualified
+rather than claimed: installability (O-12) is partial, and the "verified on a
+preview deployment" half of the M9 definition of done is **outstanding**.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
+| Unit tests | ✅ **2 134 passed** (34 files, unchanged — M9 adds no domain logic) |
+| E2E, PWA projects | ✅ **50 passed, 6 skipped** across Chromium, Firefox, WebKit, mobile |
+| E2E, full matrix | ✅ **533 passed, 9 skipped, 4 failed** — see below |
+| Production build | ✅ |
+| Bundle | ⚠️ **174.48 KB initial** (target 170, hard 200) · 5.93 KB service worker · 225.96 KB total precache |
+| `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
+| Dependencies added | 1, build-time: `vite-plugin-pwa` |
+| **Regex, JSON, History, Theme** | ✅ **unchanged** |
+
+**The 4 failures are not M9's.** Two are the `json › suggestion can be
+dismissed` flake characterised at M7 and M8 — they pass in isolation. The other
+two are `regex-mobile` execution-timeout tests, and they were verified to fail
+**identically at the M8 commit `a13910e` and with the PWA plugin disabled**,
+while passing on `regex-chromium`. Device-emulation specific, pre-existing, and
+recorded in `13_TEST_PLAN.md` §16 as an open issue against the M4 tests rather
+than quietly carried.
+
+### Built
+
+```
+vite.config.ts                       VitePWA generateSW · prompt · no runtime caching
+assets/icon.svg                      the authored mark
+scripts/make-icons.mjs               renders the three PNGs via Playwright's Chromium
+scripts/serve-production.mjs         dist/ with the REAL production headers
+scripts/measure-pwa.mjs              the measurement harness
+public/_headers                      + /sw.js and /workbox-*.js policy blocks
+src/infrastructure/pwa/              registerServiceWorker.ts
+src/application/pwa/                 pwaStore.ts, startup.ts
+src/features/pwa/                    PwaStatus.tsx — chip, toast, banner
+tests/e2e/offline.spec.ts            13 tests × 4 projects
+tests/e2e/update.spec.ts             4 tests, isolated origin
+```
+
+### The decision that mattered most
+
+**The service worker needed its own CSP, and finding that out required a new
+kind of test.**
+
+A worker takes its CSP from the headers on its own script; it does not inherit
+the page's. Our site-wide `connect-src 'none'` is exactly right for the page —
+it issues no requests — and fatal for Workbox, which precaches by calling
+`fetch()` during install. Measured A/B on the real build: **under production
+headers the worker never activated and cached nothing, silently, with no
+console error in the page.**
+
+The fix is a *narrower* policy for a different execution context — `/sw.js` and
+`/workbox-*.js` get `default-src 'none'; script-src 'self'; connect-src 'self'`
+— and the page's policy is byte-for-byte unchanged.
+
+What makes this worth recording is that **the existing test suite could never
+have caught it**: every E2E project runs against `vite preview`, which serves
+no headers at all. It would have passed every check and failed only in
+production, in the bug class `23_RISK_REGISTER.md` R-06 rates as the most
+expensive this application can ship. `scripts/serve-production.mjs` exists so
+that class is reachable from a test.
+
+### The other decisions
+
+**Registration is the platform API, not the plugin's helper.**
+`injectRegister: null`. `virtual:pwa-register` pulls `workbox-window` into the
+bundle, and the lifecycle we want is narrower than what it offers. Result: the
+whole PWA layer cost **1.44 KB** of initial JS. Workbox still generates the
+worker, because precaching and fetch handling are where a hand-rolled bug
+persists across reloads.
+
+**Nothing reloads the page except the user.** `skipWaiting: false`,
+`clientsClaim: false`. A new version installs, waits, and is announced in a
+dismissible banner. Asserted by marking the document and confirming it survives
+while a new worker sits in `waiting`.
+
+**Precache completeness was verified, not assumed.** Ten entries, checked
+against the real cache: both worker chunks, `theme-bootstrap.js`, the manifest,
+the icons. A missing worker chunk turns every offline analysis into a silent
+failure and works perfectly in development.
+
+### Performance — measured
+
+`npm run measure:pwa`, Chromium, production build, production headers.
+
+| Measurement | Value |
+|---|---|
+| First visit, cold FCP | 115.0 ms |
+| Warm FCP, served by the worker | **26.5 ms** |
+| Offline FCP, network cut | **24.1 ms** |
+| Time until offline-capable | 208 ms |
+| First analysis after an offline reload | 6 ms |
+| Precache | 10 entries, 663.97 KB on disk |
+
+### Bundle
+
+| | M8 | M9 | Delta |
+|---|---|---|---|
+| Initial JS | 173.04 KB | **174.48 KB** | +1.44 KB |
+| Service worker | — | 5.93 KB | new |
+| CSS | 7.56 KB | 7.73 KB | +0.17 KB |
+| Icons + manifest | — | 15.81 KB | new |
+| Total precache (gzipped) | 197.75 KB | 225.96 KB | +28.21 KB |
+
+Still over the 170 KB target, by 4.48 KB, and 25.5 KB under the hard budget.
+The 17.04 KB CodeMirror lead measured at M8 is untouched and still the
+available move when it is worth the editor risk.
+
+`sw.js` and `workbox-*.js` are budgeted separately — counting them as initial
+page JS inflated the figure by 7.37 KB while the entry chunk did not grow. The
+same correction, for the same reason, as the worker-chunk split at M5.
+
+### Defects found and fixed during M9
+
+| Found by | Defect |
+|---|---|
+| **A/B under production headers** | The service worker could not precache at all under the site CSP. Silent, production-only. |
+| The missing-API test | `'serviceWorker' in navigator` is true when the property exists and is `undefined` — how a locked-down profile presents it. Reading through that guard threw **before first render**, blanking the app over a feature it does not need. |
+| Firefox | The test helper selected the precache by `keys()[0]`; browsers do not agree on that order, and a planted foreign cache made it pick the wrong one. |
+| WebKit, online | `upgrade-insecure-requests` in the production CSP makes WebKit rewrite every subresource to `https://localhost`, which the local header server cannot serve. Chromium and Firefox exempt localhost. Dropped for local serving only, with every worker-relevant directive left exactly as production sends it. |
+
+### Security
+
+| Assertion | Evidence |
+|---|---|
+| The page CSP is unchanged | `public/_headers` diff: the `/*` block is untouched |
+| The worker's policy is narrower, not weaker | `default-src 'none'; script-src 'self'; connect-src 'self'` — no style, image, font or frame permission at all |
+| No user data in Cache Storage | A distinctive string is typed, allowed to reach history, and every text response in Cache Storage is read back and asserted not to contain it |
+| Cleanup touches only our cache | A foreign cache is planted on the origin and verified to survive |
+| One registration, root scope | Asserted |
+| No blob or inline worker URLs | Registration is a literal `/sw.js`; `worker-src 'self'` unchanged |
+| The app survives without a worker | Verified with `navigator.serviceWorker` removed before any app code runs |
+
+### Dependencies added at M9
+
+**One, build-time:** `vite-plugin-pwa` 1.3.0 (documented as `^0.20`, which
+predates Vite 7). devDependency. Its runtime helper is deliberately unused.
+0 vulnerabilities.
+
+### Deviations at M9
+
+| # | Deviation | Reason |
+|---|---|---|
+| D32 | **`vite-plugin-pwa` 1.3.0, not `^0.20`** | `^0.20` does not support Vite 7. |
+| D33 | **Registration is hand-written against the platform API** | The plugin's helper adds `workbox-window` to the bundle for a lifecycle wider than the one we want. Kept the layer to 1.44 KB. |
+| D34 | **No `share_target`, `file_handlers`, `protocol_handlers`** | As `07_PWA_OFFLINE.md` §6 already specifies. |
+| D35 | **No cron shortcut in the manifest** | The mode does not exist in V1.0; promising it in metadata is the defect a disabled tab would be. |
+| D36 | **`upgrade-insecure-requests` is dropped by the local header server** | Test-harness only; production sends it. Every directive governing the worker is served as production serves it. |
+| D37 | **The update suite is Chromium-only, on its own origin** | It must rewrite the bytes being served, which cannot be run concurrently against itself or against a shared `dist/`. |
+
+### Known limitations at M9
+
+- **Offline on real Safari is unverified by automation.** Playwright 1.62.1 cannot navigate WebKit under `setOffline` — and fails identically with no service worker registered, so it is the harness. Six tests skip there; seven run and pass. A manual pre-release check.
+- **The preview-deployment verification is outstanding**, and is the one half of the M9 definition of done not met. Deploying is outside this milestone's remit; it stays a release gate, and the new header block is exactly what must be confirmed there.
+- **Installability is asserted structurally, not by Lighthouse.** Manifest, icons, scope, `start_url` and a registered worker are all verified; Lighthouse was not run, and Firefox desktop offers no install prompt regardless.
+- **The update flow is tested on Chromium only.**
+- **`regex-mobile › survives two timeouts in a row` fails in isolation** — pre-existing, verified at the M8 commit and with the PWA disabled. An open issue against the M4 execution-timeout tests.
+- **No runtime caching**, deliberately. The app makes no requests that were unknown at build time, and `connect-src 'none'` blocks the APIs that would make them.
 
 ---
 

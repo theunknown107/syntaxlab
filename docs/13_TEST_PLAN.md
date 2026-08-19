@@ -797,3 +797,69 @@ showed the platform already did it.
 | Audit | `SURFACE_HEX` was `#0d1117`; `--color-surface` is `#101613`. The contrast guard was reporting confident ratios against a background the accent is never shown on. A test now reads the value out of `tokens.css`. |
 | Spec review | The contrast guard was silent when a colour passed, where §4.5 specifies "✓ Passes AA". |
 | Visual review | "Amber Console" was ellipsised to "Amber Consol…". |
+
+
+---
+
+## 16. M9 — offline and the service worker
+
+### Where these tests run, and why it is different
+
+Every other E2E project hits `vite preview`, which serves **no headers**. A
+service worker takes its CSP from the headers on its own script, so a policy
+that breaks the worker is invisible to a suite served without them — and
+measurably was: under the real `_headers`, the worker never activated and
+cached nothing.
+
+`scripts/serve-production.mjs` serves `dist/` with the real `public/_headers`.
+The four `offline-*` projects run against it on port 4183.
+
+One directive is dropped locally: `upgrade-insecure-requests`. On an HTTPS
+origin it is a no-op belt-and-braces measure; over `http://localhost` it makes
+WebKit rewrite every subresource URL to `https://localhost`, which nothing is
+listening on, and the page fails to load. Chromium and Firefox exempt
+localhost; WebKit does not. Every directive that governs the service worker is
+served exactly as production serves it.
+
+### Offline is real
+
+`context.setOffline(true)`. Nothing fakes `navigator.onLine` or asserts on a
+banner. With the network cut and the page reloaded, the suite runs a regex
+analysis, a regex execution, a JSON analysis, a format, history read/write/
+delete, a pre-paint theme check, and a mode switch. If a worker chunk were
+missing from the precache, these fail the way a user would experience it.
+
+### Isolation
+
+Every test builds its own `BrowserContext`, so no service worker, cache,
+IndexedDB or localStorage crosses between them — a cached build left by a
+previous test would make an offline assertion pass for the wrong reason.
+
+The update suite is isolated further: its own port, and its own copy of the
+build under `.tmp/update-dist`. It has to rewrite the bytes the server hands
+out, and `dist/` is shared with every other project — mutating it mid-run
+would make an update banner appear in the middle of a history or theme test.
+
+### Defects these tests found
+
+| Found by | Defect |
+|---|---|
+| **A/B under production headers** | `connect-src 'none'` applied to `/sw.js` stopped the worker activating and caching anything, silently. Nothing in the existing suite could have caught it. |
+| The missing-API test | `'serviceWorker' in navigator` is true when the property exists and is `undefined`, which is how a locked-down profile presents it. Reading through that guard threw **before first render** — a blank page over a feature the app does not need. |
+| Firefox | The helper picked the precache by `keys()[0]`; a test that plants an unrelated cache made it pick the wrong one. Browsers do not agree on that order. |
+
+### Known gaps, stated rather than papered over
+
+**WebKit offline is not verified by automation.** Playwright 1.62.1 cannot
+navigate WebKit under `setOffline` — both `reload()` and `goto()` fail with an
+internal error, **and fail identically with no service worker registered**. Six
+tests skip there with that measurement as the reason; seven still run. Real
+Safari offline behaviour is a manual pre-release check.
+
+**The update flow is Chromium-only**, for the isolation reason above.
+
+**`regex-mobile › survives two timeouts in a row` fails in isolation.** This
+predates M9: it fails identically at the M8 commit `a13910e`, with the PWA
+plugin disabled, and passes on `regex-chromium`. It is device-emulation
+specific and is an open issue against the M4 execution-timeout tests, not an
+M9 regression. Recorded rather than left for someone to rediscover.

@@ -277,7 +277,7 @@ accepted with the reasoning and the measured M11 lead in `12_PERFORMANCE.md`
 
 ---
 
-### M9 — PWA and offline *(1 day)*
+### M9 — PWA and offline *(1 day)* — ✅ **COMPLETE**, with one item outstanding
 
 **Dependencies:** M6 (needs the real chunk set).
 
@@ -298,6 +298,20 @@ accepted with the reasoning and the measured M11 lead in `12_PERFORMANCE.md`
 **Risks:** **R-06 — risk checkpoint.** If offline does not work end to end, the core PWA claim fails. Stop and escalate.
 
 **Definition of done:** offline verified on a preview deployment, not only locally.
+
+**Outcome:** 9.1–9.7 are all built and O-1 to O-11 pass. Two qualifications,
+both stated rather than absorbed:
+
+- **O-12 (installability) is partial.** The manifest, icons, scope and worker
+  are in place and asserted, but Lighthouse was not run and installability is
+  browser-specific — Firefox desktop offers no install prompt at all.
+- **The "preview deployment" half of this DoD is NOT met.** Offline is verified
+  locally against the production build *served with the real production
+  headers*, which is what caught the service-worker CSP defect. It has not been
+  verified on a Cloudflare preview URL, because deploying is an outward-facing
+  action outside this milestone's remit. It remains a release gate —
+  `17_DEPLOYMENT.md` — and the header change M9 introduces is exactly the kind
+  that must be confirmed there.
 
 ---
 

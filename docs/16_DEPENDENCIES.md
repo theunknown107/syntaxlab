@@ -407,3 +407,26 @@ input types. Specifically **not** added:
 | A colour-manipulation library | The only colour maths needed is WCAG relative luminance and a lighten-toward-white loop: about thirty lines, in `domain/theme/preferences.ts`, unit-tested. |
 | An animation library | The theme has no animation. |
 | An icon set | The drawer uses text labels and one ✓ glyph. |
+
+---
+
+### M9 — `vite-plugin-pwa`, installed
+
+Installed at **1.3.0**, not the documented `^0.20`: that range predates Vite 7,
+which this project runs. Peer range on 1.3.0 covers Vite 3–8.
+
+**As a devDependency, not a runtime one.** The service worker it generates is
+build output, and the one runtime piece it offers — `virtual:pwa-register`,
+which wraps `workbox-window` — is deliberately not used. Registration is about
+forty lines of the platform API in
+`src/infrastructure/pwa/registerServiceWorker.ts`, and the update lifecycle we
+want is narrower than the helper's: most of what it provides implements
+behaviour `07_PWA_OFFLINE.md` §4.1 rules out. Avoiding it kept the PWA layer's
+cost to **1.44 KB** of initial JS.
+
+`npm audit` reports 0 vulnerabilities with it installed (165 transitive
+packages, all build-time).
+
+Nothing else was added. The icons are rendered from an authored SVG by the
+Chromium that Playwright already installs, rather than adding an image
+pipeline for three files that change roughly never.

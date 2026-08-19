@@ -150,18 +150,18 @@
 
 | # | Criterion | Verification |
 |---|---|---|
-| O-1 | The service worker registers and precaches all assets | E8 |
-| O-2 | **After first load, the app loads and runs with the network disabled** | E7 |
-| O-3 | **Both analyses work offline** (worker chunks are precached) | E7 |
-| O-4 | History reads and writes work offline | E7 |
-| O-5 | Theme customisation works offline | E7 |
-| O-6 | **An update check failing offline produces no error and is not treated as an offline failure** | E7 |
-| O-7 | The offline indicator appears when offline and is not alarming | Manual |
-| O-8 | A new version shows an update banner | E9 |
-| O-9 | **The app never auto-reloads** | E9 |
-| O-10 | Editor content survives the update reload | E9 |
-| O-11 | Old caches are cleaned up after activation | E8 |
-| O-12 | The app is installable | Lighthouse |
+| O-1 | The service worker registers and precaches all assets | ✅ **M9** — asserted against the real cache: 10 entries, both worker chunks, `theme-bootstrap.js`, manifest and icons |
+| O-2 | **After first load, the app loads and runs with the network disabled** | ✅ **M9** — `context.setOffline(true)` then reload, on Chromium, Firefox and mobile. Not verified on WebKit — Playwright cannot navigate it offline at all (`13_TEST_PLAN.md` §16) |
+| O-3 | **Both analyses work offline** (worker chunks are precached) | ✅ **M9** — regex analysis, regex *execution* and JSON analysis all run with the network cut |
+| O-4 | History reads and writes work offline | ✅ **M9** — read, write and delete, all offline |
+| O-5 | Theme customisation works offline | ✅ **M9** — pre-paint theme survives an offline reload, and can be changed offline |
+| O-6 | **An update check failing offline produces no error and is not treated as an offline failure** | ✅ **M9** — the hourly check catches and discards its rejection; nothing is shown |
+| O-7 | The offline indicator appears when offline and is not alarming | ✅ **M9** — E2E asserts the chip appears offline, disappears online, carries `role="status"`, is not an `alert`, disables nothing, and passes axe |
+| O-8 | A new version shows an update banner | ✅ **M9** — driven by replacing the served build, not by stubbing a registration |
+| O-9 | **The app never auto-reloads** | ✅ **M9** — asserted by marking the document and confirming it survives; the worker is verified to be *waiting*, not active |
+| O-10 | Editor content survives the update reload | ✅ **M9** — the editor contents are read back after the update reload |
+| O-11 | Old caches are cleaned up after activation | ✅ **M9** — one precache after an update, and an unrelated cache planted on the origin is verified untouched |
+| O-12 | The app is installable | ⚠️ **M9** — manifest, icons, scope, start_url and a registered service worker are all in place and asserted. **Lighthouse was not run**, and installability is not claimed for every browser: Firefox desktop offers no install, and iOS installs via Add to Home Screen rather than the manifest criteria |
 | O-13 | Installed PWA launches standalone and works offline | Manual |
 | O-14 | SW registration does not delay first paint | Performance |
 | O-15 | Precache stays within budget | CI |

@@ -737,3 +737,54 @@ replacement would be a serious regression in both editors. The work is to find
 an equivalent that does not drag in a syntax-tree library — which is editor
 surgery with regression risk across Regex and JSON, and belongs in M11 with
 its own testing, not in a theme milestone.
+
+
+---
+
+### 10.10 M9 — the PWA layer
+
+`npm run measure:pwa`, Chromium, production build served with production
+headers.
+
+| Measurement | Value |
+|---|---|
+| First visit, cold FCP (median of 5) | 115.0 ms |
+| Warm FCP, served by the worker | **26.5 ms** |
+| Offline FCP, network cut | **24.1 ms** |
+| Time until a first visitor is offline-capable | 208 ms |
+| First analysis after an offline reload, including worker boot | 6 ms |
+
+The service worker makes a return visit **4× faster to first paint** than a
+cold one, because nothing is fetched. Offline is marginally faster still —
+there is not even a cache-revalidation round trip to skip.
+
+#### Bundle and cache footprint, separately
+
+These are different numbers and both matter: one is what a first visit
+downloads, the other is what sits on disk afterwards.
+
+| | M8 | M9 | Delta |
+|---|---|---|---|
+| Initial JS | 173.04 KB | **174.48 KB** | +1.44 KB |
+| Worker chunks | 19.56 KB | 19.56 KB | — |
+| Service worker | — | 5.93 KB | new |
+| CSS | 7.56 KB | 7.73 KB | +0.17 KB |
+| Icons + manifest | — | 15.81 KB | new |
+| Total precache (gzipped transfer) | 197.75 KB | 225.96 KB | +28.21 KB |
+| Precache on disk (uncompressed) | — | 663.97 KB | new |
+
+**The PWA layer cost 1.44 KB of initial JS.** That is the registration module,
+the store, the status components and the startup helpers. `workbox-window` was
+deliberately not used — the plugin's registration helper would have added
+several kilobytes for a lifecycle narrower than the one it offers.
+
+#### A metric correction, the second of its kind
+
+`sw.js` and `workbox-*.js` were initially counted as initial page JS, which
+inflated the figure by 7.37 KB the moment the PWA landed while the entry chunk
+did not grow at all. Neither is ever executed by the page: the worker is
+registered after `load`, and the Workbox chunk is `importScripts`-ed inside the
+worker's own context. They are now budgeted separately, exactly as worker
+chunks were split out at M5 for the same reason — a figure that names a load
+which does not happen is not conservative, it is wrong. Both remain inside
+"Total precache", which is the honest everything-at-once number.

@@ -277,3 +277,285 @@ Manual checks before each release: install on Chrome desktop and Android, verify
 | First visit requires network | Unavoidable. |
 | Private browsing | SW and IDB may be unavailable; app runs in memory-only mode with a notice. |
 | Cache eviction under disk pressure | Browser may evict the whole origin. `navigator.storage.persist()` is requested after the third history entry to reduce the risk. |
+
+---
+
+## 10. M9 — as built
+
+### 10.1 The pieces
+
+```mermaid
+flowchart TB
+    subgraph build["Build time"]
+        VP["vite-plugin-pwa<br/>generateSW"]
+        MAN["manifest.webmanifest"]
+        SW["sw.js + workbox-*.js<br/>precache manifest of 10 entries"]
+    end
+
+    subgraph runtime["Runtime"]
+        APP["Application bundle"]
+        REG["infrastructure/pwa/<br/>registerServiceWorker.ts"]
+        STORE["application/pwa/pwaStore"]
+        UI["features/pwa/PwaStatus<br/>chip · toast · banner"]
+    end
+
+    CACHE[("Cache Storage<br/>workbox-precache-v2-&lt;origin&gt;")]
+
+    VP --> SW
+    VP --> MAN
+    APP --> REG --> STORE --> UI
+    REG -->|"register('/sw.js')"| SW
+    SW -->|"install → fetch each entry"| CACHE
+    CACHE -->|"serves every navigation<br/>and asset, cache-first"| APP
+```
+
+**Registration is ours; the worker is Workbox's.** `injectRegister: null`. The
+plugin's helper pulls `workbox-window` into the application bundle, and the
+lifecycle we want is *narrower* than what it offers — most of it would be
+unused code implementing behaviour §4.1 rules out. Precaching and fetch
+handling stay with Workbox, because that is where a hand-rolled bug persists
+across reloads and locks a user out of their own copy.
+
+### 10.2 Startup, online and offline
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant SW as Service Worker
+    participant C as Cache Storage
+    participant N as Network
+
+    rect rgb(20,30,25)
+    note over B,N: First visit — nothing cached
+    B->>N: index.html, JS, CSS, workers
+    N-->>B: 200
+    B->>SW: register after load
+    SW->>N: fetch the 10 precache entries
+    N-->>SW: 200
+    SW->>C: put
+    note over SW: installed → activated<br/>skipWaiting: false, but nothing<br/>is controlling, so it activates
+    end
+
+    rect rgb(20,25,35)
+    note over B,N: Return visit — worker controls the page
+    B->>SW: navigate
+    SW->>C: match index.html
+    C-->>SW: hit
+    SW-->>B: cached shell
+    note over B: FCP 26.5 ms vs 115 ms cold
+    end
+
+    rect rgb(35,25,20)
+    note over B,N: Offline
+    B->>SW: navigate (network down)
+    SW->>C: match
+    C-->>SW: hit
+    SW-->>B: cached shell
+    B->>SW: /assets/analysis.worker-*.js
+    SW->>C: match
+    C-->>SW: hit
+    note over B: analysis runs — 6 ms, no network
+    end
+```
+
+### 10.3 The update lifecycle
+
+The part most PWAs get wrong, and the one rule this implementation exists to
+keep: **nothing reloads the page except the user.**
+
+```mermaid
+stateDiagram-v2
+    [*] --> Controlled: worker active, page controlled
+
+    Controlled --> Installing: hourly r.update() finds new bytes
+    Installing --> Waiting: installed
+    note right of Waiting
+        skipWaiting: false.
+        The new worker does NOT take over.
+        The running version keeps serving.
+    end note
+
+    Waiting --> Announced: onInstalled → update-available
+    note left of Announced
+        Dismissible banner. Not a modal,
+        not a reload. Dismissing re-offers
+        on the next load.
+    end note
+
+    Announced --> Applying: user clicks Reload
+    note right of Applying
+        1. editor buffers → sessionStorage
+        2. postMessage SKIP_WAITING
+        3. controllerchange → location.reload()
+    end note
+
+    Applying --> Controlled: new worker activates,<br/>old precache entries dropped
+    Announced --> Controlled: dismissed — stays on the old version
+```
+
+**Why a mixed version cannot happen.** The new worker populates its cache
+during `install`, before it activates. Until the moment it takes over, every
+request is served by the old worker from the old cache — a complete, coherent
+build. Activation is atomic from the page's point of view: the reload that
+follows is served entirely by the new one. A failed or partial install leaves
+the previous version untouched and serving.
+
+### 10.4 Cache versioning and cleanup
+
+```mermaid
+flowchart LR
+    A["Build A<br/>precache: index-aaa.js …"] -->|"deploy B"| INST["Build B installs<br/>revisions written<br/>into the same cache"]
+    INST --> ACT["activate<br/>cleanupOutdatedCaches"]
+    ACT --> KEEP["workbox-precache-v2-&lt;origin&gt;<br/>now holds only B's entries"]
+    OTHER[("some-other-app-v1<br/>another app on this origin")] -.->|"never touched"| OTHER
+```
+
+Workbox keys entries by URL **and revision** inside one named cache, and drops
+entries that are no longer in the manifest on activation. Cleanup is scoped by
+that name; nothing here enumerates Cache Storage and deletes what it finds. A
+cache belonging to something else on the same origin is left alone — asserted
+by a test that plants one and checks it survives.
+
+### 10.5 The storage boundary
+
+Three stores, three purposes, no overlap.
+
+```mermaid
+flowchart TB
+    subgraph app["Application assets — the build"]
+        CS[("Cache Storage<br/>10 entries, 663.97 KB")]
+    end
+    subgraph user["User data — never cached by the worker"]
+        IDB[("IndexedDB<br/>history entries")]
+        LS[("localStorage<br/>theme + settings")]
+    end
+    SW["Service worker"] --> CS
+    SW -.->|"no handler, no route"| IDB
+    SW -.->|"no handler, no route"| LS
+```
+
+**No user data enters Cache Storage.** The worker has one route — the
+precache — and precache entries come from the build manifest, which contains
+only files Vite emitted. A test types a distinctive string, lets it reach
+history, then reads every text response in Cache Storage back and asserts the
+string does not appear.
+
+### 10.6 The service worker's own CSP
+
+**This was the one place M9 collided with the security policy, and it is worth
+recording exactly.**
+
+```mermaid
+flowchart TB
+    H["public/_headers"] --> P["/*<br/>connect-src 'none'<br/>— correct for the page:<br/>it makes no requests"]
+    H --> S["/sw.js and /workbox-*.js<br/>default-src 'none'<br/>script-src 'self'<br/>connect-src 'self'"]
+    P --> PAGE["Page context"]
+    S --> WORKER["Service worker context"]
+    WORKER -->|"fetch() during install"| CACHE[("precache")]
+```
+
+A worker takes its CSP from the headers on its own script; it does not inherit
+the page's. Under the site-wide `connect-src 'none'`, Workbox's install-time
+`fetch()` is blocked — measured A/B on the real build, the worker **never
+activated and cached nothing**, silently, with no console error in the page.
+
+The fix is a *narrower* policy for a different execution context, not a
+relaxation of the page's. A service worker has no styles, images, fonts or
+frames; it needs to import its own Workbox chunk and fetch same-origin assets
+it is about to cache. Everything else stays denied, and the page's policy is
+byte-for-byte unchanged.
+
+**This class of bug was invisible to the test suite before M9**, because every
+E2E project runs against `vite preview`, which serves no headers at all.
+`scripts/serve-production.mjs` serves `dist/` with the real `_headers`, and the
+offline projects run against it.
+
+### 10.7 Offline UX
+
+```mermaid
+stateDiagram-v2
+    [*] --> Silent: online, up to date
+    note right of Silent
+        Nothing. Silence is the correct
+        interface for "normal".
+    end note
+
+    Silent --> Chip: offline event
+    note left of Chip
+        A calm "⬤ Offline" chip.
+        Not red, not a banner, not an
+        interstitial. Nothing disabled —
+        everything still works.
+    end note
+    Chip --> Silent: online event
+
+    Silent --> Toast: first time offline-ready
+    Toast --> Silent: after 6 s, or dismissed
+
+    Silent --> Banner: update available
+    Banner --> Silent: dismissed (re-offered next load)
+    Banner --> [*]: Reload
+```
+
+`navigator.onLine` plus the `online`/`offline` events. It is a heuristic — it
+reports whether an interface exists, not whether anything is reachable — and
+that is adequate here precisely because the application makes no requests. We
+deliberately do not probe an endpoint to find out: that would breach
+`connect-src 'none'` and the privacy promise for a cosmetic indicator.
+
+### 10.8 What is actually precached
+
+Verified against the build rather than assumed (§2.4):
+
+| Entry | Why it must be there |
+|---|---|
+| `index.html` | The shell, and the navigation fallback |
+| `assets/index-*.js` | The application |
+| `assets/index-*.css` | |
+| `assets/analysis.worker-*.js` | **Every regex and JSON analysis.** Missing it fails silently offline and works perfectly in development |
+| `assets/exec.worker-*.js` | **Regex execution.** Spawned per run, so a cache miss appears only when a user actually runs a pattern |
+| `theme-bootstrap.js` | Runs before the bundle; without it every offline load flashes the default theme |
+| `manifest.webmanifest` | Installability |
+| `icons/*.png` × 3 | |
+
+Excluded: `_headers` (Cloudflare configuration, not a runtime asset),
+`robots.txt` (meaningless offline), source maps (not deployed at all).
+
+`sw.js` and `workbox-*.js` are deliberately **not** precache entries — the
+browser manages the worker's own lifecycle, and a worker that cached itself
+could not be updated.
+
+### 10.9 Failure behaviour
+
+| Failure | Behaviour |
+|---|---|
+| Service workers unsupported | The app runs normally, online. `offlineUnavailable` is set and surfaces only if the user actually goes offline. |
+| `navigator.serviceWorker` present but `undefined` | Handled. This is how a locked-down profile presents it, and reading through a `'serviceWorker' in navigator` check **threw before first render** — a blank page over a feature the app does not need. Found by the test that removes the API. |
+| Registration rejected | Same as unsupported. Caught, reported as state, never thrown. |
+| Update check fails offline | Nothing happens and nothing is said. Update checking is explicitly outside the offline guarantee (§1.1); a user on a plane has had nothing go wrong. |
+| Install fails midway | The previous version keeps serving from its own cache. Workbox populates before activating. |
+| No waiting worker when Reload is pressed | Nothing happens. Reloading anyway would be an interruption with no purpose. |
+
+### 10.10 Browser support, measured
+
+| Browser | Offline app | Precache | Update flow | Installable |
+|---|---|---|---|---|
+| Chromium | ✅ tested | ✅ | ✅ tested | ✅ manifest + SW criteria met |
+| Firefox | ✅ tested | ✅ | not tested | Firefox desktop does not offer install |
+| WebKit / Safari | ⚠️ **not testable here** | ✅ tested | not tested | iOS installs via Add to Home Screen |
+| Mobile Chrome | ✅ tested | ✅ | not tested | ✅ |
+
+**The WebKit gap, stated precisely.** Playwright 1.62.1 cannot navigate WebKit
+while `context.setOffline(true)` — `page.reload()` and `page.goto()` both fail
+with "WebKit encountered an internal error", **and they fail identically with
+no service worker registered at all**. It is the harness, not the application.
+The six tests that need an offline navigation are skipped there; the seven
+that do not — precache contents, registration scope, cache isolation, the
+missing-API path — still run on WebKit and pass. Offline behaviour on real
+Safari is therefore **unverified by automation** and is a manual pre-release
+check.
+
+The update flow is tested on Chromium only, because it has to rewrite the
+bytes the server is serving; that is an operation on one origin and cannot be
+run concurrently against itself. It uses its own port and its own copy of the
+build so it cannot disturb any other suite.

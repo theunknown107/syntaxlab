@@ -794,3 +794,27 @@ flowchart TD
 
 `features/theme` imports `domain` and `application`, never `infrastructure` —
 the same boundary the ESLint policy enforces for every other feature.
+
+
+---
+
+## M9 — where the PWA lives
+
+```
+public/                        manifest and icons are build artefacts, emitted
+                               by vite-plugin-pwa into dist/
+src/infrastructure/pwa/        registerServiceWorker.ts — the platform API
+src/application/pwa/           pwaStore.ts, startup.ts
+src/features/pwa/              PwaStatus.tsx — chip, toast, banner
+scripts/serve-production.mjs   dist/ with real headers, for the offline tests
+```
+
+The service worker itself is **generated**, not authored: it is build output,
+and it is not part of the module graph. Like `theme-bootstrap.js`, it runs
+outside the application — but unlike the bootstrap it is not hand-written, for
+the reason `07_PWA_OFFLINE.md` §2.1 gives: a service-worker bug persists across
+reloads and is the worst class of bug this app can ship.
+
+`features/pwa` imports `application/pwa`, which imports `infrastructure/pwa` —
+the same layering every other feature follows, enforced by the ESLint boundary
+policy.

@@ -342,3 +342,34 @@ and does not:
 | Semantic status colours are not customisable | Letting a user make an error message low-contrast would turn an accessibility guarantee into a preference. |
 | The focus ring is not customisable | Same reasoning, and the stronger case: a focus ring the user can make invisible is a keyboard trap they cannot see. It stays fixed even when that means a green ring in the Mono theme — a visual inconsistency accepted deliberately in exchange for the guarantee. |
 | Theme state never enters a history record | Verified by an E2E test that reads the IndexedDB records back and asserts no theme vocabulary appears in them. |
+
+---
+
+## M9 — R-06, the service-worker risk
+
+R-06 names the service worker as the highest-consequence bug class in this
+application, because a broken one persists across reloads and can lock a user
+out of their own copy. M9 is where that risk becomes real.
+
+**What reduces it**
+
+| Mitigation | As built |
+|---|---|
+| The worker is generated, not authored | Workbox via `vite-plugin-pwa`. The hand-written part is registration, which cannot brick a client. |
+| Never `skipWaiting()` on its own | `skipWaiting: false`, `clientsClaim: false`. The new worker waits; only a user action activates it. |
+| No mixed-version state | The new cache is populated during `install`, before activation. A failed install leaves the previous version whole and serving. |
+| Cleanup is scoped | Workbox drops stale entries from its own named cache. Nothing enumerates Cache Storage and deletes what it finds — asserted by a test that plants a foreign cache and checks it survives. |
+| Failure is not fatal | Registration failing, or the API being absent, leaves a working online app. Verified by a test that removes `navigator.serviceWorker` entirely. |
+
+**What M9 found, which is the reason the risk is rated where it is**
+
+The site-wide `connect-src 'none'` silently prevented the worker from
+activating or caching anything — in production only, with no error in the page
+console, and invisible to a test suite served without headers. It was found by
+A/B-ing the real headers against none. `scripts/serve-production.mjs` now
+exists so that class of defect is reachable from a test.
+
+**Residual, accepted**
+
+- Offline on real Safari is unverified by automation (harness limitation, documented).
+- The preview-deployment verification in the M9 definition of done is outstanding and remains a release gate.

@@ -282,3 +282,21 @@ Rules:
 3. **Detect once at startup**, cache the result.
 4. **Every degradation is visible to the user**, never silent. A feature that quietly does nothing is worse than one that explains why it is off.
 5. Detection results are surfaced in the help dialog as a small diagnostics list — useful for support, and it costs nothing.
+
+
+---
+
+## M9 — service worker and Cache Storage
+
+| API | Used for | Absence handling |
+|---|---|---|
+| `navigator.serviceWorker` | Registration, update lifecycle | Feature-detected **by value, not by key** — a property that exists and is `undefined` is exactly what a locked-down profile provides. The app runs online with no offline capability. |
+| `ServiceWorkerRegistration.update()` | Hourly update check | Fails silently offline, which is expected rather than an error (`07_PWA_OFFLINE.md` §1.1). |
+| `ServiceWorker.postMessage` | `{ type: 'SKIP_WAITING' }`, on user consent only | If nothing is waiting, the action does nothing rather than reloading pointlessly. |
+| `caches` (Cache Storage) | Precache, written by Workbox inside the worker | Never touched by application code. |
+| `navigator.onLine` + `online`/`offline` | The offline chip | A heuristic about the interface, not reachability — adequate because the app makes no requests. Defaults to "online" when unavailable: a wrong offline chip is worse than none. |
+| `sessionStorage` | Editor buffers across an update reload | Wrapped in try/catch; a refusal costs the buffer, not the update. |
+| `history.replaceState` | Stripping `?mode=` after a manifest shortcut | Enum-checked value, then removed from the URL. |
+
+**Manifest shortcuts** are the one exception to "no router" (ADR-009), and stay
+one because the value is a three-item enum check rather than a parser.
