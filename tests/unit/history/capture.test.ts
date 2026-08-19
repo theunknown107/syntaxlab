@@ -21,7 +21,6 @@ import {
   updateSettings,
 } from '@/application/stores/settingsStore';
 import { workspaceStore } from '@/application/stores/workspaceStore';
-import type { HistoryEntry } from '@/domain/history/entry';
 import type { JsonAnalysis } from '@/domain/json/ast';
 import type { RegexAnalysis } from '@/domain/regex/ast';
 import { EMPTY_FLAGS } from '@/domain/regex/ast';
@@ -403,7 +402,7 @@ describe('restoring an entry', () => {
     const saved = historyStore.getState().page.entries[0];
     expect(saved?.openCount).toBe(1);
 
-    await touchEntry(saved as HistoryEntry);
+    await touchEntry(saved!);
     await refresh();
 
     const reopened = historyStore.getState().page.entries;

@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M6 complete → M7 next (awaiting approval)
+**Current milestone:** M7 complete → M8 next (awaiting approval)
 **Last updated:** 2026-08-19
 
 > Living document, updated at the end of every milestone. The architecture
@@ -32,8 +32,8 @@
 | M4 | Regex UI + safe execution | ✅ **Complete** |
 | M5 | JSON domain | ✅ **Complete** |
 | M6 | JSON UI | ✅ **Complete** |
-| M7 | History and storage | ⬜ Next |
-| M8 | Theme customisation | ⬜ |
+| M7 | History and storage | ✅ **Complete** |
+| M8 | Theme customisation | ⬜ Next |
 | M9 | PWA and offline | ⬜ |
 | M10 | Accessibility and security hardening | ⬜ |
 | M11 | Performance measurement | ⬜ |
@@ -795,6 +795,216 @@ second opinion about where those are.
 - **The split is still not resizable**, and mobile stacks rather than using tabs. M11, as at M4.
 - **Search is capped at 500 matches.** A query matching more says how many it found up to the cap; there is no "load more".
 - **One flaky E2E observed**: `workers-firefox › actually processes the payload` failed once under full parallel load and passed on every isolated and subsequent full run. Not reproduced; recorded rather than dismissed.
+
+---
+
+## M7 — objective and outcome
+
+**Objective:** history and local storage. The milestone where the privacy model
+stops being a document and becomes behaviour.
+
+**Outcome:** met. All 28 acceptance criteria (H-1 – H-28) pass. Regex and JSON
+are unchanged, and keep working with storage removed entirely.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
+| Unit tests | ✅ **2 070 passed** (32 files, +123 from M6) |
+| E2E | ✅ **366 passed, 3 skipped** across 14 projects · one known environment flake, below |
+| Production build | ✅ |
+| Bundle | ✅ **169.29 KB initial** · 19.56 KB workers · 197.75 KB precache |
+| `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
+| Raw-HTML / eval scan | ✅ none |
+| **Regex and JSON (M4, M6)** | ✅ **unchanged and green** |
+| JSONTestSuite corpus | ✅ byte-identical after a repository-wide `prettier --write` |
+
+### Built
+
+```
+src/domain/history/              entry (schema + port), validate, title,
+                                 query, transfer
+src/infrastructure/storage/      db (native IndexedDB), historyRepository
+src/application/stores/          settingsStore (localStorage)
+src/application/history/         historyStore, capture, restore
+src/features/history/            drawer, controls, transfer, view model
+src/components/primitives/       Dialog — Drawer and ConfirmDialog
+scripts/measure-history.mjs      the performance harness
+```
+
+### The decisions that carry the most weight
+
+**`idb` was planned and not installed.** `16_DEPENDENCIES.md` §2.3 argued for
+it, and the argument was sound on its own terms: raw IndexedDB has genuinely
+error-prone transaction-lifetime semantics. What that assessment could not know
+is that the wrapper is thirty lines — promisify a request, a transaction and an
+open — and that the hazard is better handled visibly than hidden. This
+dependency would have sat on the path of the user's persisted data, which
+`05_SECURITY.md` treats as hostile input. The full reversal, including what
+would reverse it again, is recorded in that document rather than here.
+
+**Persisted data is reconstructed, never cast.** `readEntry` rebuilds every
+field explicitly, so no key an edited database might carry reaches application
+state. `searchText` is recomputed rather than trusted — a stored value that
+disagreed with the entry would make it permanently unfindable.
+
+**A record from a newer build is kept, hidden and reported.** Not quarantined,
+not deleted. This is what stops an old tab destroying a V1.1 user's cron
+entries, and it is why an unknown `type` is treated as future data rather than
+corruption. An E2E test plants such a record, reloads, and reads it back **off
+disk** to prove it survived.
+
+**One implementation of the rules, two backends.** The memory fallback is the
+same `HistoryStore` over a different backend, so the path that gets the least
+manual testing behaves identically to the one that gets the most.
+
+**Modal surfaces are the platform's.** `<dialog>` with `showModal()` supplies
+the focus trap, Escape, page inertness, backdrop and focus restoration. The
+E2E suite presses Tab twelve times and asserts focus never leaves.
+
+**Pinned entries are never pruned, at any pressure.** If everything is pinned
+and storage is full, the save fails honestly and says why. Capture then
+suspends with an explicit resume, rather than retrying a failing write after
+every analysis for the rest of the session.
+
+### Performance — measured
+
+`npm run measure:history`, Chromium, production build, median of three.
+
+| Entries | Open the drawer | Search |
+|---|---|---|
+| 0 | 48 ms | 6 ms |
+| 100 | 82 ms | 14 ms |
+| 500 *(the cap)* | 98 ms | 27 ms |
+| 1 000 | 101 ms | 33 ms |
+
+Budgets are 200 ms and 100 ms. 1 000 is measured although the cap is 500,
+because a store can exceed the cap transiently after an import.
+
+Those numbers are also what justifies not debouncing the search box: a 150 ms
+debounce would be the only latency in the interaction.
+
+### Bundle
+
+| | M6 | M7 | Delta |
+|---|---|---|---|
+| Initial JS | 158.12 KB | **169.29 KB** | +11.17 KB |
+| Worker chunks | 19.56 KB | 19.56 KB | — |
+| CSS | 5.86 KB | 6.95 KB | +1.09 KB |
+| Total precache | 185.50 KB | 197.75 KB | +12.25 KB |
+
+Within budget, but **0.71 KB under the 170 KB target** — worth stating plainly
+rather than reporting as a pass. M8 has very little incidental headroom left.
+
+### Defects found and fixed during M7
+
+| Found by | Defect |
+|---|---|
+| Unit | `schemaVersion: 1.5` was classified as data from a newer build — kept and hidden — when it is corruption. The future check now requires an integer. |
+| E2E | The history button's accessible name collided with the pause toggle's; the pause label now leads with its verb. |
+| E2E | An entry row's accessible name was the whole row read as one sentence. Rows carry explicit labels. |
+| **Reading the spec against the build** | Restoring silently replaced whatever was in the editor. It now asks first, and only when something would be lost. |
+| **Reading the spec against the build** | An empty list said the same thing whether filtered, paused, or new. |
+| **Reading the spec against the build** | The first-run notice omitted that the browser can clear storage — required by §9's own wording rules. |
+| **Reading the spec against the build** | An explicit Analyze still waited out the two-second capture delay. |
+| **Reading the spec against the build** | Quota exhaustion retried a failing write after every analysis, indefinitely. |
+| **Reading the spec against the build** | The corrupt-database path had no recovery. The specified **Reset history database** action now exists. |
+| **Reading the spec against the build** | The compound `by-type-created` index was missing; the `meta` store held a caller-specific shape. |
+
+### The E2E flake from M6 — §26 investigation, concluded
+
+M6 recorded one unreproduced failure: `workers-firefox › actually processes the
+payload`. The M7 brief asked for a bounded investigation before anything else,
+without reaching for retries or larger timeouts.
+
+**Method:** five consecutive full-suite runs on the production build, all
+projects in parallel — the condition under which it was first seen.
+
+**Result:** the original test **never failed again** in five runs. Two runs
+were entirely clean. Three runs each had exactly one failure, and no two were
+the same test:
+
+| Run | Failure |
+|---|---|
+| 1 | — |
+| 2 | `regex-firefox › survives two timeouts in a row` |
+| 3 | — |
+| 4 | `json-mobile › the suggestion can be dismissed for the session` |
+| 5 | `regex-mobile › survives two timeouts in a row` |
+
+**Conclusion: an environment flake, not a product defect.** The evidence is the
+*distribution*. A real defect concentrates on one test; these scattered across
+three unrelated tests and four browser projects, with one test failing on two
+different engines. Every affected test has a wall-clock dependency — two
+sequential 2-second worker timeouts, or a debounce — and eleven browser
+projects run in parallel on one machine. The shared resource is the machine.
+
+**No retries were added and no timeout was raised.** Both would have hidden a
+signal worth keeping: if these ever concentrate on one test, that is a real
+defect and it should still be visible.
+
+**It recurred once during the final M7 run**, on
+`json-mobile > the suggestion can be dismissed for the session` — one of the
+three above. Because M7 adds a banner directly above the element that test
+looks at, an M7 regression had to be ruled out before calling it a flake
+again. Two pieces of evidence rule it out:
+
+1. **It flaked on a build with no history code in it.** The five investigation
+   runs were launched at the start of M7, before the first history file
+   existed; run 4's failure was this same test on that build.
+2. **Three isolated repeats pass** (`--repeat-each=3`, 9.6 s), with the
+   first-run banner present and occupying space on the mobile viewport.
+
+The failing assertion has a 10-second budget on a debounced analysis, running
+on an emulated mobile viewport while thirteen other browser projects share the
+machine. That is the same wall-clock-under-contention shape as the other two.
+
+**What this does not establish.** The runs were on one machine and one OS. It
+is not proof the tests are sound on CI hardware, and it is not a claim that
+these tests are well-designed — a 10-second budget on a debounce is thin, and
+`12_PERFORMANCE.md` has the measurements that would justify a better one.
+What it establishes is that the M6 failure is not reproducible, that the
+residue is diffuse rather than pointed, and that none of it is caused by M7.
+
+### Security
+
+| Assertion | Evidence |
+|---|---|
+| Persisted data cannot reach state unvalidated | `readEntry` rebuilds field by field; unit tests assert unknown keys are dropped |
+| Hostile stored content stays text | E2E round-trips `<img src=x onerror=alert(1)>` through real IndexedDB; no element created |
+| Prototype pollution via storage or import | Records rebuilt, never assigned; `parseImportText` drops `__proto__` in the reviver |
+| Import files are bounded | 20 MB, 10 000 entries, envelope-checked, then per-record validation |
+| Test subjects are not stored | No field exists for one; a unit test asserts card-like digits never reach a record |
+| Privacy copy is bounded to what we enforce | Unit test asserts the absence of "never leave", "100% private", "secure", "encrypted" |
+| Raw-HTML props | Still banned by lint and the CI grep; none in the feature |
+
+### Dependencies added at M7
+
+**None**, and one removed from the plan — see above.
+
+### Deviations at M7
+
+| # | Deviation | Reason |
+|---|---|---|
+| D18 | **`idb` not installed** | `16_DEPENDENCIES.md` §2.3. |
+| D19 | **`by-pinned` index not created** | `pinned` is a boolean and IndexedDB rejects booleans as keys; the index would be created and silently hold nothing. Ordering is done in `queryEntries`. |
+| D20 | **The repository reads the whole store and filters in memory** | Cursor paging would be a second implementation of "what the list shows". 98 ms at the cap, 101 ms at twice it. |
+| D21 | **Search is not debounced** | Measured at 27 ms for 500 entries; a 150 ms debounce would be the only latency present. |
+| D22 | **Delete commits immediately; undo re-adds** | Deferring the write means a tab closed inside the undo window resurrects a deleted entry. |
+| D23 | **The settings mirror lives in the drawer** | There is no settings dialog until M8. |
+| D24 | **The soft 50 MB budget is not enforced** | It would mean pruning on `storage.estimate()`, a number browsers deliberately fuzz. `QuotaExceededError` is the one signal that is not a guess. |
+| D25 | **`preferences.ts` and `migrations.ts` were never created** | `02_ARCHITECTURE.md` §9 records why: settings are application state, and the migration table belongs beside the validator that runs it. |
+
+### Known limitations at M7
+
+- **A regex pattern can itself contain a secret** — a pattern written to match one specific token contains that token. Nothing detects this; the mitigations are the general ones (visible, deletable, pausable). Recorded against R-09 rather than left unstated.
+- **`dbSchemaVersion`, `lastPrunedAt` and `entryCount` are not written.** All three exist to avoid a full scan, and the repository does a full read by design.
+- **No help-dialog link** on the first-run notice; the dialog arrives at M10.
+- **No tag UI.** `tags` is in the schema, validated and bounded, with nothing that writes it. It is there so adding tags later is not a migration.
+- **Import merges only.** `importAll` supports `replace`, and the drawer offers only merge — replace is destructive and wants its own confirmation flow, and merge already covers restoring a backup.
+- **Two-tab conflict resolution is last-write-wins by `lastOpenedAt`.** Sufficient for one person with two tabs; it is not a sync algorithm.
 
 ---
 

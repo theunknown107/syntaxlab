@@ -216,7 +216,7 @@
 
 ---
 
-### M7 — History and storage *(2–2.5 days)*
+### M7 — History and storage *(2–2.5 days)* — ✅ **COMPLETE**
 
 **Dependencies:** M4 (needs analyses to store).
 
@@ -241,6 +241,11 @@
 **Risks:** R-09 — this milestone is where the privacy model becomes real rather than documented.
 
 **Definition of done:** every history acceptance criterion in `21_ACCEPTANCE_CRITERIA.md` §4 passes.
+
+**Outcome:** met. All 28 criteria H-1 to H-28 pass, each with its evidence
+recorded in that document. 7.1–7.11 are all built. The planned `idb` dependency
+was **not** installed — `16_DEPENDENCIES.md` §2.3 records the reversal and what
+would reverse it again.
 
 ---
 

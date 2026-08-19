@@ -704,6 +704,26 @@ Real IndexedDB, production build, real CSP. Beyond the happy path:
 | E2E | An entry row's accessible name was the entire row read as one sentence. Rows now carry explicit labels. |
 | **Reading the spec against the build** | Four drifts: a missing compound index, a `meta` record shaped for its caller rather than the store, an explicit Analyze that still waited two seconds, and quota exhaustion that retried a failing write after every analysis for the rest of the session. |
 
+### The M6 flake, closed
+
+The unreproduced `workers-firefox` failure recorded at M6 was investigated at
+M7 before any other work: five consecutive full-suite runs under full parallel
+load. It never recurred. Three other single failures appeared across those
+runs, no two the same test, spread over four browser projects — including one
+test that failed on two different engines.
+
+**Judged an environment flake, and no retry or timeout increase was added.**
+Every affected test has a wall-clock dependency and eleven browser projects
+share one machine. Adding retries would hide the signal: if these ever
+concentrate on one test, that is a real defect and it should stay visible.
+
+One of the three recurred during the final M7 run. It was checked against M7
+specifically — the milestone adds a banner directly above the element that
+test looks at — and ruled out: the same test failed on a build that contained
+no history code, and three isolated repeats pass with the banner present.
+
+Full evidence in `IMPLEMENTATION_STATUS.md`, M7.
+
 ### What is deliberately not tested
 
 - **A real `QuotaExceededError` from a real browser.** Filling a browser's quota takes minutes and the threshold varies by machine. The error is injected instead, and the code path from the error to the UI is fully covered.

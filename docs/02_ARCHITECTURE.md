@@ -521,7 +521,7 @@ syntaxlab/
 │   │   └── shared/   { result.ts, limits.ts, errors.ts, explanation.ts }
 │   │
 │   ├── infrastructure/
-│   │   ├── storage/  { db.ts, historyRepository.ts, preferences.ts, migrations.ts }
+│   │   ├── storage/  { db.ts, historyRepository.ts }
 │   │   ├── workers/  { workerClient.ts, protocol.ts }
 │   │   ├── pwa/      { registerSW.ts }
 │   │   └── browser/  { clipboard.ts, fileIO.ts }
@@ -562,20 +562,28 @@ src/
 │                  ✅ M4   regex/execute (the only `new RegExp` on user input)
 │                  ✅ M5   json/ (tokenizer, parser, ast, path, numbers,
 │                          plain, analyze, explain, validate)
+│                  ✅ M7   history/ (entry, validate, title, query, transfer)
 ├── features/       ✅ M4   regex/ (workspace, panels, tester, view models)
+│                  ✅ M6   json/ (workspace, tree, panels, view model)
+│                  ✅ M7   history/ (drawer, controls, transfer, view model)
 ├── infrastructure/ ✅ M2   workers/ (protocol, workerClient, workers)
 │                          browser/ (capabilities)
+│                  ✅ M7   storage/ (db, historyRepository)
 ├── workers/        ✅ M2   analysis.worker.ts, exec.worker.ts
 ├── styles/         ✅ M1   tokens.css, reset.css, global.css
 ├── App.tsx         ✅ M1
 └── main.tsx        ✅ M1
 
-   domain/json/     M5
-   features/        M4  regex, then json at M6
-   infrastructure/storage/  M7
 ```
 
-`features/json/` and `infrastructure/storage/` do not exist yet. They are created at the milestones listed above.
+**Two files in the sketch were never created, and should not be.**
+`preferences.ts` would be a second home for settings that already live in
+`application/stores/settingsStore.ts` — settings are read synchronously during
+first render, which makes them application state with a localStorage write-
+through, not an infrastructure concern. `migrations.ts` would separate the
+migration table from the validator that is the only thing that runs it; they
+are twenty lines apart in `domain/history/validate.ts` and a reader needs both
+at once.
 
 ### Why this structure, given the brief warned against elaborate hierarchies
 

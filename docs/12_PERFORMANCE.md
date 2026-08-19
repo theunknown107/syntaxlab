@@ -642,12 +642,12 @@ can disagree with the first. The numbers above are what justifies not doing
 that: the curve from 500 to 1 000 entries is 3 ms of open time. Revisit if the
 cap rises past a few thousand — `06_DATA_STORAGE.md` §2.1 says the same.
 
-**Bundle cost of the whole milestone: +9.66 KB gzipped** (158.84 → 168.50 KB
+**Bundle cost of the whole milestone: +11.17 KB gzipped** (158.12 → 169.29 KB
 initial, and +1.09 KB CSS), for the domain, the repository, the store, the
 drawer, transfer, and the two modal primitives. No dependency was added; `idb`
 was planned and dropped (`16_DEPENDENCIES.md` §2.3).
 
-Initial JS now sits **1.5 KB under the 170 KB target** and 31 KB under the hard
+Initial JS now sits **0.71 KB under the 170 KB target** and 31 KB under the hard
 budget. That is tight enough to be worth stating plainly: M8 has very little
 headroom before the target needs a deliberate decision rather than an
 incidental one.
