@@ -261,3 +261,43 @@ describe('the presets as applied', () => {
     }
   });
 });
+
+describe('the setProperty boundary', () => {
+  /**
+   * `applyTheme` writes into CSS custom properties, so the guarantee that only
+   * validated values reach it has to hold for *every* caller — including our
+   * own controls, whose values come from the platform rather than from us.
+   */
+  it('revalidates even a theme handed straight in', () => {
+    setTheme({
+      ...DEFAULT_THEME,
+      // The shapes a compromised or mistaken caller could produce. TypeScript
+      // does not run at runtime, so the type here proves nothing.
+      gradient: {
+        from: 'red; background: url(https://attacker.example)',
+        to: 'url(x)',
+        angleDeg: Number.POSITIVE_INFINITY,
+        intensity: 100_000,
+      },
+      accent: '<style>x</style>',
+      contrastMode: 'high"] * { display: none } [x="' as never,
+      fontScale: 99,
+    });
+
+    expect(isHexColor(property('--gradient-from'))).toBe(true);
+    expect(isHexColor(property('--gradient-to'))).toBe(true);
+    expect(isHexColor(property('--color-accent'))).toBe(true);
+    expect(property('--gradient-angle')).toMatch(/^\d{1,3}deg$/);
+    expect(property('--gradient-intensity')).toMatch(/^\d*\.?\d+$/);
+    expect(property('--font-scale')).toBe('1');
+    expect(['normal', 'high']).toContain(root.dataset.contrast);
+  });
+
+  it('leaves an already-valid theme untouched', () => {
+    // Idempotent, or revalidating at the boundary would quietly rewrite the
+    // user's choices every time they changed something.
+    const theme = { ...DEFAULT_THEME, glowIntensity: 55, fontScale: 1.125 } as const;
+    setTheme(theme);
+    expect(themeStore.getState()).toEqual(theme);
+  });
+});

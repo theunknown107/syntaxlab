@@ -76,8 +76,17 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
  * The split matters for a slider: dragging it should repaint on every frame,
  * and must not serialise JSON into localStorage on every frame. The visual
  * update is synchronous; only the write is debounced.
+ *
+ * **Everything is revalidated here, including values from our own UI.** The
+ * colour controls hand over `input[type="color"].value`, which the platform
+ * guarantees to be `#rrggbb` — but that guarantee lives in a specification,
+ * not in this codebase, and `applyTheme` is a `setProperty` sink. Validating
+ * at this one choke point makes the invariant structural instead of a comment
+ * every future caller has to have read. `readTheme` is total and idempotent,
+ * so a theme that is already valid passes through unchanged.
  */
-export function setTheme(theme: ThemePreferences): void {
+export function setTheme(candidate: ThemePreferences): void {
+  const theme = readTheme(candidate);
   themeStore.setState(theme);
   applyTheme(theme);
 
