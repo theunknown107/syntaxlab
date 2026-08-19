@@ -89,6 +89,21 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
     },
     {
+      name: 'theme-chromium',
+      testMatch: /theme\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'theme-firefox',
+      testMatch: /theme\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'theme-webkit',
+      testMatch: /theme\.spec\.ts/,
+      use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
+    },
+    {
       name: 'workers-chromium',
       testMatch: /workers\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' },
