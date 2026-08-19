@@ -422,7 +422,7 @@ forty lines of the platform API in
 `src/infrastructure/pwa/registerServiceWorker.ts`, and the update lifecycle we
 want is narrower than the helper's: most of what it provides implements
 behaviour `07_PWA_OFFLINE.md` §4.1 rules out. Avoiding it kept the PWA layer's
-cost to **1.44 KB** of initial JS.
+cost to **1.48 KB** of initial JS.
 
 `npm audit` reports 0 vulnerabilities with it installed (165 transitive
 packages, all build-time).

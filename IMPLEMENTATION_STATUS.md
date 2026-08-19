@@ -1211,7 +1211,7 @@ preview deployment" half of the M9 definition of done is **outstanding**.
 | E2E, PWA projects | ✅ **50 passed, 6 skipped** across Chromium, Firefox, WebKit, mobile |
 | E2E, full matrix | ✅ **533 passed, 9 skipped, 4 failed** — see below |
 | Production build | ✅ |
-| Bundle | ⚠️ **174.48 KB initial** (target 170, hard 200) · 5.93 KB service worker · 225.96 KB total precache |
+| Bundle | ⚠️ **174.52 KB initial** (target 170, hard 200) · 5.93 KB service worker · 226.00 KB total precache |
 | `npm audit --audit-level=high` | ✅ 0 vulnerabilities |
 | Dependencies added | 1, build-time: `vite-plugin-pwa` |
 | **Regex, JSON, History, Theme** | ✅ **unchanged** |
@@ -1268,7 +1268,7 @@ that class is reachable from a test.
 **Registration is the platform API, not the plugin's helper.**
 `injectRegister: null`. `virtual:pwa-register` pulls `workbox-window` into the
 bundle, and the lifecycle we want is narrower than what it offers. Result: the
-whole PWA layer cost **1.44 KB** of initial JS. Workbox still generates the
+whole PWA layer cost **1.48 KB** of initial JS. Workbox still generates the
 worker, because precaching and fetch handling are where a hand-rolled bug
 persists across reloads.
 
@@ -1299,13 +1299,13 @@ failure and works perfectly in development.
 
 | | M8 | M9 | Delta |
 |---|---|---|---|
-| Initial JS | 173.04 KB | **174.48 KB** | +1.44 KB |
+| Initial JS | 173.04 KB | **174.52 KB** | +1.48 KB |
 | Service worker | — | 5.93 KB | new |
 | CSS | 7.56 KB | 7.73 KB | +0.17 KB |
 | Icons + manifest | — | 15.81 KB | new |
-| Total precache (gzipped) | 197.75 KB | 225.96 KB | +28.21 KB |
+| Total precache (gzipped) | 197.75 KB | 226.00 KB | +28.25 KB |
 
-Still over the 170 KB target, by 4.48 KB, and 25.5 KB under the hard budget.
+Still over the 170 KB target, by 4.52 KB, and 25.5 KB under the hard budget.
 The 17.04 KB CodeMirror lead measured at M8 is untouched and still the
 available move when it is worth the editor risk.
 

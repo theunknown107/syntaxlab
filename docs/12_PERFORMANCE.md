@@ -765,12 +765,12 @@ downloads, the other is what sits on disk afterwards.
 
 | | M8 | M9 | Delta |
 |---|---|---|---|
-| Initial JS | 173.04 KB | **174.48 KB** | +1.44 KB |
+| Initial JS | 173.04 KB | **174.52 KB** | +1.48 KB |
 | Worker chunks | 19.56 KB | 19.56 KB | — |
 | Service worker | — | 5.93 KB | new |
 | CSS | 7.56 KB | 7.73 KB | +0.17 KB |
 | Icons + manifest | — | 15.81 KB | new |
-| Total precache (gzipped transfer) | 197.75 KB | 225.96 KB | +28.21 KB |
+| Total precache (gzipped transfer) | 197.75 KB | 226.00 KB | +28.25 KB |
 | Precache on disk (uncompressed) | — | 663.97 KB | new |
 
 **The PWA layer cost 1.44 KB of initial JS.** That is the registration module,
