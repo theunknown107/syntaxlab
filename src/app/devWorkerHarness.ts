@@ -39,6 +39,7 @@ declare global {
       ping: () => Promise<HarnessOutcome>;
       echo: (text: string) => Promise<HarnessOutcome>;
       regex: (source: string, flags?: string) => Promise<HarnessOutcome>;
+      json: (source: string) => Promise<HarnessOutcome>;
       spin: (durationMs: number, timeoutMs?: number) => Promise<HarnessOutcome>;
       execStatus: () => string;
       analysisStatus: () => string;
@@ -69,6 +70,9 @@ export function installDevWorkerHarness(): void {
 
     regex: async (source: string, flags = '') =>
       toOutcome(await getAnalysisClient().request('analysis.regex', { source, flags })),
+
+    json: async (source: string) =>
+      toOutcome(await getAnalysisClient().request('analysis.json', { source })),
 
     spin: async (durationMs: number, timeoutMs?: number) =>
       toOutcome(

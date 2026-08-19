@@ -150,16 +150,3 @@ export interface JsonAnalysis {
   readonly unsafeNumbers: readonly UnsafeNumberReport[];
   readonly explanation: Explanation;
 }
-
-export const EMPTY_STATS: JsonStats = {
-  nodeCount: 0,
-  maxDepth: 0,
-  objectCount: 0,
-  arrayCount: 0,
-  stringCount: 0,
-  numberCount: 0,
-  booleanCount: 0,
-  nullCount: 0,
-  totalKeys: 0,
-  byteLength: 0,
-};

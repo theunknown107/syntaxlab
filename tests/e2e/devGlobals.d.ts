@@ -15,6 +15,7 @@ type HarnessOutcome = Promise<{
 
 interface SyntaxLabDevHarness {
   regex: (source: string, flags?: string) => HarnessOutcome;
+  json: (source: string) => HarnessOutcome;
   ping: () => Promise<{ ok: boolean; code?: string; message?: string; value?: unknown }>;
   echo: (
     text: string,

@@ -276,3 +276,123 @@ test.describe('regex analysis through the worker', () => {
     expect(analysis.warnings.some((warning) => warning.code === 'NESTED_QUANTIFIER')).toBe(true);
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * JSON analysis through the worker — M5
+ * ------------------------------------------------------------------ */
+
+test.describe('JSON analysis through the worker', () => {
+  test('parses a document and returns a validated tree', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.json('{"id":1,"tags":["a","b"]}'),
+    );
+
+    expect(outcome.ok).toBe(true);
+    const analysis = outcome.value as {
+      kind: string;
+      valid: boolean;
+      stats: { nodeCount: number; maxDepth: number };
+      cst: { type: string; members: { key: string }[] };
+    };
+
+    expect(analysis.kind).toBe('json');
+    expect(analysis.valid).toBe(true);
+    expect(analysis.cst.type).toBe('object');
+    expect(analysis.cst.members.map((member) => member.key)).toEqual(['id', 'tags']);
+    expect(analysis.stats.maxDepth).toBe(2);
+  });
+
+  test('object members survive structured clone as an array, not a record', async ({ page }) => {
+    await ready(page);
+
+    // The prototype-pollution defence has to hold across the worker boundary,
+    // not only inside the domain: `structuredClone` is what actually moves
+    // this data between threads.
+    const shape: string = await page.evaluate(async () => {
+      const outcome = await window.__syntaxlabDev!.json('{"__proto__":{"polluted":true}}');
+      const analysis = outcome.value as { cst: { members: unknown } };
+      return Array.isArray(analysis.cst.members) ? 'array' : 'record';
+    });
+
+    expect(shape).toBe('array');
+
+    const polluted: boolean = await page.evaluate(() => 'polluted' in Object.prototype);
+    expect(polluted).toBe(false);
+  });
+
+  test('reports a syntax error with a position rather than throwing', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.json('{\n  "a": 1,\n}'),
+    );
+
+    expect(outcome.ok).toBe(true);
+    const analysis = outcome.value as {
+      valid: boolean;
+      errors: { message: string; span?: { line: number } }[];
+    };
+    expect(analysis.valid).toBe(false);
+    expect(analysis.errors[0]?.message).toMatch(/Trailing comma/);
+    expect(analysis.errors[0]?.span?.line).toBe(3);
+  });
+
+  test('reports duplicate keys and unsafe numbers', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.json('{"a":1,"a":2,"id":9007199254740993}'),
+    );
+
+    const analysis = outcome.value as {
+      duplicateKeys: { key: string; occurrences: unknown[] }[];
+      unsafeNumbers: { reason: string }[];
+    };
+    expect(analysis.duplicateKeys[0]?.key).toBe('a');
+    expect(analysis.duplicateKeys[0]?.occurrences).toHaveLength(2);
+    expect(analysis.unsafeNumbers[0]?.reason).toBe('PRECISION_LOSS');
+  });
+
+  test('rejects an over-limit document in the worker, not only in the UI', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.json(`"${'a'.repeat(5_000_001)}"`),
+    );
+
+    // The worker never trusts its caller.
+    expect(outcome.ok).toBe(false);
+    expect(outcome.code).toBe('DOMAIN');
+    expect(outcome.message).toMatch(/limit/i);
+  });
+
+  test('survives nesting that would exhaust a recursive parser', async ({ page }) => {
+    await ready(page);
+
+    const outcome: Outcome = await page.evaluate(() =>
+      window.__syntaxlabDev!.json('['.repeat(100_000)),
+    );
+
+    expect(outcome.ok).toBe(true);
+    const analysis = outcome.value as { errors: { code: string }[] };
+    expect(analysis.errors.some((error) => error.code === 'LIMIT_EXCEEDED')).toBe(true);
+
+    // And the worker is still usable afterwards.
+    const next: Outcome = await page.evaluate(() => window.__syntaxlabDev!.json('{"a":1}'));
+    expect(next.ok).toBe(true);
+  });
+
+  test('does not disturb regex analysis on the same worker', async ({ page }) => {
+    await ready(page);
+
+    const outcomes = await page.evaluate(async () => {
+      const json = await window.__syntaxlabDev!.json('{"a":[1,2,3]}');
+      const regex = await window.__syntaxlabDev!.regex('(a+)+', '');
+      return { json: json.ok, regex: regex.ok };
+    });
+
+    expect(outcomes).toEqual({ json: true, regex: true });
+  });
+});
