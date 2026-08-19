@@ -141,7 +141,10 @@ export function JsonFindings({ analysis, onGoTo }: FindingsProps): React.JSX.Ele
                       onGoTo(span.start);
                     }}
                   >
-                    line {span.line}
+                    {/* Column as well as line: duplicates on one line read
+                        identically otherwise, which is common in minified
+                        documents. */}
+                    line {span.line}:{span.column}
                     {index < report.occurrences.length - 1 ? ', ' : ''}
                   </button>
                 ))}

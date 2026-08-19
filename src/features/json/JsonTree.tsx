@@ -340,6 +340,8 @@ function RowContent({ row }: { row: JsonRow }): React.JSX.Element {
       {/* Badges carry text, never colour alone. */}
       {row.duplicate && <span className={styles.badgeDuplicate}>duplicate key</span>}
       {row.unsafeNumber && <span className={styles.badgeUnsafe}>precision</span>}
+      {/* Colour alone would not say this; recovery output needs a word. */}
+      {row.unreadable && <span className={styles.badgeUnreadable}>could not be read</span>}
 
       <span className="srOnly">
         {TYPE_LABELS[row.type]}

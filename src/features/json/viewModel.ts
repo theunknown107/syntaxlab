@@ -40,6 +40,8 @@ export interface JsonRow {
   readonly duplicate: boolean;
   /** This number does not survive the round trip through a double. */
   readonly unsafeNumber: boolean;
+  /** Error recovery produced this node; the source here could not be read. */
+  readonly unreadable: boolean;
 }
 
 /** How much of a string value is shown on a row. */
@@ -200,6 +202,7 @@ function toRow(
     // name, and only the specific occurrences are duplicates.
     duplicate: keySpan !== undefined && context.duplicateSpans.has(keySpan.start),
     unsafeNumber: context.unsafeSpans.has(node.span.start),
+    unreadable: node.type === 'error',
   };
 }
 
@@ -381,10 +384,15 @@ export function statusLine(analysis: JsonAnalysis | null): JsonStatusLine | null
   }
 
   const { stats } = analysis;
-  const parts = [`${stats.nodeCount.toLocaleString('en')} values`, `depth ${stats.maxDepth}`];
-  if (stats.totalKeys > 0) parts.push(`${stats.totalKeys.toLocaleString('en')} keys`);
+  const parts = [plural(stats.nodeCount, 'value'), `depth ${stats.maxDepth}`];
+  if (stats.totalKeys > 0) parts.push(plural(stats.totalKeys, 'key'));
   parts.push(formatBytes(stats.byteLength));
   return { valid: true, text: `Valid · ${parts.join(' · ')}` };
+}
+
+/** "1 key" rather than "1 keys". Read aloud, the latter is what gives a tool away. */
+function plural(count: number, noun: string): string {
+  return `${count.toLocaleString('en')} ${noun}${count === 1 ? '' : 's'}`;
 }
 
 export function formatBytes(bytes: number): string {

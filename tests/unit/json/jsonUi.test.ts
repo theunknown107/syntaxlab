@@ -155,6 +155,12 @@ describe('tree rows', () => {
     expect(rows.some((row) => row.unsafeNumber)).toBe(false);
   });
 
+  it('marks an unreadable node in words, not only in colour', () => {
+    const rows = rowsOf('{"a": ?, "b": 2}', ['$']);
+    expect(rows.find((row) => row.label === 'a')?.unreadable).toBe(true);
+    expect(rows.find((row) => row.label === 'b')?.unreadable).toBe(false);
+  });
+
   it('renders user keys as ordinary data, including __proto__', () => {
     const rows = rowsOf('{"__proto__":1,"constructor":2}', ['$']);
     expect(rows.map((row) => row.label)).toEqual([null, '__proto__', 'constructor']);
@@ -277,6 +283,17 @@ describe('error excerpts', () => {
 });
 
 describe('the status line', () => {
+  it('singularises, so it does not read as machine output', () => {
+    const one = analyzeJson('{"a":1}');
+    if (!one.ok) throw new Error('failed');
+    // "1 keys" and "1 values" are the details that give a tool away.
+    expect(statusLine(one.value)?.text).toBe('Valid · 2 values · depth 1 · 1 key · 7 bytes');
+
+    const scalar = analyzeJson('1');
+    if (!scalar.ok) throw new Error('failed');
+    expect(statusLine(scalar.value)?.text).toContain('1 value ·');
+  });
+
   it('summarises a valid document in one line', () => {
     const result = analyzeJson('{"a":1,"b":[1,2]}');
     if (!result.ok) throw new Error('failed');
