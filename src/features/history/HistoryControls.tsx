@@ -51,7 +51,9 @@ export function HistoryControls(): React.JSX.Element {
           // The action comes first, then the current state: a toggle labelled
           // only "Pause" gives no clue whether it is already paused. Leading
           // with the verb also keeps it distinct from the button beside it.
-          aria-label={enabled ? 'Pause history. History is on.' : 'Resume history. History is paused.'}
+          aria-label={
+            enabled ? 'Pause history. History is on.' : 'Resume history. History is paused.'
+          }
           onClick={() => {
             setHistoryEnabled(!enabled);
           }}
@@ -89,8 +91,8 @@ export function HistoryNotice(): React.JSX.Element | null {
   return (
     <aside className={styles.notice} aria-label="About history">
       <p className={styles.noticeText}>
-        SyntaxLab now saves what you analyse, in this browser, so you can come back to it. It is
-        not sent to a server. You can pause it at any time from the header.
+        SyntaxLab now saves what you analyse, in this browser, so you can come back to it. It is not
+        sent to a server. You can pause it at any time from the header.
       </p>
       <div className={styles.noticeActions}>
         <button type="button" className={styles.noticeButton} onClick={acknowledge}>

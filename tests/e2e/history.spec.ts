@@ -101,7 +101,9 @@ test('the pause setting survives a reload', async ({ page }) => {
 test('renames an entry, and the new name is what search finds', async ({ page }) => {
   await captureAndOpen(page, 'ab+c');
 
-  await drawer(page).getByRole('button', { name: /^Rename/ }).click();
+  await drawer(page)
+    .getByRole('button', { name: /^Rename/ })
+    .click();
   await drawer(page).getByRole('textbox', { name: 'New name for this entry' }).fill('Postcode');
   await drawer(page).getByRole('button', { name: 'Save' }).click();
 
@@ -132,7 +134,9 @@ test('pins an entry and filters to pinned only', async ({ page }) => {
 test('deletes an entry and brings it back with undo', async ({ page }) => {
   await captureAndOpen(page, 'ab+c');
 
-  await drawer(page).getByRole('button', { name: /^Delete/ }).click();
+  await drawer(page)
+    .getByRole('button', { name: /^Delete/ })
+    .click();
   // The row, specifically: the undo bar names the deleted entry too.
   await expect(drawer(page).getByRole('button', { name: 'Open /ab+c/g' })).toBeHidden();
 
@@ -253,7 +257,10 @@ test('a record from a newer version is kept and reported, not destroyed', async 
       const open = indexedDB.open('syntaxlab');
       open.onsuccess = () => {
         const db = open.result;
-        const request = db.transaction('history', 'readonly').objectStore('history').get('from-the-future');
+        const request = db
+          .transaction('history', 'readonly')
+          .objectStore('history')
+          .get('from-the-future');
         request.onsuccess = () => {
           db.close();
           resolve(request.result !== undefined);

@@ -164,7 +164,10 @@ describe('readEntry — invalid records', () => {
     ['negative openCount', { openCount: -3 }],
     ['missing metadata', { metadata: undefined }],
     ['metadata of the wrong type', { metadata: { type: 'json', valid: true } }],
-    ['metadata with a bad count', { metadata: { type: 'regex', flags: '', groupCount: -1, hadErrors: false, nodeCount: 0 } }],
+    [
+      'metadata with a bad count',
+      { metadata: { type: 'regex', flags: '', groupCount: -1, hadErrors: false, nodeCount: 0 } },
+    ],
   ];
 
   for (const [name, patch] of cases) {

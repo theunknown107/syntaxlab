@@ -119,9 +119,17 @@ describe('countLabel', () => {
   });
 
   it('singularises one entry', () => {
-    expect(countLabel(page({ total: 1, entries: [entry({ type: 'regex', flags: '', groupCount: 0, hadErrors: false, nodeCount: 0 })] }), false)).toBe(
-      '1 entry',
-    );
+    expect(
+      countLabel(
+        page({
+          total: 1,
+          entries: [
+            entry({ type: 'regex', flags: '', groupCount: 0, hadErrors: false, nodeCount: 0 }),
+          ],
+        }),
+        false,
+      ),
+    ).toBe('1 entry');
   });
 
   it('says how many of how many when the page is capped', () => {

@@ -90,7 +90,7 @@ function clearAnalysis(): void {
   }));
 }
 
-async function runAnalysis(): Promise<void> {
+async function runAnalysis(explicit: boolean): Promise<void> {
   const requested = workspaceStore.getState();
   if (requested.jsonInput === '') {
     clearAnalysis();
@@ -119,7 +119,7 @@ async function runAnalysis(): Promise<void> {
     }));
     // Only a *valid* document is eventually recorded; capture itself decides
     // that (06_DATA_STORAGE.md §4.1).
-    scheduleCapture();
+    scheduleCapture(explicit);
     return;
   }
 
@@ -160,14 +160,14 @@ export function setJsonInput(jsonInput: string): void {
 
   timer = setTimeout(() => {
     timer = null;
-    void runAnalysis();
+    void runAnalysis(false);
   }, debounceForSize(jsonInput.length));
 }
 
 /** The explicit action for a large document, and `Ctrl/⌘ + Enter` anywhere. */
 export function analyzeJsonNow(): void {
   cancelTimer();
-  void runAnalysis();
+  void runAnalysis(true);
 }
 
 export function clearJson(): void {

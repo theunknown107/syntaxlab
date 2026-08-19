@@ -442,14 +442,15 @@ export function createIdbBackend(db: IDBDatabase): HistoryBackend {
     remove: (ids) => removeMany(db, STORE_HISTORY, [...ids]),
     clear: () => clearStore(db, STORE_HISTORY),
     quarantine: async (records) => {
+      // `{ key, value }`, the shape the `meta` store is specified to hold
+      // (06_DATA_STORAGE.md §2.2), rather than a shape unique to this caller.
       const stored = (await getOne(db, STORE_META, QUARANTINE_KEY)) as
-        | { records?: unknown }
-        | undefined;
-      const kept: unknown[] = Array.isArray(stored?.records) ? (stored.records as unknown[]) : [];
+        { value?: { records?: unknown } } | undefined;
+      const previous = stored?.value?.records;
+      const kept: unknown[] = Array.isArray(previous) ? (previous as unknown[]) : [];
       await put(db, STORE_META, {
         key: QUARANTINE_KEY,
-        records: [...kept, ...records].slice(-MAX_QUARANTINED),
-        at: Date.now(),
+        value: { records: [...kept, ...records].slice(-MAX_QUARANTINED), at: Date.now() },
       });
     },
   };

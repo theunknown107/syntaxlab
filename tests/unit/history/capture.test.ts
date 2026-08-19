@@ -8,15 +8,24 @@ import {
   scheduleCapture,
   setHistoryEnabled,
 } from '@/application/history/capture';
-import { __setRepositoryForTests, historyStore, refresh } from '@/application/history/historyStore';
-import { DEFAULT_SETTINGS, settingsStore, updateSettings } from '@/application/stores/settingsStore';
+import {
+  __setRepositoryForTests,
+  historyStore,
+  refresh,
+  resumeCapture,
+} from '@/application/history/historyStore';
+import {
+  DEFAULT_SETTINGS,
+  settingsStore,
+  updateSettings,
+} from '@/application/stores/settingsStore';
 import { workspaceStore } from '@/application/stores/workspaceStore';
 import type { JsonAnalysis } from '@/domain/json/ast';
 import type { RegexAnalysis } from '@/domain/regex/ast';
 import { EMPTY_FLAGS } from '@/domain/regex/ast';
 import { HistoryStore } from '@/infrastructure/storage/historyRepository';
 
-import { createFakeBackend, type FakeBackend } from './fakeBackend';
+import { createFakeBackend, quotaError, type FakeBackend } from './fakeBackend';
 
 /**
  * Capture policy — 06_DATA_STORAGE.md §4.1
@@ -292,5 +301,88 @@ describe('the pause setting', () => {
     localStorage.setItem('syntaxlab.settings.v1', '{not json');
     updateSettings({});
     expect(settingsStore.getState().historyEnabled).toBe(true);
+  });
+});
+
+describe('when storage fills up', () => {
+  it('stops capturing rather than retrying a failing write after every analysis', async () => {
+    // One entry saved, then every write refused for space with nothing
+    // prunable — the state the doc calls Degraded.
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      mode: 'regex',
+      pattern: 'ab+c',
+      analysis: regexAnalysis('ab+c'),
+    }));
+    await captureNow();
+
+    backend.failAlwaysWith = quotaError();
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      pattern: 'second',
+      analysis: regexAnalysis('second'),
+    }));
+    await captureNow();
+
+    expect(historyStore.getState().captureSuspended).toBe(true);
+
+    // A later analysis does not try again on its own.
+    backend.failAlwaysWith = null;
+    const writes = backend.writes;
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      pattern: 'third',
+      analysis: regexAnalysis('third'),
+    }));
+    scheduleCapture();
+    await vi.advanceTimersByTimeAsync(CAPTURE_DELAY_MS * 2);
+    expect(backend.writes).toBe(writes);
+
+    // Only when the user says so.
+    resumeCapture();
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      pattern: 'fourth',
+      analysis: regexAnalysis('fourth'),
+    }));
+    await captureNow();
+    expect(await savedInputs()).toContain('fourth');
+  });
+
+  it('never deleted what was already saved', async () => {
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      mode: 'regex',
+      pattern: 'keep-me',
+      analysis: regexAnalysis('keep-me'),
+    }));
+    await captureNow();
+
+    backend.failAlwaysWith = quotaError();
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      pattern: 'wont-fit',
+      analysis: regexAnalysis('wont-fit'),
+    }));
+    await captureNow();
+
+    backend.failAlwaysWith = null;
+    expect(await savedInputs()).toContain('keep-me');
+  });
+});
+
+describe('an explicit analyse', () => {
+  it('is recorded immediately, with no quiet period to wait through', async () => {
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      mode: 'regex',
+      pattern: 'ab+c',
+      analysis: regexAnalysis('ab+c'),
+    }));
+
+    scheduleCapture(true);
+    // Only the microtasks the save itself needs, not the two-second timer.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await savedInputs()).toEqual(['ab+c']);
   });
 });

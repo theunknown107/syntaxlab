@@ -9,10 +9,12 @@ import {
   rename,
   setPinned,
   setPinnedOnly,
+  resumeCapture,
   setSearch,
   setSort,
   setTypeFilter,
   undoRemove,
+  type HistoryState,
 } from '@/application/history/historyStore';
 import { restoreEntry } from '@/application/history/restore';
 import { settingsStore } from '@/application/stores/settingsStore';
@@ -61,7 +63,6 @@ export function HistoryDrawer({ open, onClose }: HistoryDrawerProps): React.JSX.
   }, [open]);
 
   const filtered = state.search !== '' || state.typeFilter !== null || state.pinnedOnly;
-  const notes = integrityNotes(state.page);
 
   return (
     <Drawer open={open} onClose={onClose} title="History">
@@ -139,19 +140,7 @@ export function HistoryDrawer({ open, onClose }: HistoryDrawerProps): React.JSX.
           {countLabel(state.page, filtered)}
         </p>
 
-        {!state.durable && state.status !== 'idle' ? (
-          <p className={styles.warning} role="status">
-            {NOT_DURABLE_NOTE}
-          </p>
-        ) : null}
-
-        {state.error !== null ? <ErrorNote error={state.error} /> : null}
-
-        {notes.map((note) => (
-          <p key={note} className={styles.note}>
-            {note}
-          </p>
-        ))}
+        <Notices state={state} />
 
         <ul className={styles.list}>
           {state.page.entries.map((entry) => (
@@ -202,6 +191,41 @@ export function HistoryDrawer({ open, onClose }: HistoryDrawerProps): React.JSX.
         undone. Export first if you want to keep a copy.
       </ConfirmDialog>
     </Drawer>
+  );
+}
+
+/** Everything the drawer has to say about the state of storage itself. */
+function Notices({ state }: { readonly state: HistoryState }): React.JSX.Element {
+  return (
+    <>
+      {!state.durable && state.status !== 'idle' ? (
+        <p className={styles.warning} role="status">
+          {NOT_DURABLE_NOTE}
+        </p>
+      ) : null}
+
+      {state.captureSuspended ? (
+        <div className={styles.warning} role="status">
+          <p className={styles.errorTitle}>
+            Storage filled up, so new analyses are no longer being saved.
+          </p>
+          <p className={styles.errorHint}>
+            Delete or export some entries, then resume. Nothing already saved was removed.
+          </p>
+          <button type="button" className={styles.linkAction} onClick={resumeCapture}>
+            Resume saving
+          </button>
+        </div>
+      ) : null}
+
+      {state.error !== null ? <ErrorNote error={state.error} /> : null}
+
+      {integrityNotes(state.page).map((note) => (
+        <p key={note} className={styles.note}>
+          {note}
+        </p>
+      ))}
+    </>
   );
 }
 

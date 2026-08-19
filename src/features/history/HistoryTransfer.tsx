@@ -132,5 +132,7 @@ function describe(report: ImportReport): string {
 
   const summary = `Imported: ${parts.join(', ')}.`;
   // The reasons matter: "12 skipped" with no explanation reads as data loss.
-  return report.reasons.length === 0 ? summary : `${summary} Skipped because: ${report.reasons.join('; ')}.`;
+  return report.reasons.length === 0
+    ? summary
+    : `${summary} Skipped because: ${report.reasons.join('; ')}.`;
 }

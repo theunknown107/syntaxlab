@@ -23,10 +23,7 @@ interface ModalProps {
   readonly describedBy?: string;
 }
 
-function useDialog(
-  open: boolean,
-  onClose: () => void,
-): React.RefObject<HTMLDialogElement | null> {
+function useDialog(open: boolean, onClose: () => void): React.RefObject<HTMLDialogElement | null> {
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -77,12 +74,7 @@ export function Drawer({
 }: ModalProps): React.JSX.Element {
   const ref = useDialog(open, onClose);
   return (
-    <dialog
-      ref={ref}
-      className={styles.drawer}
-      aria-label={title}
-      aria-describedby={describedBy}
-    >
+    <dialog ref={ref} className={styles.drawer} aria-label={title} aria-describedby={describedBy}>
       {/* Rendered only while open, so its contents are not in the accessibility
           tree — and not focusable — when the drawer is shut. */}
       {open ? children : null}

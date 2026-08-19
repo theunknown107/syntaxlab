@@ -56,6 +56,13 @@ export interface HistoryState {
   readonly pinnedOnly: boolean;
   /** A just-deleted entry, recoverable until the window closes. */
   readonly pendingUndo: HistoryEntry | null;
+  /**
+   * True after storage refused a write for space even once room had been
+   * made. Capture stops until the user acts, because the alternative is
+   * retrying a failing write after every analysis for the rest of the session
+   * (06_DATA_STORAGE.md §4, Degraded).
+   */
+  readonly captureSuspended: boolean;
 }
 
 const INITIAL: HistoryState = {
@@ -67,6 +74,7 @@ const INITIAL: HistoryState = {
   typeFilter: null,
   pinnedOnly: false,
   pendingUndo: null,
+  captureSuspended: false,
 };
 
 export const historyStore = createStore<HistoryState>(INITIAL);
@@ -114,7 +122,7 @@ function announce(): void {
 }
 
 export function connectTabs(): () => void {
-  // Settings live in localStorage, which already broadcasts its own changes
+  // AppSettings live in localStorage, which already broadcasts its own changes
   // across tabs. Re-reading on that event costs nothing and keeps the pause
   // switch consistent everywhere without a second message type.
   const onStorage = (event: StorageEvent): void => {
@@ -227,7 +235,21 @@ async function mutate(
 
 /** Records one analysis. Called only by the capture policy. */
 export async function saveEntry(candidate: NewHistoryEntry): Promise<boolean> {
-  return mutate((repo) => repo.save(candidate));
+  const saved = await mutate((repo) => repo.save(candidate));
+  if (!saved && historyStore.getState().error?.code === 'QUOTA') {
+    historyStore.setState((previous) => ({ ...previous, captureSuspended: true }));
+  }
+  return saved;
+}
+
+/**
+ * Resumes automatic saving after the user has made room.
+ *
+ * Explicit rather than automatic: storage was full a moment ago, and silently
+ * trying again would put the same failure back in front of them.
+ */
+export function resumeCapture(): void {
+  historyStore.setState((previous) => ({ ...previous, captureSuspended: false, error: null }));
 }
 
 /**

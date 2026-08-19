@@ -29,7 +29,10 @@ export interface ImportResult {
   readonly reasons: readonly string[];
 }
 
-export function buildEnvelope(entries: readonly HistoryEntry[], appVersion: string): ExportEnvelope {
+export function buildEnvelope(
+  entries: readonly HistoryEntry[],
+  appVersion: string,
+): ExportEnvelope {
   return {
     format: EXPORT_FORMAT,
     formatVersion: EXPORT_FORMAT_VERSION,
@@ -93,8 +96,7 @@ export function readEnvelope(value: unknown): ImportResult | string {
     skipped += 1;
     // Bounded: a file of ten thousand bad records must not produce ten
     // thousand lines of explanation.
-    const reason =
-      outcome.kind === 'future' ? 'created by a newer version' : outcome.reason;
+    const reason = outcome.kind === 'future' ? 'created by a newer version' : outcome.reason;
     if (reasons.length < 5 && !reasons.includes(reason)) reasons.push(reason);
   }
 
@@ -110,8 +112,7 @@ export function readEnvelope(value: unknown): ImportResult | string {
  * file cannot reach `Object.prototype` (05_SECURITY.md §7).
  */
 export type ParsedImport =
-  | { readonly ok: true; readonly value: unknown }
-  | { readonly ok: false; readonly error: string };
+  { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: string };
 
 export function parseImportText(text: string): ParsedImport {
   if (text.length > MAX_IMPORT_BYTES) {

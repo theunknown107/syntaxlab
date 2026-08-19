@@ -22,10 +22,23 @@ export const DB_VERSION = 1;
 export const STORE_HISTORY = 'history';
 export const STORE_META = 'meta';
 
-/** Indices on `history`. Only what a query actually uses (§2.1). */
+/**
+ * Indices on `history` — 06_DATA_STORAGE.md §2.1
+ *
+ * Created up front although the current repository reads none of them: it
+ * loads the whole store, which is capped at 500 entries, and filters in
+ * memory. Adding an index later would need a version bump and an upgrade
+ * path, so the cheap moment to declare them is now — an unused index on a
+ * 500-record store costs nothing measurable.
+ *
+ * `by-pinned` from the spec is **not** created. `pinned` is a boolean, and
+ * IndexedDB rejects booleans as keys: the index would silently contain
+ * nothing. Pinned-first ordering is done in `queryEntries` instead.
+ */
 export const INDEX_CREATED = 'by-created';
 export const INDEX_OPENED = 'by-opened';
 export const INDEX_TYPE = 'by-type';
+export const INDEX_TYPE_CREATED = 'by-type-created';
 
 export type DbEvent =
   /** Another tab holds an older connection and is preventing the upgrade. */
@@ -82,6 +95,7 @@ function upgrade(db: IDBDatabase, oldVersion: number): void {
     history.createIndex(INDEX_CREATED, 'createdAt');
     history.createIndex(INDEX_OPENED, 'lastOpenedAt');
     history.createIndex(INDEX_TYPE, 'type');
+    history.createIndex(INDEX_TYPE_CREATED, ['type', 'createdAt']);
     db.createObjectStore(STORE_META, { keyPath: 'key' });
   }
   // if (oldVersion < 2) { … additive changes only, where possible … }

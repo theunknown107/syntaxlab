@@ -63,7 +63,9 @@ function isKnownType(value: unknown): value is HistoryType {
  * quarantines that record and continues; it never aborts a read of the rest
  * (06_DATA_STORAGE.md §7.2).
  */
-const RECORD_MIGRATIONS: Readonly<Record<number, (record: Record<string, unknown>) => Record<string, unknown>>> = {
+const RECORD_MIGRATIONS: Readonly<
+  Record<number, (record: Record<string, unknown>) => Record<string, unknown>>
+> = {
   // Version 1 is the original shape, so there is nothing to do. The entry
   // exists so the table is never empty and version 2 has an obvious home.
   1: (record) => record,
@@ -143,7 +145,11 @@ export function readEntry(value: unknown): ReadOutcome {
   // from a newer build, and must not be preserved as though a future release
   // would understand it.
   const version = value.schemaVersion;
-  if (typeof version === 'number' && Number.isInteger(version) && version > CURRENT_SCHEMA_VERSION) {
+  if (
+    typeof version === 'number' &&
+    Number.isInteger(version) &&
+    version > CURRENT_SCHEMA_VERSION
+  ) {
     return { kind: 'future', id };
   }
 

@@ -5,7 +5,7 @@ import type { RegexAnalysis } from '@/domain/regex/ast';
 
 import { settingsStore, updateSettings } from '../stores/settingsStore';
 import { workspaceStore } from '../stores/workspaceStore';
-import { saveEntry } from './historyStore';
+import { historyStore, saveEntry } from './historyStore';
 
 /**
  * What gets captured, and when — 06_DATA_STORAGE.md §4, 08_UI_UX_SPEC.md §19
@@ -90,9 +90,16 @@ export function jsonMetadata(analysis: JsonAnalysis): HistoryMetadata {
  * continuous edit produces exactly one entry when it stops, not one per pause
  * in typing.
  */
-export function scheduleCapture(): void {
+export function scheduleCapture(immediate = false): void {
   cancel();
-  if (!settingsStore.getState().historyEnabled) return;
+  if (!capturing()) return;
+
+  // An explicit Analyze is not a pause in typing — it is the user saying they
+  // are done, so there is nothing left to wait for (06_DATA_STORAGE.md §4.3).
+  if (immediate) {
+    void captureNow();
+    return;
+  }
 
   timer = setTimeout(() => {
     timer = null;
@@ -100,15 +107,19 @@ export function scheduleCapture(): void {
   }, CAPTURE_DELAY_MS);
 }
 
+function capturing(): boolean {
+  return settingsStore.getState().historyEnabled && !historyStore.getState().captureSuspended;
+}
+
 /** Writes the current workspace to history, if it is worth writing. */
 export async function captureNow(): Promise<void> {
   // Re-checked here as well as when scheduling: the user may have paused
-  // history during the two seconds the timer was waiting.
-  if (!settingsStore.getState().historyEnabled) return;
+  // history, or storage may have run out, during the two seconds the timer
+  // was waiting.
+  if (!capturing()) return;
 
   const state = workspaceStore.getState();
-  const candidate =
-    state.mode === 'regex' ? regexCandidate(state) : jsonCandidate(state);
+  const candidate = state.mode === 'regex' ? regexCandidate(state) : jsonCandidate(state);
   if (candidate === null) return;
 
   const fingerprint = fingerprintOf(candidate.type, candidate.input);

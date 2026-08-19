@@ -1,7 +1,7 @@
 import { createStore } from './createStore';
 
 /**
- * Settings — 06_DATA_STORAGE.md §6, 11_STATE_MANAGEMENT.md §5
+ * Application settings — 06_DATA_STORAGE.md §5, 11_STATE_MANAGEMENT.md §5
  *
  * localStorage rather than IndexedDB, deliberately. Settings are a handful of
  * booleans that must be readable *synchronously during the first render* — the
@@ -15,7 +15,7 @@ import { createStore } from './createStore';
 
 const STORAGE_KEY = 'syntaxlab.settings.v1';
 
-export interface Settings {
+export interface AppSettings {
   /** Whether new analyses are captured. Off means nothing new is written. */
   readonly historyEnabled: boolean;
   /** Whether the first-run explanation has been shown and acknowledged. */
@@ -23,7 +23,7 @@ export interface Settings {
   readonly historySort: 'created' | 'opened';
 }
 
-export const DEFAULT_SETTINGS: Settings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   // On by default. History is the feature; a user who does not want it can
   // turn it off from the header or the first-run notice, both one click away.
   historyEnabled: true,
@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   historySort: 'created',
 };
 
-function readStored(): Settings {
+function readStored(): AppSettings {
   let raw: string | null;
   try {
     raw = localStorage.getItem(STORAGE_KEY);
@@ -58,7 +58,7 @@ function readStored(): Settings {
   }
 }
 
-export const settingsStore = createStore<Settings>(readStored());
+export const settingsStore = createStore<AppSettings>(readStored());
 
 /**
  * Writes settings, tolerating a storage that refuses.
@@ -68,7 +68,7 @@ export const settingsStore = createStore<Settings>(readStored());
  * noise than the problem is worth. It is not silent about anything the user
  * would otherwise be misled by — history durability is reported separately.
  */
-function persist(settings: Settings): void {
+function persist(settings: AppSettings): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {
@@ -76,9 +76,9 @@ function persist(settings: Settings): void {
   }
 }
 
-export function updateSettings(patch: Partial<Settings>): void {
+export function updateSettings(patch: Partial<AppSettings>): void {
   settingsStore.setState((previous) => {
-    const next: Settings = {
+    const next: AppSettings = {
       historyEnabled: patch.historyEnabled ?? previous.historyEnabled,
       hasSeenHistoryNotice: patch.hasSeenHistoryNotice ?? previous.hasSeenHistoryNotice,
       historySort: patch.historySort ?? previous.historySort,

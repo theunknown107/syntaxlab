@@ -130,11 +130,7 @@ export interface StorageError {
   readonly hint?: string;
 }
 
-export function storageError(
-  code: StorageErrorCode,
-  message: string,
-  hint?: string,
-): StorageError {
+export function storageError(code: StorageErrorCode, message: string, hint?: string): StorageError {
   // Built field-by-field rather than by spreading, so an unexpected key can
   // never reach a StorageError (18_CODING_STANDARDS.md S4).
   return hint === undefined ? { code, message } : { code, message, hint };
