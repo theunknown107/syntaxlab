@@ -276,7 +276,11 @@ export default tseslint.config(
      exhaustiveness is precisely what stops a new node type rendering as a
      blank row. */
   {
-    files: ['src/domain/regex/**/*.ts', 'src/features/regex/viewModel.ts'],
+    files: [
+      'src/domain/regex/**/*.ts',
+      'src/domain/json/**/*.ts',
+      'src/features/regex/viewModel.ts',
+    ],
     rules: { complexity: 'off', 'max-depth': ['warn', 4] },
   },
 
