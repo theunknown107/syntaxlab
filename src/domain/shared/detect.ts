@@ -99,7 +99,11 @@ function scoreRegex(sample: string): number {
 
   let score = 0;
   if (sample.startsWith('^') || sample.endsWith('$')) score += 0.35;
-  if (/\\[dwsbDWSB]/.test(sample)) score += 0.3;
+  // A shorthand escape is worth the suggestion floor on its own: `\d`, `\w`,
+  // `\s` and `\b` essentially never occur in prose, so `\bword\b` should
+  // offer — while staying below the auto-select line, because a single signal
+  // has earned an offer and not a switch.
+  if (/\\[dwsbDWSB]/.test(sample)) score += 0.6;
   if (/\[[^\]]+\]/.test(sample)) score += 0.2;
   if (/\((\?[:=!<]|[^)])*\)/.test(sample)) score += 0.15;
   if (/[*+?]|\{\d+(,\d*)?\}/.test(sample)) score += 0.15;

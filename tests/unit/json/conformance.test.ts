@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -29,6 +30,7 @@ import { analyzeJson } from '@/domain/json/analyze';
  */
 
 const DIR = join(process.cwd(), 'tests/fixtures/jsontestsuite');
+const MANIFEST = join(process.cwd(), 'tests/fixtures/jsontestsuite.checksums.json');
 
 function decode(bytes: Buffer): string {
   return new TextDecoder('utf-8').decode(bytes);
@@ -62,7 +64,7 @@ const cases = {
   i: files.filter((name) => name.startsWith('i_')),
 };
 
-describe('JSONTestSuite — the corpus is present and complete', () => {
+describe('JSONTestSuite — the corpus is present and intact', () => {
   it('has the published file counts', () => {
     // A silently truncated fixture directory would turn this whole file into
     // a green test that proves nothing.
@@ -70,6 +72,36 @@ describe('JSONTestSuite — the corpus is present and complete', () => {
     expect(cases.n).toHaveLength(188);
     expect(cases.i).toHaveLength(35);
     expect(files).toHaveLength(318);
+  });
+
+  /**
+   * Content integrity, not just presence.
+   *
+   * Added after a real incident during M6: a `prettier --write` run over the
+   * repository reformatted these files as ordinary JSON and *repaired* them —
+   * `[2.e3]` became `[2e3]`, `["",]` became `[""]`, `[.2e-3]` became
+   * `[0.2e-3]`. The corpus still had 318 files, so the count check above
+   * passed while the suite had been silently weakened.
+   *
+   * A hash manifest is the check that catches that. `.prettierignore` now
+   * excludes the directory as well, but an ignore rule is a convention and
+   * this is a gate.
+   */
+  it('matches the recorded checksums', () => {
+    // Kept outside the corpus directory, so it cannot be mistaken for one of
+    // the fixtures it describes.
+    const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8')) as Record<string, string>;
+
+    expect(Object.keys(manifest).sort()).toEqual(files);
+
+    const mismatched = files.filter((name) => {
+      const actual = createHash('sha256')
+        .update(readFileSync(join(DIR, name)))
+        .digest('hex');
+      return actual.slice(0, 16) !== manifest[name];
+    });
+
+    expect(mismatched).toEqual([]);
   });
 });
 

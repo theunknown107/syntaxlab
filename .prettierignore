@@ -16,3 +16,6 @@ IMPLEMENTATION_STATUS.md
 # invalid UTF-8, lone surrogates, truncated escapes — and formatting them
 # would silently weaken the conformance suite.
 tests/fixtures/jsontestsuite/
+# The manifest is generated; reformatting it would change every hash line's
+# position for no benefit.
+tests/fixtures/jsontestsuite.checksums.json
