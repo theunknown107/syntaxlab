@@ -1,11 +1,11 @@
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { cp, mkdir, readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
 /**
  * Serves `dist/` with the **real** production headers from `public/_headers`.
  *
- *   node scripts/serve-production.mjs [port]
+ *   node scripts/serve-production.mjs [port] [root]
  *
  * `vite preview` serves no security headers at all, which means the entire
  * E2E suite validates the application under a policy that is not the one it
@@ -18,7 +18,18 @@ import { extname, join, normalize } from 'node:path';
  */
 
 const PORT = Number(process.argv[2] ?? 4183);
-const ROOT = 'dist';
+
+/**
+ * The directory to serve. Defaults to the real build; the update suite passes
+ * its own copy so it can rewrite a "deployed" service worker without every
+ * other E2E project seeing an update banner appear mid-test.
+ */
+const ROOT = process.argv[3] ?? 'dist';
+
+if (ROOT !== 'dist') {
+  await mkdir(ROOT, { recursive: true });
+  await cp('dist', ROOT, { recursive: true });
+}
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -54,6 +65,28 @@ async function readHeaderRules() {
   return rules;
 }
 
+/**
+ * Adjusts one header for the fact that this server speaks HTTP on localhost.
+ *
+ * Exactly one directive is dropped: `upgrade-insecure-requests`. In production
+ * the origin is HTTPS and the directive is a no-op belt-and-braces measure;
+ * here it makes WebKit rewrite every subresource URL to `https://localhost`,
+ * which nothing is listening for, and the page fails to load at all. Chromium
+ * and Firefox exempt localhost from the upgrade; WebKit does not.
+ *
+ * Nothing else is touched. Every directive that governs the service worker —
+ * `script-src`, `connect-src`, `worker-src`, `default-src` — is served exactly
+ * as production serves it, which is the entire reason this file exists.
+ */
+function localise(name, value) {
+  if (name.toLowerCase() !== 'content-security-policy') return value;
+  return value
+    .split(';')
+    .map((directive) => directive.trim())
+    .filter((directive) => directive !== 'upgrade-insecure-requests')
+    .join('; ');
+}
+
 function matches(pattern, pathname) {
   if (pattern.endsWith('/*')) return pathname.startsWith(pattern.slice(0, -1));
   // A `*` anywhere else, as in `/workbox-*.js`, matches within one segment.
@@ -78,7 +111,7 @@ const server = createServer((request, response) => {
     // the same precedence Cloudflare Pages applies.
     for (const rule of rules) {
       if (matches(rule.pattern, pathname)) {
-        for (const [name, value] of rule.headers) response.setHeader(name, value);
+        for (const [name, value] of rule.headers) response.setHeader(name, localise(name, value));
       }
     }
 

@@ -46,12 +46,36 @@ const NOOP: ServiceWorkerHandle = {
  * offline is product state, and the caller decides what to say about it.
  */
 export function registerServiceWorker(notify: (event: PwaEvent) => void): ServiceWorkerHandle {
+  try {
+    return register(notify);
+  } catch (error) {
+    // Nothing about offline support is worth a blank page. Whatever went
+    // wrong, the application still runs — it simply will not run offline.
+    notify({
+      kind: 'unavailable',
+      reason: error instanceof Error ? error.message : 'Registration failed.',
+    });
+    return NOOP;
+  }
+}
+
+function register(notify: (event: PwaEvent) => void): ServiceWorkerHandle {
   // `import.meta.env.PROD` is replaced at build time, so the whole body is
   // dropped from a development bundle. A stale service worker during
   // development is a debugging trap with nothing to gain.
   if (!import.meta.env.PROD) return NOOP;
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
-    notify({ kind: 'unavailable', reason: 'This browser does not support service workers.' });
+  // The *value* is checked, not just the key. A property can be present and
+  // undefined — a locked-down profile does exactly that, and `'serviceWorker'
+  // in navigator` is true for it. Reading through that guard threw before the
+  // first render, taking the whole application down over a feature it does not
+  // need. Found by the test that removes the API.
+  const container: unknown = typeof navigator === 'undefined' ? undefined : navigator.serviceWorker;
+  if (
+    typeof container !== 'object' ||
+    container === null ||
+    typeof (container as ServiceWorkerContainer).register !== 'function'
+  ) {
+    notify({ kind: 'unavailable', reason: 'This browser does not provide service workers.' });
     return NOOP;
   }
 

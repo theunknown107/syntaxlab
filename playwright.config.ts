@@ -104,6 +104,39 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
     },
     {
+      /*
+       * Offline runs against port 4183, which serves dist/ with the *real*
+       * production headers. `vite preview` sends none, and a service worker
+       * takes its CSP from the headers on its own script — so a policy that
+       * breaks the worker would pass every other suite and fail only in
+       * production. Measured: it did.
+       */
+      name: 'offline-chromium',
+      testMatch: /offline\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4183' },
+    },
+    {
+      name: 'offline-firefox',
+      testMatch: /offline\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4183' },
+    },
+    {
+      name: 'offline-webkit',
+      testMatch: /offline\.spec\.ts/,
+      use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4183' },
+    },
+    {
+      name: 'offline-mobile',
+      testMatch: /offline\.spec\.ts/,
+      use: { ...devices['Pixel 5'], baseURL: 'http://localhost:4183' },
+    },
+    {
+      // Chromium only, and on its own origin — see the file header.
+      name: 'update-chromium',
+      testMatch: /update\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4184' },
+    },
+    {
       name: 'workers-chromium',
       testMatch: /workers\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' },
@@ -124,6 +157,18 @@ export default defineConfig({
     {
       command: 'npm run build && npm run preview',
       url: 'http://localhost:4173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
+    {
+      command: 'npm run build && node scripts/serve-production.mjs 4183',
+      url: 'http://localhost:4183',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
+    {
+      command: 'node scripts/serve-production.mjs 4184 .tmp/update-dist',
+      url: 'http://localhost:4184',
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },
