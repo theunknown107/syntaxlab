@@ -81,7 +81,9 @@ describe('AppShell', () => {
 
     await user.click(screen.getByRole('radio', { name: 'JSON' }));
 
-    expect(screen.getByRole('heading', { name: 'JSON input' })).toBeInTheDocument();
+    // From M6 both modes are real features, so the JSON pane is the editor
+    // rather than the shared placeholder.
+    expect(screen.getByRole('heading', { name: /^JSON/ })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pattern' })).not.toBeInTheDocument();
   });
 

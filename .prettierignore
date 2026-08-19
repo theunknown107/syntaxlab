@@ -11,3 +11,8 @@ package-lock.json
 # documentation changes.
 docs
 IMPLEMENTATION_STATUS.md
+
+# The JSONTestSuite corpus. Many of these files are deliberately malformed —
+# invalid UTF-8, lone surrogates, truncated escapes — and formatting them
+# would silently weaken the conformance suite.
+tests/fixtures/jsontestsuite/

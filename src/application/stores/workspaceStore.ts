@@ -1,4 +1,7 @@
 import type { RegexAnalysis } from '@/domain/regex/ast';
+import type { JsonAnalysis } from '@/domain/json/ast';
+import type { IndentStyle } from '@/domain/json/format';
+import type { DetectionResult } from '@/domain/shared/detect';
 import type { RegexExecResult } from '@/domain/regex/execute';
 import type { SourceSpan } from '@/domain/shared/result';
 import { createStore } from './createStore';
@@ -45,6 +48,14 @@ export interface WorkspaceFailure {
 export interface WorkspaceState {
   readonly mode: AnalysisMode;
 
+  /**
+   * What a paste looked like, and whether the user has waved the suggestion
+   * away. Dismissal is per session and deliberately not persisted: a user who
+   * dismissed it last week should still be told when they paste JSON today.
+   */
+  readonly detected: DetectionResult | null;
+  readonly suggestionDismissed: boolean;
+
   readonly pattern: string;
   readonly flags: string;
   readonly testSubject: string;
@@ -56,6 +67,22 @@ export interface WorkspaceState {
   readonly exec: RegexExecResult | null;
   readonly execStatus: ExecStatus;
   readonly execError: WorkspaceFailure | null;
+
+  /* ---- JSON ---- */
+
+  readonly jsonInput: string;
+  readonly jsonAnalysis: JsonAnalysis | null;
+  readonly jsonStatus: AnalysisStatus;
+  readonly jsonError: WorkspaceFailure | null;
+  /**
+   * Above `manualAnalyzeBytes` the user presses a button instead of the
+   * document being parsed on a debounce. A multi-megabyte paste must not
+   * re-analyse on every keystroke (12_PERFORMANCE.md §3.2).
+   */
+  readonly jsonManual: boolean;
+  /** True when the editor holds changes the current analysis does not reflect. */
+  readonly jsonStale: boolean;
+  readonly jsonIndent: IndentStyle;
 }
 
 const initialState: WorkspaceState = {
@@ -69,6 +96,17 @@ const initialState: WorkspaceState = {
   exec: null,
   execStatus: 'idle',
   execError: null,
+
+  detected: null,
+  suggestionDismissed: false,
+
+  jsonInput: '',
+  jsonAnalysis: null,
+  jsonStatus: 'idle',
+  jsonError: null,
+  jsonManual: false,
+  jsonStale: false,
+  jsonIndent: 'two',
 };
 
 export const workspaceStore = createStore<WorkspaceState>(initialState);

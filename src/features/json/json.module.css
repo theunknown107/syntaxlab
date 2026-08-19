@@ -1,0 +1,404 @@
+/**
+ * JSON workspace — 08_UI_UX_SPEC.md §7.2, 09_DESIGN_SYSTEM.md
+ *
+ * The tree is the primary visual object on this screen. Everything around it
+ * is chrome: one-line status, small tables, restrained badges. No cards, no
+ * glass, no second accent colour.
+ */
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+  gap: var(--panel-gap);
+  align-items: start;
+  width: 100%;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--panel-gap);
+  min-width: 0;
+}
+
+@media (width <= 1023px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.help {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.muted {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.code {
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  background-color: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+}
+
+.jump {
+  padding: 0;
+  font-size: var(--text-xs);
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+/* ---- Status line ---- */
+
+.statusValid,
+.statusInvalid {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.statusValid {
+  color: var(--color-accent-text);
+  border-color: var(--color-border-accent);
+}
+
+.statusInvalid {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+/* ---- Toolbar ---- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.indentPicker {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.select {
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Manual analysis ---- */
+
+.manual {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border-accent);
+  border-radius: var(--radius-md);
+}
+
+.manual p {
+  flex: 1;
+  min-width: 14rem;
+  margin: 0;
+}
+
+/* ---- Errors ---- */
+
+.errorList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.error {
+  padding: var(--space-2);
+  font-size: var(--text-sm);
+  background-color: var(--color-error-bg);
+  border-inline-start: 2px solid var(--color-error);
+  border-radius: var(--radius-sm);
+}
+
+.errorHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.errorMessage {
+  color: var(--color-text);
+}
+
+.errorLocation {
+  display: block;
+  padding: 0;
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+/* The caret excerpt. Monospace and pre-wrapped, so the caret lands under the
+   character it points at. Hidden from assistive technology — the line and
+   column above say the same thing in words. */
+.excerpt {
+  padding: var(--space-2);
+  margin: var(--space-2) 0 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.caret {
+  color: var(--color-error);
+}
+
+.errorHint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ---- Findings ---- */
+
+.findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.findingLead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+.findingList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-inline-start: var(--space-4);
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+/* ---- Search ---- */
+
+.search {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.searchField {
+  flex: 1;
+  min-width: 0;
+}
+
+.searchInput {
+  width: 100%;
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+@media (width <= 767px) {
+  .searchInput,
+  .select {
+    font-size: 1rem; /* iOS zooms the viewport below 16px */
+  }
+}
+
+.searchCount {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* ---- Selected node ---- */
+
+.selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-accent-text);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Tree ---- */
+
+/* The scroll container. A fixed height is what makes virtualisation possible:
+   the visible slice is arithmetic on the scroll offset rather than a
+   measurement pass. */
+.treeViewport {
+  max-height: 60vh;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.tree {
+  min-width: min-content;
+}
+
+/* Height must match ROW_HEIGHT in JsonTree.tsx. */
+.row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  height: 24px;
+  padding-inline-end: var(--space-2);
+  white-space: nowrap;
+  cursor: default;
+  border-radius: var(--radius-sm);
+}
+
+.row:hover {
+  background-color: var(--color-surface-raised);
+}
+
+.row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.rowSelected {
+  background-color: var(--color-accent-subtle);
+}
+
+/* A search hit is marked by a border as well as a tint, so the highlight
+   survives a greyscale or forced-colours rendering. */
+.rowMatched {
+  background-color: var(--color-match-b);
+  box-shadow: inset 2px 0 0 var(--color-info);
+}
+
+.twisty {
+  flex: none;
+  width: 1ch;
+  color: var(--color-text-muted);
+}
+
+.rowKey {
+  color: var(--syntax-key);
+}
+
+.rowColon {
+  color: var(--color-text-muted);
+}
+
+.rowValue {
+  color: var(--color-text-secondary);
+  overflow-x: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowCount {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* Value colours by type — 09_DESIGN_SYSTEM.md §3.3. */
+.typeString {
+  color: var(--syntax-string);
+}
+
+.typeNumber {
+  color: var(--syntax-number);
+}
+
+.typeBoolean {
+  color: var(--syntax-boolean);
+}
+
+.typeNull {
+  color: var(--syntax-null);
+}
+
+.typeObject,
+.typeArray {
+  color: var(--color-text-muted);
+}
+
+.typeError {
+  color: var(--syntax-error);
+}
+
+/* Badges carry their own text; the colour is secondary. */
+.badgeDuplicate,
+.badgeUnsafe {
+  flex: none;
+  padding: 0 var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-full);
+}
+
+.badgeDuplicate {
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
+}
+
+.badgeUnsafe {
+  color: var(--color-info);
+  border: 1px solid var(--color-info);
+}

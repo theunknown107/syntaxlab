@@ -100,6 +100,11 @@
 
   /* ---- Syntax palette (09_DESIGN_SYSTEM.md §3.3) ---- */
   --syntax-error: var(--red-500);
+  --syntax-key: #8be9fd;
+  --syntax-string: var(--green-300);
+  --syntax-number: #ffb86c;
+  --syntax-boolean: #8be9fd;
+  --syntax-null: var(--gray-400);
   --syntax-rx-meta: var(--green-500);
   --syntax-rx-class: #ffb86c;
   --syntax-rx-group: #8be9fd;

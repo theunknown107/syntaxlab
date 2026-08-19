@@ -3,13 +3,13 @@
 The `test_parsing/` corpus from [JSONTestSuite](https://github.com/nst/JSONTestSuite)
 by Nicolas Seriot, the published conformance suite for RFC 8259.
 
-| | |
-|---|---|
-| **Source** | `https://github.com/nst/JSONTestSuite` — `test_parsing/` |
-| **Retrieved** | 2026-08-19 |
-| **Licence** | MIT — see `LICENSE` in this directory |
-| **Files** | 318 (95 `y_`, 188 `n_`, 35 `i_`) |
-| **Used by** | `tests/unit/json/conformance.test.ts` |
+|               |                                                          |
+| ------------- | -------------------------------------------------------- |
+| **Source**    | `https://github.com/nst/JSONTestSuite` — `test_parsing/` |
+| **Retrieved** | 2026-08-19                                               |
+| **Licence**   | MIT — see `LICENSE` in this directory                    |
+| **Files**     | 318 (95 `y_`, 188 `n_`, 35 `i_`)                         |
+| **Used by**   | `tests/unit/json/conformance.test.ts`                    |
 
 ## Why it is vendored rather than fetched
 

@@ -1,4 +1,5 @@
 import { Header } from './Header';
+import { ModeSuggestion } from './ModeSuggestion';
 import { StatusBar } from './StatusBar';
 import { Workspace } from './Workspace';
 import styles from './AppShell.module.css';
@@ -21,6 +22,7 @@ export function AppShell(): React.JSX.Element {
       </a>
 
       <Header />
+      <ModeSuggestion />
 
       <main id="main" className={styles.main} tabIndex={-1}>
         <h1 className="srOnly">SyntaxLab — understand developer syntax instantly</h1>
