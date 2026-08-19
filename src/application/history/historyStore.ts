@@ -10,6 +10,7 @@ import type {
   StorageError,
 } from '@/domain/history/entry';
 import { buildEnvelope } from '@/domain/history/transfer';
+import { storageUsage } from '@/infrastructure/browser/capabilities';
 import { createHistoryRepository } from '@/infrastructure/storage/historyRepository';
 
 import { createStore } from '../stores/createStore';
@@ -63,6 +64,9 @@ export interface HistoryState {
    * (06_DATA_STORAGE.md §4, Degraded).
    */
   readonly captureSuspended: boolean;
+  /** Origin-wide storage estimate, or null where the browser does not report one. */
+  readonly usage: number | null;
+  readonly quota: number | null;
 }
 
 const INITIAL: HistoryState = {
@@ -75,6 +79,8 @@ const INITIAL: HistoryState = {
   pinnedOnly: false,
   pendingUndo: null,
   captureSuspended: false,
+  usage: null,
+  quota: null,
 };
 
 export const historyStore = createStore<HistoryState>(INITIAL);
@@ -332,6 +338,12 @@ export async function clearAll(): Promise<boolean> {
 /* ------------------------------------------------------------------ *
  * Transfer
  * ------------------------------------------------------------------ */
+
+/** Re-reads the browser's storage estimate. Cheap, and only when asked. */
+export async function refreshUsage(): Promise<void> {
+  const { usage, quota } = await storageUsage();
+  historyStore.setState((previous) => ({ ...previous, usage, quota }));
+}
 
 export async function exportAll(): Promise<ExportEnvelope | null> {
   const repo = await ensureRepository();

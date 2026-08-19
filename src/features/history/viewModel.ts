@@ -107,10 +107,23 @@ export function integrityNotes(page: HistoryPage): readonly string[] {
  * cannot enforce would be worse than no claim at all (05_SECURITY.md §11).
  */
 export const STORAGE_NOTE =
-  'History is stored in this browser and is not sent to any server. Anyone with access to this browser profile can read it.';
+  'History is stored in this browser and is not sent to any server. Anyone with access to this browser profile can read it. Browsers can clear site storage on their own, so treat exports — not this list — as the backup.';
 
 export const NOT_DURABLE_NOTE =
   'This browser is not allowing SyntaxLab to save history, so entries will be lost when the tab closes. Analysis is unaffected.';
+
+/**
+ * How much room history is using.
+ *
+ * `navigator.storage.estimate()` reports the whole origin, not this feature,
+ * and browsers deliberately blur it. The wording says "about" for that reason
+ * rather than presenting a rounded number as exact.
+ */
+export function usageLabel(usage: number | null, quota: number | null): string {
+  if (usage === null) return 'This browser does not report how much storage is in use.';
+  if (quota === null || quota === 0) return `About ${formatBytes(usage)} in use by this site.`;
+  return `About ${formatBytes(usage)} in use by this site, of roughly ${formatBytes(quota)} available.`;
+}
 
 /** Turns a storage failure into something a user can act on. */
 export function errorNote(error: StorageError): { title: string; hint: string | null } {

@@ -5,6 +5,7 @@ import {
   dismissUndo,
   historyStore,
   refresh,
+  refreshUsage,
   remove,
   rename,
   setPinned,
@@ -17,6 +18,7 @@ import {
   type HistoryState,
 } from '@/application/history/historyStore';
 import { restoreEntry } from '@/application/history/restore';
+import { setHistoryEnabled } from '@/application/history/capture';
 import { settingsStore } from '@/application/stores/settingsStore';
 import { useStore } from '@/components/hooks/useStore';
 import { Badge } from '@/components/primitives/Button';
@@ -32,6 +34,7 @@ import {
   relativeTime,
   STORAGE_NOTE,
   summarise,
+  usageLabel,
 } from './viewModel';
 import styles from './history.module.css';
 
@@ -55,11 +58,16 @@ export interface HistoryDrawerProps {
 export function HistoryDrawer({ open, onClose }: HistoryDrawerProps): React.JSX.Element {
   const state = useStore(historyStore, (value) => value);
   const sort = useStore(settingsStore, (value) => value.historySort);
+  const enabled = useStore(settingsStore, (value) => value.historyEnabled);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const searchId = useId();
 
   useEffect(() => {
-    if (open) void refresh();
+    if (!open) return;
+    void refresh();
+    // Only while the drawer is open: an estimate nobody is looking at is a
+    // storage call for nothing.
+    void refreshUsage();
   }, [open]);
 
   const filtered = state.search !== '' || state.typeFilter !== null || state.pinnedOnly;
@@ -156,6 +164,27 @@ export function HistoryDrawer({ open, onClose }: HistoryDrawerProps): React.JSX.
         ) : null}
 
         <footer className={styles.footer}>
+          {/*
+            The settings mirror (H-16). SyntaxLab has no settings dialog yet —
+            that arrives with the theme work — so the one surface history has
+            is where its state, size and controls belong.
+          */}
+          <div className={styles.settings}>
+            <span>
+              Saving is <strong>{enabled ? 'on' : 'paused'}</strong> ·{' '}
+              {state.page.total.toLocaleString('en')} saved
+            </span>
+            <button
+              type="button"
+              className={styles.linkAction}
+              onClick={() => {
+                setHistoryEnabled(!enabled);
+              }}
+            >
+              {enabled ? 'Pause saving' : 'Resume saving'}
+            </button>
+          </div>
+          <p className={styles.privacy}>{usageLabel(state.usage, state.quota)}</p>
           <p className={styles.privacy}>{STORAGE_NOTE}</p>
           <div className={styles.footerActions}>
             <HistoryTransfer />
@@ -187,8 +216,11 @@ export function HistoryDrawer({ open, onClose }: HistoryDrawerProps): React.JSX.
         confirmLabel="Delete everything"
         destructive
       >
-        This removes every saved entry from this browser, including pinned ones. It cannot be
-        undone. Export first if you want to keep a copy.
+        {/* The count, not just "everything": the user should know the size of
+            what they are about to lose before they confirm it. */}
+        This deletes all {state.page.total.toLocaleString('en')} saved{' '}
+        {state.page.total === 1 ? 'entry' : 'entries'} from this browser, including pinned ones. It
+        cannot be undone. Export first if you want to keep a copy.
       </ConfirmDialog>
     </Drawer>
   );

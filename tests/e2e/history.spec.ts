@@ -366,3 +366,68 @@ test('the first-run notice can turn history off outright', async ({ page }) => {
   await page.reload();
   await expect(page.getByRole('button', { name: 'Turn history off' })).toBeHidden();
 });
+
+/* ------------------------------------------------------------------ *
+ * Multiple tabs
+ * ------------------------------------------------------------------ */
+
+test('a save in one tab reaches the other', async ({ page, context }) => {
+  const second = await context.newPage();
+  await second.goto('/');
+
+  await analysePattern(page, 'shared+pattern');
+  await page.waitForTimeout(CAPTURE_WAIT);
+
+  // The second tab never analysed anything; it learns through the channel.
+  await historyButton(second).click();
+  await expect(drawer(second)).toBeVisible();
+  await expect(drawer(second).getByText('/shared+pattern/g')).toBeVisible();
+
+  await second.close();
+});
+
+test('pausing in one tab pauses the other', async ({ page, context }) => {
+  const second = await context.newPage();
+  await second.goto('/');
+
+  await page.getByRole('button', { name: /Pause history/ }).click();
+
+  // localStorage broadcasts its own changes; the other tab re-reads.
+  await expect(second.getByRole('button', { name: /Resume history/ })).toBeVisible();
+  await second.close();
+});
+
+/* ------------------------------------------------------------------ *
+ * The settings mirror
+ * ------------------------------------------------------------------ */
+
+test('the drawer states what history is doing, how much it holds, and how to stop it', async ({
+  page,
+}) => {
+  await captureAndOpen(page, 'ab+c');
+
+  await expect(drawer(page).getByText(/Saving is/)).toBeVisible();
+  await expect(drawer(page).getByText(/1 saved/)).toBeVisible();
+  await expect(drawer(page).getByText(/in use by this site|does not report/)).toBeVisible();
+
+  await drawer(page).getByRole('button', { name: 'Pause saving' }).click();
+  await expect(drawer(page).getByRole('button', { name: 'Resume saving' })).toBeVisible();
+  // The header agrees with the drawer.
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /Resume history/ })).toBeVisible();
+});
+
+test('clear-all names how much is about to go', async ({ page }) => {
+  await captureAndOpen(page, 'ab+c');
+
+  await drawer(page).getByRole('button', { name: 'Clear all' }).click();
+  await expect(page.getByText(/This deletes all 1 saved entry/)).toBeVisible();
+});
+
+test('the storage note discloses eviction rather than promising permanence', async ({ page }) => {
+  await captureAndOpen(page, 'ab+c');
+
+  const note = drawer(page).getByText(/not sent to any server/);
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('Browsers can clear site storage on their own');
+});

@@ -54,3 +54,25 @@ export function detectCapabilities(): Capabilities {
 export function resetCapabilitiesCache(): void {
   cached = null;
 }
+
+/**
+ * How much storage this origin is using — 06_DATA_STORAGE.md §6.1
+ *
+ * Both numbers are approximations by design: browsers deliberately blur the
+ * quota to keep it from being a fingerprinting signal, and the usage covers
+ * the whole origin rather than any one feature. Null means the browser does
+ * not answer, which is an ordinary outcome rather than a failure.
+ */
+export async function storageUsage(): Promise<{ usage: number | null; quota: number | null }> {
+  if (typeof navigator === 'undefined' || (navigator.storage as unknown) === undefined) {
+    return { usage: null, quota: null };
+  }
+  if (typeof navigator.storage.estimate !== 'function') return { usage: null, quota: null };
+
+  try {
+    const estimate = await navigator.storage.estimate();
+    return { usage: estimate.usage ?? null, quota: estimate.quota ?? null };
+  } catch {
+    return { usage: null, quota: null };
+  }
+}
