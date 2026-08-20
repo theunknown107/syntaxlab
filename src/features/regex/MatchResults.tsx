@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import type { RegexExecResult, RegexMatch } from '@/domain/regex/execute';
 import type { ExecStatus, WorkspaceFailure } from '@/application/stores/workspaceStore';
 import { Badge } from '@/components/primitives/Button';
@@ -127,8 +129,38 @@ function truncationNotice(result: RegexExecResult): string | null {
   }
 }
 
+/**
+ * How many rows are put in the document at once — 12_PERFORMANCE.md §11.3
+ *
+ * A pattern like `[\w.]+@[\w.]+` over a 200 KB subject returns the full
+ * 10 000 matches the worker is allowed to send. Rendering all of them built
+ * **130 000 DOM nodes** and cost 349 ms of layout, 162 ms of style and 36 MB of
+ * heap — a second of work for rows nobody scrolls to.
+ *
+ * `table-layout: fixed` and `content-visibility: auto` were both measured
+ * first and both did nothing: the expense is creating the nodes, not laying
+ * them out, and Chromium ignores containment inside a table anyway. So the fix
+ * is to not create them.
+ *
+ * Chosen rather than a virtualiser because match rows are not a fixed height —
+ * a matched value runs to 2 000 characters and a capture list is as long as
+ * the pattern has groups. The windowing used for the JSON tree assumes a
+ * uniform row and does not transfer.
+ */
+const PAGE_SIZE = 200;
+
 function MatchTable({ result }: { result: RegexExecResult }): React.JSX.Element {
   const notice = truncationNotice(result);
+  const [shown, setShown] = useState(PAGE_SIZE);
+
+  // A new result is a new list; showing row 4 000 of the previous one would be
+  // both wrong and slow.
+  useEffect(() => {
+    setShown(PAGE_SIZE);
+  }, [result]);
+
+  const visible = result.matches.length <= shown ? result.matches : result.matches.slice(0, shown);
+  const remaining = result.matches.length - visible.length;
 
   return (
     <div>
@@ -165,11 +197,29 @@ function MatchTable({ result }: { result: RegexExecResult }): React.JSX.Element 
           </tr>
         </thead>
         <tbody>
-          {result.matches.map((match) => (
+          {visible.map((match) => (
             <MatchRow key={match.ordinal} match={match} hasIndices={result.hasIndices} />
           ))}
         </tbody>
       </table>
+
+      {remaining > 0 && (
+        <p className={styles.showMore}>
+          <button
+            type="button"
+            className={styles.showMoreButton}
+            onClick={() => {
+              setShown((current) => current + PAGE_SIZE);
+            }}
+          >
+            Show {Math.min(PAGE_SIZE, remaining).toLocaleString('en')} more
+          </button>{' '}
+          <span className={styles.muted} role="status">
+            Showing {visible.length.toLocaleString('en')} of{' '}
+            {result.matches.length.toLocaleString('en')}.
+          </span>
+        </p>
+      )}
     </div>
   );
 }

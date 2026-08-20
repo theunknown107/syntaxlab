@@ -371,3 +371,54 @@ test('every flag toggle is labelled and reports its state', async ({ page }) => 
     expect((await flag.textContent())?.trim().length ?? 0).toBeGreaterThan(0);
   }
 });
+
+test('renders a large match list progressively rather than all at once', async ({ page }) => {
+  await page.goto('/');
+  const gotIt = page.getByRole('button', { name: 'Got it' });
+  if (await gotIt.isVisible()) await gotIt.click();
+
+  await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
+  await page.keyboard.type('a');
+
+  // ~4 000 matches. `insertText` dispatches one input event rather than 12 000
+  // key events, which keeps this test to a second and needs no clipboard
+  // permission — those differ across the three engines this spec runs on.
+  await page.getByRole('textbox', { name: 'Test string' }).click();
+  await page.keyboard.insertText('ab '.repeat(4_000));
+
+  const matches = page.getByRole('region', { name: 'Matches' }).first();
+  await expect(matches.getByText(/4,000 matches/)).toBeVisible({ timeout: 15_000 });
+
+  // The count is 4 000; the document holds 200. Rendering all of them cost
+  // 130 000 nodes and a second of layout — 12_PERFORMANCE.md §11.3.
+  await expect(page.locator('tbody tr')).toHaveCount(200);
+
+  const showMore = page.getByRole('button', { name: /Show 200 more/ });
+  await expect(showMore).toBeVisible();
+  await showMore.click();
+  await expect(page.locator('tbody tr')).toHaveCount(400);
+
+  // Every match stays reachable, and the control says where you are.
+  await expect(matches.getByText(/Showing 400 of 4,000/)).toBeVisible();
+});
+
+test('resets the match list when the result changes', async ({ page }) => {
+  await page.goto('/');
+  const gotIt = page.getByRole('button', { name: 'Got it' });
+  if (await gotIt.isVisible()) await gotIt.click();
+
+  await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
+  await page.keyboard.type('a');
+  await page.getByRole('textbox', { name: 'Test string' }).click();
+  await page.keyboard.insertText('ab '.repeat(4_000));
+
+  await expect(page.locator('tbody tr')).toHaveCount(200);
+  await page.getByRole('button', { name: /Show 200 more/ }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(400);
+
+  // A new pattern is a new list — holding position at row 400 of the previous
+  // result would be both wrong and slow.
+  await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
+  await page.keyboard.type('b');
+  await expect(page.locator('tbody tr')).toHaveCount(200);
+});

@@ -466,3 +466,28 @@
     font-size: 1rem;
   }
 }
+
+/* ---- Progressive match list (12_PERFORMANCE.md §11.3) ---- */
+
+.showMore {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+}
+
+.showMoreButton {
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.showMoreButton:hover {
+  color: var(--color-accent-text);
+  border-color: var(--color-border-accent);
+}
