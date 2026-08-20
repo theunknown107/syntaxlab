@@ -30,11 +30,17 @@ export type HexColor = string;
 /**
  * The surface the accent is judged against.
  *
- * This is `--color-surface` at rest, which resolves to `--gray-900` in
- * `styles/tokens.css`. It is duplicated here because the domain cannot read
- * CSS, and `tests/unit/theme/preferences.test.ts` asserts the two agree so the
- * duplication cannot drift — a guard measuring against the wrong background is
- * worse than no guard, because it reports confidently.
+ * `--color-surface` resolves to `--gray-900`, and since M10's family split
+ * there are two of those: `#131313` for the neutral ramp and `#101613` for the
+ * green family's tinted one. This is the **stricter** of the pair — the
+ * lighter background, which yields the lower contrast ratio — so a colour that
+ * passes here passes on both.
+ *
+ * Duplicated from CSS because the domain cannot read a stylesheet;
+ * `tests/unit/theme/contrast.test.ts` reads both values back out of
+ * `tokens.css` and asserts this is the conservative one, so the duplication
+ * cannot drift. A guard measuring the wrong background is worse than no guard,
+ * because it reports confidently.
  */
 export const SURFACE_HEX = '#101613';
 
@@ -94,6 +100,15 @@ export interface ThemePreferences {
     readonly intensity: number;
   };
   readonly accent: HexColor;
+  /**
+   * The AA-safe companion to `accent`.
+   *
+   * Stored rather than recomputed so the pre-paint bootstrap needs no contrast
+   * maths — it writes a validated hex like every other value.
+   */
+  readonly accentLegible: HexColor;
+  /** Drives the neutral ramp. See `ThemeFamily`. */
+  readonly family: ThemeFamily;
   readonly glowIntensity: number;
   readonly contrastMode: ContrastMode;
   readonly reducedMotion: MotionMode;
@@ -104,9 +119,25 @@ export interface ThemePreferences {
  * Presets
  * ------------------------------------------------------------------ */
 
+/**
+ * The visual family a preset belongs to — 09_DESIGN_SYSTEM.md §13
+ *
+ * This exists for one reason: the neutral ramp. Green is a *deliberate* part
+ * of the Matrix and Emerald identity, down to a faintly green near-black. In
+ * every other family that same tint is contamination — it is what made Crimson
+ * Night read as grey-with-red rather than black-with-crimson.
+ *
+ * Only `green` currently changes anything; the rest share the neutral ramp.
+ * They are named rather than collapsed to a boolean because the classification
+ * is the product decision, and a later family may want its own treatment.
+ */
+export const THEME_FAMILIES = ['green', 'cyan', 'amber', 'crimson', 'mono'] as const;
+export type ThemeFamily = (typeof THEME_FAMILIES)[number];
+
 export interface ThemePreset {
   readonly id: string;
   readonly name: string;
+  readonly family: ThemeFamily;
   readonly from: HexColor;
   readonly to: HexColor;
   /** Named explicitly only where the palette is a ramp rather than a blend. */
@@ -141,6 +172,7 @@ export interface ThemePreset {
 const MATRIX: ThemePreset = {
   id: 'matrix',
   name: 'Matrix',
+  family: 'green',
   from: '#00FF41',
   mid: ['#008F11', '#003B00'],
   to: '#0D0208',
@@ -160,6 +192,7 @@ const MATRIX: ThemePreset = {
 const CRIMSON_NIGHT: ThemePreset = {
   id: 'crimsonNight',
   name: 'Crimson Night',
+  family: 'crimson',
   from: '#DC143C',
   to: '#343434',
   angleDeg: 135,
@@ -172,6 +205,7 @@ export const PRESETS: readonly ThemePreset[] = [
   {
     id: 'emerald',
     name: 'Emerald',
+    family: 'green',
     from: '#10b981',
     to: '#064e3b',
     angleDeg: 120,
@@ -180,6 +214,7 @@ export const PRESETS: readonly ThemePreset[] = [
   {
     id: 'cyan',
     name: 'Deep Cyan',
+    family: 'cyan',
     from: '#22d3ee',
     to: '#0e4f5c',
     angleDeg: 145,
@@ -188,6 +223,7 @@ export const PRESETS: readonly ThemePreset[] = [
   {
     id: 'amber',
     name: 'Amber Console',
+    family: 'amber',
     from: '#fbbf24',
     to: '#78350f',
     angleDeg: 130,
@@ -196,8 +232,12 @@ export const PRESETS: readonly ThemePreset[] = [
   {
     id: 'mono',
     name: 'Mono',
-    from: '#9aada3',
-    to: '#1f2a24',
+    family: 'mono',
+    // True greys, R = G = B. These were `#9aada3` and `#1f2a24` — the old
+    // green-tinted neutrals — which made the one preset whose entire purpose
+    // is "no colour theatre" the second-greenest theme in the set.
+    from: '#a6a6a6',
+    to: '#252525',
     angleDeg: 180,
     intensity: 25,
   },
@@ -233,7 +273,11 @@ export function themeFromPreset(preset: ThemePreset): ThemePreferences {
     // *gradient* keeps the colour exactly as specified; only this derived
     // token moves, which is the rule when a requested colour is too dark to
     // carry a focus ring (09_DESIGN_SYSTEM.md §11.4).
-    accent: lightenToPass(preset.from),
+    accent: preset.from,
+    // The gradient always shows the specified colour; only this companion
+    // moves when the colour is too dark to carry a focus ring.
+    accentLegible: lightenToPass(preset.from),
+    family: preset.family,
     glowIntensity: 25,
     contrastMode: 'normal',
     reducedMotion: 'system',
@@ -337,15 +381,32 @@ export function readTheme(value: unknown): ThemePreferences {
       angleDeg: readInt(gradient.angleDeg, 0, 359) ?? DEFAULT_THEME.gradient.angleDeg,
       intensity: readInt(gradient.intensity, 0, 100) ?? DEFAULT_THEME.gradient.intensity,
     },
-    // Falls back to a companion derived from the gradient's own start colour
-    // rather than to the default green: a stored theme with a valid amber
-    // gradient and a corrupt accent should stay amber.
-    accent: isHexColor(migrated.accent) ? migrated.accent : lightenToPass(from),
+    // Falls back to the gradient's own start colour rather than to the default
+    // green: a stored theme with a valid amber gradient and a corrupt accent
+    // should stay amber.
+    accent: isHexColor(migrated.accent) ? migrated.accent : from,
+    // Recomputed rather than trusted when absent or corrupt. A stored value
+    // that failed contrast would put an unreadable focus ring on screen.
+    accentLegible: isHexColor(migrated.accentLegible)
+      ? migrated.accentLegible
+      : lightenToPass(isHexColor(migrated.accent) ? migrated.accent : from),
+    family: readEnum(migrated.family, THEME_FAMILIES) ?? familyOf(readPresetId(migrated.preset)),
     glowIntensity: readInt(migrated.glowIntensity, 0, 100) ?? DEFAULT_THEME.glowIntensity,
     contrastMode: readEnum(migrated.contrastMode, CONTRAST_MODES) ?? 'normal',
     reducedMotion: readEnum(migrated.reducedMotion, MOTION_MODES) ?? 'system',
     fontScale: readFontScale(migrated.fontScale),
   };
+}
+
+/**
+ * The family a preset id belongs to.
+ *
+ * A custom theme keeps whatever family it was edited from, which is why the
+ * value is persisted rather than derived on every read: a user who tweaks
+ * Matrix's colours should keep the green neutrals they were looking at.
+ */
+function familyOf(presetId: string): ThemeFamily {
+  return presetById(presetId)?.family ?? 'green';
 }
 
 /** A known preset id, or `'custom'`. An unknown id is not preserved. */

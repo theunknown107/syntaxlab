@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M10 complete → M11 next (awaiting approval)
+**Current milestone:** M10 complete, incl. the theme correction pass → M11 next (awaiting approval)
 **Last updated:** 2026-08-20
 
 > Living document, updated at the end of every milestone. The architecture
@@ -1642,3 +1642,77 @@ Violating any of these is a defect, not a shortcut.
 | M6 | ✅ | ✅ | ✅ 1 947 | ✅ 295 (3 skipped) | ✅ | ✅ 0 vulns | **J-2 passed** — JSONTestSuite 95/188/35; JSON UI; bundle 158.12 KB |
 | M5 | ✅ | ✅ | ✅ 1 252 | ✅ 167 (3 skipped) | ✅ | ✅ 0 vulns | JSON domain; 4 000-document differential; coverage 97.5%; bundle metric corrected |
 | M4 | ✅ | ✅ | ✅ 859 | ✅ 146 (3 skipped) | ✅ | ✅ 0 vulns | **Bundle checkpoint passed — 162.54 KB vs 170 KB target.** CodeMirror measured at 88 KB, not the ~150 KB estimated |
+
+---
+
+## M10 theme correction pass — objective and outcome
+
+**Objective:** Crimson Night shipped with the two specified colours exactly
+right and still looked green. Find every source of that and fix it at the
+architectural level, not per component.
+
+**Outcome:** found by measurement, fixed at one choke point, and pinned by two
+audits plus twelve unit tests and six E2E tests.
+
+### What was actually green
+
+Not the gradient — the chrome, which is why changing two stops would not have
+fixed it.
+
+| Source | Detail |
+|---|---|
+| The shared neutral ramp | `--gray-900` was `#101613`, six units greener than red. Surfaces, borders and the sunken panel all resolved to it, in **every** theme. |
+| Six accent-adjacent tokens | `--color-accent-hover/active/text`, `--color-focus`, `--color-selection`, `--color-match-a` were hard-wired to `--green-*` regardless of theme. |
+| `--color-surface-sunken` | `#070a09`, a green literal the ramp change alone would have missed. Caught by the static audit. |
+| Mono's own colours | `#9aada3` on `#1f2a24` — the old tinted greys, making the "no colour" preset the second-greenest one. Caught by the runtime audit. |
+| Editor decorations | `--syntax-rx-meta` was `--green-500`; `\|` measured **`#3ddc84`** with Crimson Night selected. |
+
+None of these contain the word "green". They were found by resolving every
+`var()` chain to a literal and classifying its hue, then by reading *used*
+values out of a real browser with each preset selected.
+
+### The fix
+
+One architectural change: a **theme family** attribute on `<html>`. The neutral
+ramp is the default and the green tint is the exception, so a preset that
+forgets to declare a family gets neutral greys — wrong-looking, never green.
+The accent-adjacent tokens are now derived from `--color-accent` via
+`color-mix()` rather than from a fixed hue. Six tokens changed; no component
+did. Full detail in `09_DESIGN_SYSTEM.md` §13.
+
+**`--color-accent` is now the specified colour exactly** and only
+`--color-accent-legible` is lightened. Previously the lightened companion *was*
+the accent, which made Crimson Night drift toward pink.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck / ESLint / Stylelint / Prettier | ✅ clean |
+| Unit tests | ✅ **2 167 passed** (36 files, +12) |
+| `theme` E2E — Chromium, Firefox, WebKit | ✅ **48 passed** per engine |
+| `a11y` + `hardening` E2E | ✅ **121 passed** |
+| `npm run audit:hues` | ✅ no green outside the green family |
+| `npm run audit:themes` | ✅ **"No green in the decorative tokens of any non-green theme"** — all six presets |
+| Bundle | ⚠️ **175.05 KB initial** (+0.24 KB; target 170, hard 200) |
+| Dependencies | **None added.** `color-mix()` is a browser feature. |
+
+Three existing tests failed on the corrected behaviour and were updated, not
+suppressed: the Crimson accent assertion (now inverted by design), Mono's
+persisted grey, and the recorded Mono contrast ratio (7.75 → **7.53**, the true
+figure for `#a6a6a6`).
+
+### Deviations
+
+| # | Deviation | Reason |
+|---|---|---|
+| D43 | **Themes carry a `family` attribute** | The only way to give one family a tinted ramp without every token knowing about themes. Schema gains `family` and `accentLegible`, both repaired on read. |
+| D44 | **The focus ring is theme-derived, not fixed** | It was fixed green to guarantee visibility, which meant a green ring in Mono. It is now `lightenToPass(accent)` — themed, and guaranteed ≥ 4.5:1 by construction rather than by being frozen. `23_RISK_REGISTER.md` corrected. |
+| D45 | **The syntax palette lost its greens** | Editor decorations are theme surface. Replaced with yellow and blue; this also removes the green/red pair and *improves* CVD distinguishability (A-11). |
+
+### The claim, precisely
+
+**Non-green themes contain no green as a decorative/theme hue.** Not "no green
+pixels anywhere" — `--color-success` is `#00FF41` in every theme including
+Crimson Night, because green *means* success in this design system and breaking
+that to satisfy a visual rule would trade a real signal for a cosmetic one.

@@ -235,7 +235,7 @@ test.describe('offline', () => {
     await page.getByRole('radio', { name: 'Mono' }).click();
     await page.keyboard.press('Escape');
     await page.reload();
-    expect(await token('--gradient-from')).toBe('#9aada3');
+    expect(await token('--gradient-from')).toBe('#a6a6a6');
 
     await context.close();
   });

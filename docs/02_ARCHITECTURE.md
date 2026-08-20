@@ -426,7 +426,7 @@ graph LR
     end
     subgraph Persistent["Persistent"]
         P1["historyStore → IndexedDB"]
-        P2["themeStore → localStorage"]
+        P2["themeStore → localStorage<br/><i>+ data-theme-family on &lt;html&gt;</i>"]
         P3["settingsStore → localStorage"]
     end
     Ephemeral -.-> Session

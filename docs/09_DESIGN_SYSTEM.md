@@ -42,6 +42,11 @@ The payoff: user customisation writes to layer ① at runtime, and layers ② an
 
 ### 3.1 Primitives
 
+> **Superseded in part by §13.2.** The neutral ramp below is green-tinted, and
+> since the M10 correction pass it applies only to the *green* family. Every
+> other theme inherits a truly neutral ramp. The greens themselves are also
+> restated against the specified Matrix palette in §12.1.
+
 ```css
 :root {
   /* Greens — six steps, deliberately not ten. The brief warns against
@@ -75,7 +80,9 @@ The payoff: user customisation writes to layer ① at runtime, and layers ② an
 }
 ```
 
-**Why `#0a0e0c` and not `#000000`:** pure black against bright text causes halation and is genuinely fatiguing over a long session. A slightly green-tinted near-black keeps the hacker register while staying comfortable, and gives darker surfaces somewhere to go.
+**Why `#0a0e0c` and not `#000000`:** — still the reasoning, but the tint is now
+green only for the green family; the neutral ramp uses `#0b0b0b` for the same
+anti-halation reason without the hue. Originally: pure black against bright text causes halation and is genuinely fatiguing over a long session. A slightly green-tinted near-black keeps the hacker register while staying comfortable, and gives darker surfaces somewhere to go.
 
 **Why six greens:** accent, hover, active, border, glow, and deep-gradient stop. Every one has a job. A seventh would not.
 
@@ -121,6 +128,10 @@ The payoff: user customisation writes to layer ① at runtime, and layers ② an
 `color-mix()` in oklab does the derivation work. It is supported in all current evergreen browsers; a fallback `@supports not (color: color-mix(in oklab, red, blue))` block supplies static equivalents for older engines.
 
 ### 3.3 Syntax-highlighting palette
+
+> **Superseded by §13.4.** The three `--green-*` slots below put green inside
+> every non-green theme and have been replaced with yellow and blue. The
+> palette is also literal now rather than referencing theme scales.
 
 Distinct hues, all ≥ 4.5:1 against `--color-surface`, chosen to remain distinguishable under the most common colour-vision deficiencies (verified with a simulator — green/red pairs are avoided as the *only* distinction).
 
@@ -687,3 +698,156 @@ lost its surface, and an *unselected* tab rendered as bare text with no border
 `ButtonBorder`, and the selected one keeps the `Highlight`/`HighlightText`
 pair. That is the only place in the codebase using `forced-color-adjust: none`,
 and it is used to opt *into* a system pair rather than out of forcing.
+
+---
+
+## 13. M10 correction — theme families and the no-green rule
+
+### 13.1 The defect
+
+Crimson Night shipped at M10 with the two specified colours exactly right, and
+it still looked green.
+
+Not the gradient — the **chrome**. `--gray-900` was `#101613`: six units greener
+than it was red, and `--color-surface`, `--color-border` and
+`--color-surface-sunken` all resolved to that shared ramp. On top of that, five
+accent-adjacent tokens were hard-wired to `--green-*` regardless of theme:
+
+| Token | Resolved to | In every theme |
+|---|---|---|
+| `--color-accent-hover` | `--green-600` | yes |
+| `--color-accent-active` | `--green-700` | yes |
+| `--color-accent-text` | `--green-300` | yes |
+| `--color-focus` | `--green-300` | yes |
+| `--color-selection` | `--green-900` | yes |
+| `--color-match-a` | `--green-500` at 22% | yes |
+
+And the editor's own decorations: `--syntax-rx-meta` was `--green-500`, so a
+`|` measured **`#3ddc84`** with Crimson Night selected.
+
+The word "green" appears in none of the values that mattered. `#101613` reads as
+black in a diff and as green on a screen, which is why this was found by
+measuring hue rather than by review.
+
+### 13.2 Families
+
+A **theme family** is the hue group a preset belongs to. It exists so the shared
+neutral ramp can differ for exactly one family without every other token
+learning about themes.
+
+```mermaid
+flowchart TD
+    P["Preset<br/>domain/theme/preferences.ts"]
+    F{"preset.family"}
+    G["green<br/>Matrix · Emerald"]
+    N["cyan · amber<br/>crimson · mono"]
+    ATTR["data-theme-family<br/>on &lt;html&gt;"]
+    TINT["Tinted ramp<br/>:root[data-theme-family='green']"]
+    NEUT["Neutral ramp<br/>:root — R ≈ G ≈ B"]
+
+    P --> F
+    F --> G --> ATTR --> TINT
+    F --> N --> ATTR --> NEUT
+
+    classDef rule stroke-width:3px
+    class NEUT rule
+```
+
+**The neutral ramp is the default and the tint is the exception.** That
+direction matters: a new preset that forgets to declare a family inherits
+neutral greys, which is wrong-looking but never green. The opposite default
+would reintroduce the defect silently.
+
+```css
+/* :root — shared by every theme */
+--gray-950: #0b0b0b;  --gray-900: #131313;  --gray-800: #1b1b1b;
+--gray-700: #252525;  --gray-600: #343434;  --gray-500: #545454;
+--gray-400: #8a8a8a;  --gray-300: #a6a6a6;  --gray-100: #eeeeee;
+--color-surface-sunken: #080808;
+
+/* the one family that is allowed a tint */
+:root[data-theme-family='green'] {
+  --gray-950: #0a0e0c;  --gray-900: #101613;  /* …the original ramp… */
+  --color-surface-sunken: #070a09;
+}
+```
+
+### 13.3 Derivation
+
+The accent-adjacent tokens are now derived from `--color-accent` rather than
+from a fixed hue, so they follow whatever theme is active. This is the
+architectural choke point: six tokens changed, and no component did.
+
+```mermaid
+flowchart LR
+    SRC["preset.from<br/>e.g. #DC143C"]
+    ACC["--color-accent<br/>exact, never moves"]
+    LEG["--color-accent-legible<br/>lightenToPass(from)"]
+
+    HOV["--color-accent-hover<br/>mix 70% + white"]
+    ACT["--color-accent-active<br/>mix 78% + black"]
+    SEL["--color-selection<br/>mix 22% + --gray-700"]
+    MAT["--color-match-a<br/>mix 22% + transparent"]
+    TXT["--color-accent-text"]
+    FOC["--color-focus"]
+
+    SRC --> ACC
+    SRC --> LEG
+    ACC --> HOV & ACT & SEL & MAT
+    LEG --> TXT & FOC
+
+    classDef fixed stroke-width:3px
+    class ACC fixed
+```
+
+**`--color-accent` is the specified colour and never moves.** Only
+`--color-accent-legible` is lightened, and only where an accessible text or
+focus token is required. Letting the lighter red take over the accent would
+have made Crimson Night pink, which is the opposite of the brief.
+
+`color-mix()` has an `@supports not` fallback of plain neutral values, so a
+browser without it gets a flat but correct palette rather than a green one.
+
+### 13.4 The syntax palette
+
+Editor decorations are theme surface too, so the three green slots were
+replaced:
+
+| Token | Was | Now | Hue |
+|---|---|---|---|
+| `--syntax-rx-meta` | `#3ddc84` | `#f1fa8c` | 65° |
+| `--syntax-rx-escape` | `#6ee7a0` | `#79c0ff` | 208° |
+| `--syntax-string` | `#6ee7a0` | `#f1fa8c` | 65° |
+
+The six regex hues now sit at 31°, 65°, 191°, 208°, 265° and 317°, each above
+7.5:1 against both surfaces. Dropping green also drops the **green/red pair**,
+the worst of these for colour-vision deficiency — so this is a small
+accessibility gain rather than a cost (A-11).
+
+### 13.5 Semantics are not decoration
+
+`--color-success` is still green — `#00FF41` — in every theme, including
+Crimson Night. Green *means* success in this design system, and breaking that
+to satisfy a visual rule would trade a real signal for a cosmetic one. The rule
+is about **decorative** hue: chrome, gradients, surfaces, borders, accents,
+selection, glows and decorations.
+
+### 13.6 How this is enforced
+
+Measured, not reviewed, because review is what missed it.
+
+| Check | What it does |
+|---|---|
+| `npm run audit:hues` | Resolves every `var()` chain in `tokens.css` to a literal and classifies its hue |
+| `npm run audit:themes` | Selects each preset in Chromium and reads the **used** value of every decorative token |
+| `tests/unit/theme/families.test.ts` | The shared ramp is neutral; the syntax palette has no green; families are declared and persisted |
+| `tests/e2e/theme.spec.ts` | Per-preset runtime assertion, plus the editor decorations under Crimson Night |
+
+Both audits judge a **near-neutral** on channel bias (green ahead of red and
+blue) and a **saturated** colour on hue alone. The distinction matters in both
+directions: `#101613` is green at a spread of 6, and `#f1fa8c` has more green
+than red by construction and is a yellow.
+
+**Result: non-green themes contain no green as a decorative/theme hue.** That
+is the claim the tests support — not that no green pixel exists anywhere, which
+would be false, because the success colour is green by design.

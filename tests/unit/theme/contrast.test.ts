@@ -80,11 +80,16 @@ describe('the fixed interface tokens', () => {
 
 describe('every preset', () => {
   it.each(PRESETS.map((preset) => [preset.name, preset] as const))(
-    '%s derives an accent that passes AA',
+    '%s derives a legible accent companion that passes AA',
     (_name, preset) => {
+      // `accent` is the specified colour and stays exactly that — it is what
+      // the gradient, buttons and borders use. `accentLegible` is the token
+      // that carries text and the focus ring, and it is the one that must
+      // clear AA.
       const theme = themeFromPreset(preset);
-      expect(verdictFor(theme.accent)).toBe('pass');
-      expect(ratio(theme.accent, SURFACE_HEX)).toBeGreaterThanOrEqual(4.5);
+      expect(theme.accent).toBe(preset.from);
+      expect(verdictFor(theme.accentLegible)).toBe('pass');
+      expect(ratio(theme.accentLegible, SURFACE_HEX)).toBeGreaterThanOrEqual(4.5);
     },
   );
 
@@ -102,7 +107,10 @@ describe('every preset', () => {
 
   it('records the measured accent ratios, so a drift is visible in the diff', () => {
     const measured = Object.fromEntries(
-      PRESETS.map((preset) => [preset.id, ratio(themeFromPreset(preset).accent, SURFACE_HEX)]),
+      PRESETS.map((preset) => [
+        preset.id,
+        ratio(themeFromPreset(preset).accentLegible, SURFACE_HEX),
+      ]),
     );
     expect(measured).toEqual({
       matrix: 13.42,
@@ -110,14 +118,14 @@ describe('every preset', () => {
       emerald: 7.22,
       cyan: 10.14,
       amber: 10.98,
-      mono: 7.75,
+      mono: 7.53,
     });
   });
 
   it('records where a specified colour needed a lightened companion', () => {
     // Only Crimson Night. Matrix's #00FF41 is 13.42:1 and is used untouched.
     const lightened = PRESETS.filter(
-      (preset) => themeFromPreset(preset).accent !== preset.from,
+      (preset) => themeFromPreset(preset).accentLegible !== preset.from,
     ).map((preset) => preset.id);
     expect(lightened).toEqual(['crimsonNight']);
 

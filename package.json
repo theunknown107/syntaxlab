@@ -24,7 +24,9 @@
     "measure:theme": "node scripts/measure-theme.mjs",
     "icons": "node scripts/make-icons.mjs",
     "measure:pwa": "node scripts/measure-pwa.mjs",
-    "serve:prod": "node scripts/serve-production.mjs"
+    "serve:prod": "node scripts/serve-production.mjs",
+    "audit:hues": "node scripts/audit-theme-hues.mjs",
+    "audit:themes": "node scripts/audit-theme-runtime.mjs"
   },
   "license": "MIT",
   "private": true,

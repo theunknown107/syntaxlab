@@ -87,6 +87,7 @@
   applyHex('--gradient-mid-2', gradient.mid2);
   applyHex('--gradient-to', gradient.to);
   applyHex('--color-accent', theme.accent);
+  applyHex('--color-accent-legible', theme.accentLegible);
   applyAngle('--gradient-angle', gradient.angleDeg);
   applyFraction('--gradient-intensity', gradient.intensity);
   applyFraction('--glow-intensity', theme.glowIntensity);
@@ -95,6 +96,9 @@
     root.style.setProperty('--font-scale', String(theme.fontScale));
   }
 
+  // The neutral ramp depends on this, so it must land before first paint or a
+  // crimson theme flashes green-tinted surfaces on every load.
+  applyEnum('themeFamily', theme.family, ['green', 'cyan', 'amber', 'crimson', 'mono']);
   applyEnum('contrast', theme.contrastMode, ['normal', 'high']);
   applyEnum('motion', theme.reducedMotion, ['system', 'always', 'never']);
 })();

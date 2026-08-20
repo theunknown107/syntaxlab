@@ -340,7 +340,7 @@ and does not:
 |---|---|
 | No dependency was added | A colour picker, a theming library or a colour-maths package would each have put third-party code on the path between persisted data and `setProperty`. |
 | Semantic status colours are not customisable | Letting a user make an error message low-contrast would turn an accessibility guarantee into a preference. |
-| The focus ring is not customisable | Same reasoning, and the stronger case: a focus ring the user can make invisible is a keyboard trap they cannot see. It stays fixed even when that means a green ring in the Mono theme — a visual inconsistency accepted deliberately in exchange for the guarantee. |
+| The focus ring cannot be made invisible | A focus ring the user can hide is a keyboard trap they cannot see. Until the M10 correction pass the ring was *fixed* green, which honoured that at the cost of a green ring in Mono. It is now `--color-accent-legible`, which is `lightenToPass(accent)` — derived from the theme but **guaranteed by construction** to clear 4.5:1 against the surface. Themed and safe, rather than safe by being frozen; see `09_DESIGN_SYSTEM.md` §13.3. |
 | Theme state never enters a history record | Verified by an E2E test that reads the IndexedDB records back and asserts no theme vocabulary appears in them. |
 
 ---

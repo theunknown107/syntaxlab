@@ -811,3 +811,23 @@ nothing.
 Still 4.81 KB over the 170 KB target and 25 KB under the hard budget. The
 17.04 KB CodeMirror lead measured at M8 is untouched and remains the available
 move when the editor risk is worth taking.
+
+### 10.12 The M10 theme correction pass
+
+| | M10 | After the pass | Delta |
+|---|---|---|---|
+| Initial JS | 174.81 KB | **175.05 KB** | +0.24 KB |
+| CSS | 7.83 KB | 7.94 KB | +0.11 KB |
+| Service worker | 5.93 KB | 5.93 KB | — |
+| Total precache | 226.39 KB | 226.74 KB | +0.35 KB |
+
++0.24 KB of JS: two fields on the persisted theme (`family` and
+`accentLegible`) and the enum validation that repairs them on read. +0.11 KB of
+CSS: one family override block and the `@supports not (color-mix)` fallbacks.
+
+**No dependency was added.** Every derived colour is `color-mix()`, which the
+browser already implements, so the alternative — a colour library on the path
+between persisted data and `setProperty` — was never needed. The two audit
+scripts run at development time and ship nothing.
+
+Still under the 200 KB hard budget with 25 KB to spare.

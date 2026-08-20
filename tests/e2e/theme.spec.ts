@@ -73,11 +73,13 @@ test('offers Crimson Night, with the two specified colours exactly', async ({ pa
   expect((await token(page, '--gradient-from')).toLowerCase()).toBe('#dc143c');
   expect((await token(page, '--gradient-to')).toLowerCase()).toBe('#343434');
 
-  // The accent is a lightened companion, because #DC143C is 3.67:1 against the
-  // surface. The gradient keeps the requested colour; only the derived token
-  // moves.
-  const accent = (await token(page, '--color-accent')).toLowerCase();
-  expect(accent).not.toBe('#dc143c');
+  // #DC143C is 3.67:1 against the surface, so it cannot carry text or a focus
+  // ring. The split: `--color-accent` stays the requested colour exactly and
+  // paints the chrome, and only `--color-accent-legible` moves. Letting the
+  // lighter red take over the accent would make the theme pink rather than
+  // crimson, which is the opposite of what was asked for.
+  expect((await token(page, '--color-accent')).toLowerCase()).toBe('#dc143c');
+  expect((await token(page, '--color-accent-legible')).toLowerCase()).not.toBe('#dc143c');
   await expect(drawer(page).getByText(/Passes AA|Low contrast|Fails accessibility/)).toBeVisible();
 
   await closeDrawer(page);
@@ -175,7 +177,9 @@ test('survives a reload', async ({ page }) => {
   await closeDrawer(page);
 
   await page.reload();
-  expect(await token(page, '--gradient-from')).toBe('#9aada3');
+  // A true grey. Mono was #9aada3 on #1f2a24 until this pass — the old tinted
+  // neutrals, which made the "no colour" preset the second-greenest one.
+  expect(await token(page, '--gradient-from')).toBe('#a6a6a6');
 
   await openDrawer(page);
   await expect(drawer(page).getByRole('radio', { name: 'Mono' })).toHaveAttribute(
@@ -560,4 +564,155 @@ test('two tabs stay in step', async ({ page, context }) => {
     .toBe('#10b981');
 
   await second.close();
+});
+
+/**
+ * The no-green rule, measured in a real browser — 09_DESIGN_SYSTEM.md §13
+ *
+ * The unit tests read `tokens.css` as authored, which only ever shows the
+ * default theme. This selects each preset and reads what the user is actually
+ * looking at, which is the only way the Crimson Night leak was ever going to be
+ * caught: the offending token was a `color-mix()` over an inherited ramp, green
+ * in no single declaration anywhere.
+ */
+
+const DECORATIVE = [
+  '--color-bg',
+  '--color-surface',
+  '--color-surface-raised',
+  '--color-surface-sunken',
+  '--color-text',
+  '--color-text-secondary',
+  '--color-text-muted',
+  '--color-border',
+  '--color-border-strong',
+  '--color-accent',
+  '--color-accent-legible',
+  '--color-accent-hover',
+  '--color-accent-active',
+  '--color-focus',
+  '--color-selection',
+  '--gradient-from',
+  '--gradient-mid-1',
+  '--gradient-mid-2',
+  '--gradient-to',
+];
+
+function hueOf(r: number, g: number, b: number, spread: number): number {
+  const max = Math.max(r, g, b);
+  let hue: number;
+  if (max === r) hue = (((g - b) / spread) % 6) * 60;
+  else if (max === g) hue = ((b - r) / spread + 2) * 60;
+  else hue = ((r - g) / spread + 4) * 60;
+  return hue < 0 ? hue + 360 : hue;
+}
+
+function channelsOf(value: string): [number, number, number] {
+  const [r = 0, g = 0, b = 0] = value.match(/[0-9.]+/g)?.map(Number) ?? [];
+  return [r, g, b];
+}
+
+/** Green as a visible hue; near-neutrals are judged on channel bias instead. */
+function isGreen(value: string): boolean {
+  const [r, g, b] = channelsOf(value);
+  const spread = Math.max(r, g, b) - Math.min(r, g, b);
+  if (spread === 0) return false;
+
+  const min = Math.min(r, g, b);
+  const max = Math.max(r, g, b);
+
+  const lightness = (max + min) / 2 / 255;
+  const saturation = spread / 255 / (1 - Math.abs(2 * lightness - 1) || 1);
+  // A saturated colour is judged on hue alone: a yellow has more green than
+  // red by construction and is not a green.
+  if (saturation < 0.06) return g > r && g > b;
+
+  const hue = hueOf(r, g, b, spread);
+  return hue >= 70 && hue < 170;
+}
+
+/**
+ * Custom properties compute *as specified*, so reading one off `:root` hands
+ * back the literal text `color-mix(in oklab, …)`. Assigning it to `color` on a
+ * throwaway element forces the browser to do the mixing, which is the number
+ * that reaches a screen.
+ */
+async function usedColours(page: Page, names: string[]): Promise<Record<string, string>> {
+  return page.evaluate((properties) => {
+    const probe = document.createElement('span');
+    probe.style.display = 'none';
+    document.body.append(probe);
+    const resolved = Object.fromEntries(
+      properties.map((property) => {
+        probe.style.color = 'transparent';
+        probe.style.color = `var(${property})`;
+        const used = getComputedStyle(probe).color;
+        return [property, used === 'rgba(0, 0, 0, 0)' ? '' : used];
+      }),
+    );
+    probe.remove();
+    return resolved;
+  }, names);
+}
+
+for (const [preset, family] of [
+  ['Deep Cyan', 'cyan'],
+  ['Amber Console', 'amber'],
+  ['Crimson Night', 'crimson'],
+  ['Mono', 'mono'],
+] as const) {
+  test(`${preset} contains no green in any decorative token`, async ({ page }) => {
+    await start(page);
+    await openDrawer(page);
+    await drawer(page).getByRole('radio', { name: preset }).click();
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme-family', family);
+
+    const values = await usedColours(page, DECORATIVE);
+    const green = Object.entries(values).filter(([, value]) => value !== '' && isGreen(value));
+    expect(green).toEqual([]);
+
+    // Guards the probe: an empty read would make the assertion above vacuous.
+    expect(Object.values(values).filter((value) => value !== '').length).toBeGreaterThan(12);
+  });
+}
+
+test('Matrix keeps its four specified colours and stays in the green family', async ({ page }) => {
+  await start(page);
+  await openDrawer(page);
+  await drawer(page).getByRole('radio', { name: 'Matrix' }).click();
+
+  await expect(page.locator('html')).toHaveAttribute('data-theme-family', 'green');
+  expect([
+    await token(page, '--gradient-from'),
+    await token(page, '--gradient-mid-1'),
+    await token(page, '--gradient-mid-2'),
+    await token(page, '--gradient-to'),
+  ]).toEqual(['#00FF41', '#008F11', '#003B00', '#0D0208']);
+});
+
+test('the editor decorations carry no green inside a non-green theme', async ({ page }) => {
+  await start(page);
+  await openDrawer(page);
+  await drawer(page).getByRole('radio', { name: 'Crimson Night' }).click();
+  await closeDrawer(page);
+
+  await page.locator('.cm-content').first().click();
+  await page.keyboard.type('^(a|b)+' + String.raw`\d` + '[x-z]$');
+
+  // Highlighting arrives from the analysis worker, so the decorations are not
+  // in the DOM on the same tick as the keystrokes.
+  const decorated = page.locator('.cm-content [class*="tok-"]');
+  await expect(decorated.first()).toBeVisible();
+  await expect.poll(async () => decorated.count()).toBeGreaterThan(3);
+
+  // `|` rendered #3ddc84 here before this pass — green, in the theme whose
+  // whole brief is black and crimson. Decoration colours are theme surface too.
+  const decorations = await page.evaluate(() =>
+    [...document.querySelectorAll('.cm-content [class*="tok-"]')].map(
+      (element) => getComputedStyle(element).color,
+    ),
+  );
+  expect(decorations.length).toBeGreaterThan(3);
+  expect(decorations.filter(isGreen)).toEqual([]);
 });

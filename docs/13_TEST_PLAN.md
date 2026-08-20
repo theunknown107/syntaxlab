@@ -540,6 +540,26 @@ url(javascript:alert(1))
 ```
 Assert: rejected by the hex allowlist; defaults applied; no CSS rule created.
 
+### 7.6a Theme hue (M10 correction pass)
+
+Green is a *theme* hue, not a global ban: it stays in the green family and in
+the semantic success colour. What must not happen is green appearing as
+decoration in a theme that did not ask for it.
+
+Measured rather than grepped, because the leak — `#101613`, `#3ddc84` — never
+contained the word "green":
+
+| Check | Scope |
+|---|---|
+| `npm run audit:hues` | Static: every `var()` chain in `tokens.css` resolved to a literal and classified |
+| `npm run audit:themes` | Runtime: each preset selected in Chromium, every decorative token read at its *used* value |
+| `tests/unit/theme/families.test.ts` | Shared ramp neutral; syntax palette green-free; regex hues ≥ 15° apart; families declared, persisted, and repaired when corrupt |
+| `tests/e2e/theme.spec.ts` | Per-preset runtime assertion across all four non-green families, Matrix's four colours, and the editor decorations under Crimson Night |
+
+A near-neutral is judged on channel bias, a saturated colour on hue alone —
+`#101613` is green at a spread of 6, and `#f1fa8c` has more green than red and
+is a yellow.
+
 ### 7.7 Malicious import
 Wrong MIME and extension; a valid JSON file that is not an export; version 999; 100 000 entries; a deeply nested envelope; a prototype-polluting envelope. Assert: specific rejection message; no partial import; no hang.
 

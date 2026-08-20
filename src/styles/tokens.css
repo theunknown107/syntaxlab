@@ -34,18 +34,30 @@
   --green-700: #059648;
   --green-900: var(--matrix-deep);
 
-  /* Neutrals. --gray-950 is a green-tinted near-black, not pure #000:
-     pure black against bright text causes halation and is fatiguing
-     over a long session, and leaves darker surfaces nowhere to go. */
-  --gray-950: #0a0e0c;
-  --gray-900: #101613;
-  --gray-800: #171f1b;
-  --gray-700: #1f2a24;
-  --gray-600: #2d3a33;
-  --gray-500: #4a5a52;
-  --gray-400: #7a8d83; /* 5.20:1 on --gray-900, 5.52:1 on --gray-950 — measured */
-  --gray-300: #9aada3;
-  --gray-100: #e8f0eb;
+  /* ---- Neutrals ----
+     **Genuinely neutral: R = G = B at every step.**
+
+     These were green-tinted (`#0a0e0c`, `#101613`, …) so that the whole
+     interface leaned toward the Matrix identity. That tint is invisible in a
+     hex string and very visible on screen, and because every theme shares this
+     ramp it made Crimson Night read as "grey with a little red" rather than
+     black with crimson. A green-tinted neutral is still green
+     (`09_DESIGN_SYSTEM.md` §13).
+
+     Luminance-matched to the values they replace, so contrast is preserved:
+     body text measures 16.01:1 on `--gray-900` and muted text 5.38:1, both
+     slightly better than before.
+
+     The green family gets its tint back below, where it belongs. */
+  --gray-950: #0b0b0b;
+  --gray-900: #131313;
+  --gray-800: #1b1b1b;
+  --gray-700: #252525;
+  --gray-600: #343434;
+  --gray-500: #545454;
+  --gray-400: #8a8a8a; /* 5.38:1 on --gray-900 — measured */
+  --gray-300: #a6a6a6;
+  --gray-100: #eeeeee;
   --white: #f5faf7;
 
   /* Status — desaturated so they sit in a dark UI without vibrating. */
@@ -64,7 +76,7 @@
   --color-bg: var(--gray-950);
   --color-surface: var(--gray-900);
   --color-surface-raised: var(--gray-800);
-  --color-surface-sunken: #070a09;
+  --color-surface-sunken: #080808;
 
   /* Text */
   --color-text: var(--gray-100);
@@ -75,10 +87,17 @@
 
   /* Accent — the customisable axis (M8 rewrites --color-accent) */
   --color-accent: var(--matrix-bright);
-  --color-accent-hover: var(--green-300);
-  --color-accent-active: var(--green-600);
+  /* Derived from the accent, not from the green scale. These were
+     `--green-300` and `--green-600`, which meant every theme had a green
+     hover and a green active state no matter what the user picked. */
+  --color-accent-hover: color-mix(in oklab, var(--color-accent) 70%, #ffffff);
+  --color-accent-active: color-mix(in oklab, var(--color-accent) 78%, #000000);
   --color-accent-subtle: color-mix(in oklab, var(--color-accent) 12%, transparent);
-  --color-accent-text: var(--green-300);
+  /* The AA-safe companion, written by `applyTheme`. For a light accent this
+     is the accent itself; for a dark one — Crimson Night's #DC143C at 3.67:1
+     — it is the lightened derivation. Never green unless the theme is. */
+  --color-accent-legible: var(--matrix-bright);
+  --color-accent-text: var(--color-accent-legible);
 
   /* Borders */
   --color-border: var(--gray-700);
@@ -96,30 +115,46 @@
   --color-info-bg: var(--blue-900);
 
   /* Focus — never falls below 3:1 against any surface */
-  --color-focus: var(--green-300);
+  /* Follows the theme, and is guaranteed legible because it uses the
+     AA-checked companion rather than the raw accent. A focus ring must stay
+     visible; it need not stay green. */
+  --color-focus: var(--color-accent-legible);
 
   /* ---- Editor ---- */
-  --color-selection: color-mix(in oklab, var(--green-500) 22%, var(--gray-700));
+  --color-selection: color-mix(in oklab, var(--color-accent) 22%, var(--gray-700));
 
   /* Match highlighting alternates so adjacent matches stay distinguishable.
      Both are paired with an underline in the editor theme, because colour is
      never the only signal (09_DESIGN_SYSTEM.md §3.3). */
-  --color-match-a: color-mix(in oklab, var(--green-500) 22%, transparent);
+  --color-match-a: color-mix(in oklab, var(--color-accent) 22%, transparent);
   --color-match-b: color-mix(in oklab, var(--blue-500) 24%, transparent);
 
-  /* ---- Syntax palette (09_DESIGN_SYSTEM.md §3.3) ---- */
+  /* ---- Syntax palette (09_DESIGN_SYSTEM.md §3.3, §13.4) ----
+     Literal values, deliberately **not** derived from any theme scale: a
+     reader learns that quantifiers are pink and anchors are purple, and that
+     mapping must not move when the chrome changes.
+
+     **No green.** Three of these used to pull from `--green-*`, which both
+     coupled the editor to the Matrix palette and put green inside every
+     non-green theme — `|` rendered `#3ddc84` in Crimson Night, measured. They
+     are now yellow and blue.
+
+     The six regex hues sit at 31°, 65°, 191°, 208°, 265° and 317°, each above
+     7.5:1 on both surfaces. Dropping green also drops the green/red pair,
+     which is the worst of these for colour-vision deficiency — so this is a
+     small accessibility gain rather than a cost. */
   --syntax-error: var(--red-500);
   --syntax-key: #8be9fd;
-  --syntax-string: var(--green-300);
+  --syntax-string: #f1fa8c;
   --syntax-number: #ffb86c;
   --syntax-boolean: #8be9fd;
   --syntax-null: var(--gray-400);
-  --syntax-rx-meta: var(--green-500);
+  --syntax-rx-meta: #f1fa8c;
   --syntax-rx-class: #ffb86c;
   --syntax-rx-group: #8be9fd;
   --syntax-rx-quantifier: #ff7edb;
   --syntax-rx-anchor: #bd93f9;
-  --syntax-rx-escape: var(--green-300);
+  --syntax-rx-escape: #79c0ff;
 
   /* ---- Gradient ----
      Intensity multiplies alpha rather than swapping colours, so the M8
@@ -244,6 +279,33 @@
   }
 }
 
+/*
+ * The green family keeps its tinted neutrals — 09_DESIGN_SYSTEM.md §13.2
+ *
+ * Matrix and Emerald are *intentionally* green, and a faintly green near-black
+ * is part of that identity: it is why the default reads as a terminal rather
+ * than as a grey app with green text. Every other family gets the neutral ramp
+ * above, so the tint is applied where it is meant and nowhere else.
+ *
+ * One attribute, set by `applyTheme` and by the pre-paint bootstrap. No colour
+ * arithmetic at runtime, and nothing to fall back from if `color-mix` is
+ * missing.
+ */
+:root[data-theme-family='green'] {
+  --gray-950: #0a0e0c;
+  --gray-900: #101613;
+  --gray-800: #171f1b;
+  --gray-700: #1f2a24;
+  --gray-600: #2d3a33;
+  --gray-500: #4a5a52;
+  --gray-400: #7a8d83;
+  --gray-300: #9aada3;
+  --gray-100: #e8f0eb;
+
+  /* Not part of the ramp, but tinted for the same reason. */
+  --color-surface-sunken: #070a09;
+}
+
 /* High contrast. Also honours the OS setting automatically, below. */
 [data-contrast='high'] {
   --color-bg: #000;
@@ -277,9 +339,13 @@
    rather than losing colour entirely. */
 @supports not (color: color-mix(in oklab, red, blue)) {
   :root {
-    --color-accent-subtle: rgb(0 255 65 / 0.12);
-    --color-selection: #2a4a3a;
-    --color-match-a: rgb(0 255 65 / 0.22);
+    /* Neutral fallbacks: an engine without color-mix gets a theme-agnostic
+       approximation rather than the Matrix green baked into every theme. */
+    --color-accent-subtle: rgb(255 255 255 / 0.1);
+    --color-selection: #333333;
+    --color-match-a: rgb(255 255 255 / 0.18);
+    --color-accent-hover: var(--color-accent);
+    --color-accent-active: var(--color-accent);
     --color-match-b: rgb(74 158 255 / 0.24);
     --color-border-accent: rgb(0 255 65 / 0.4);
     --color-success-bg: rgb(0 255 65 / 0.1);

@@ -65,9 +65,13 @@ export function applyTheme(theme: ThemePreferences): void {
   style.setProperty('--gradient-angle', `${theme.gradient.angleDeg}deg`);
   style.setProperty('--gradient-intensity', String(theme.gradient.intensity / 100));
   style.setProperty('--color-accent', theme.accent);
+  style.setProperty('--color-accent-legible', theme.accentLegible);
   style.setProperty('--glow-intensity', String(theme.glowIntensity / 100));
   style.setProperty('--font-scale', String(theme.fontScale));
 
+  // Drives the neutral ramp. One attribute rather than nine colour writes,
+  // and the tint lives in the stylesheet where the design system is.
+  root.dataset.themeFamily = theme.family;
   root.dataset.contrast = theme.contrastMode;
   root.dataset.motion = theme.reducedMotion;
 }
@@ -163,7 +167,8 @@ export function updateGradient(patch: Partial<ThemePreferences['gradient']>): vo
     gradient,
     // The accent follows the start colour, lightened only as far as legibility
     // requires. The gradient itself always keeps the chosen colour exactly.
-    accent: lightenToPass(gradient.from),
+    accent: gradient.from,
+    accentLegible: lightenToPass(gradient.from),
     preset: presetIdFor(gradient),
   });
 }

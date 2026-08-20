@@ -141,6 +141,8 @@ describe('readTheme — valid input', () => {
     expect(Object.keys(theme).sort()).toEqual(
       [
         'accent',
+        'accentLegible',
+        'family',
         'contrastMode',
         'fontScale',
         'glowIntensity',
@@ -386,10 +388,13 @@ describe('presets', () => {
     expect(theme.gradient.from).toBe('#DC143C');
     expect(verdictFor(theme.gradient.from)).not.toBe('pass');
 
-    // …and the accent, which carries the focus ring, is lightened until it
-    // does pass.
-    expect(theme.accent).not.toBe('#DC143C');
-    expect(verdictFor(theme.accent)).toBe('pass');
+    // The accent stays the specified colour — it is the dominant one, and the
+    // theme must read as black and crimson rather than grey and pink.
+    expect(theme.accent).toBe('#DC143C');
+
+    // Only the companion that carries text and the focus ring is lightened.
+    expect(theme.accentLegible).not.toBe('#DC143C');
+    expect(verdictFor(theme.accentLegible)).toBe('pass');
   });
 
   it('interpolates the middle stops for a two-colour preset', () => {
@@ -398,12 +403,12 @@ describe('presets', () => {
     expect(theme.gradient.mid2).toBe(mixHex('#DC143C', '#343434', 2 / 3));
   });
 
-  it('gives every preset an accent that is readable on the surface', () => {
+  it('gives every preset a legible accent companion', () => {
     // 09_DESIGN_SYSTEM.md §4.5. The user may choose a failing colour; a
-    // shipped preset may not.
+    // shipped preset may not leave text unreadable.
     for (const preset of PRESETS) {
       const theme = themeFromPreset(preset);
-      expect(verdictFor(theme.accent), `${preset.id} ${theme.accent}`).toBe('pass');
+      expect(verdictFor(theme.accentLegible), `${preset.id} ${theme.accentLegible}`).toBe('pass');
     }
   });
 
@@ -453,17 +458,30 @@ describe('contrast', () => {
     expect(verdictFor(fixed)).toBe('pass');
   });
 
-  it('judges against the real surface token, not an approximation of it', () => {
+  it('judges against the stricter of the two real surfaces', () => {
     // Read out of the stylesheet rather than restated here: the guard reports
     // a ratio with confidence, so the background it measures against has to be
-    // the one the colour is actually shown on.
+    // one the colour is actually shown on.
+    //
+    // Since the M10 family split there are two `--gray-900` declarations — the
+    // neutral ramp's, and the green family's tinted override. The guard must
+    // use whichever yields the *lower* ratio, or it would pass a colour that
+    // is unreadable in the other family.
     const tokens = readFileSync('src/styles/tokens.css', 'utf8');
-    const gray900 = /--gray-900:\s*(#[0-9a-fA-F]{6})/.exec(tokens)?.[1];
-    const surface = /--color-surface:\s*var\(--gray-900\)/.test(tokens);
+    const surfaces = [...tokens.matchAll(/--gray-900:\s*(#[0-9a-fA-F]{6})/g)].map((match) =>
+      (match[1] ?? '').toLowerCase(),
+    );
 
     expect(isHexColor(SURFACE_HEX)).toBe(true);
-    expect(surface).toBe(true);
-    expect(SURFACE_HEX.toLowerCase()).toBe(gray900?.toLowerCase());
+    expect(/--color-surface:\s*var\(--gray-900\)/.test(tokens)).toBe(true);
+    expect(surfaces).toHaveLength(2);
+    expect(surfaces).toContain(SURFACE_HEX.toLowerCase());
+
+    // A lighter background gives a lower ratio against light text.
+    const strictest = surfaces.reduce((worst, candidate) =>
+      contrastRatio('#ffffff', candidate) < contrastRatio('#ffffff', worst) ? candidate : worst,
+    );
+    expect(SURFACE_HEX.toLowerCase()).toBe(strictest);
   });
 });
 
@@ -514,12 +532,12 @@ describe('derived state', () => {
     expect(isDefaultTheme(themeFromPreset(PRESETS[2]!))).toBe(false);
   });
 
-  it('derives the accent from the gradient start, lightened only if it must be', () => {
+  it('keeps the accent exact and lightens only the companion', () => {
     for (const preset of PRESETS) {
       const theme = themeFromPreset(preset);
-      expect(theme.accent).toBe(lightenToPass(preset.from));
-      // Whatever happens to the accent, the gradient keeps the exact colour.
+      expect(theme.accent).toBe(preset.from);
       expect(theme.gradient.from).toBe(preset.from);
+      expect(theme.accentLegible).toBe(lightenToPass(preset.from));
     }
   });
 

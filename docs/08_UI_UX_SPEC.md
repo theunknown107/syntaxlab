@@ -407,10 +407,11 @@ with the browser profile can read it, and that the browser may clear it.
 ```
 ┌─ Appearance ─────────────────────── ✕ ─┐
 │ Presets                                 │
-│ [Matrix][Emerald][Cyan][Amber][Mono]    │
+│ [Matrix][Emerald][Cyan]                 │
+│ [Amber][Crimson Night][Mono]            │
 ├─────────────────────────────────────────┤
 │ Gradient                                │
-│ From  [■ #00ff88]   To  [■ #003d1f]     │
+│ From  [■ #00FF41]   To  [■ #0D0208]     │
 │ Angle    ●────────── 135°               │
 │ Intensity ────●───── 40%                │
 ├─────────────────────────────────────────┤

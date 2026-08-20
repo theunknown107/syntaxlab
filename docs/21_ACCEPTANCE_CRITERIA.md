@@ -129,7 +129,7 @@
 | # | Criterion | Verification |
 |---|---|---|
 | T-1 | The default theme matches `09_DESIGN_SYSTEM.md` — **the four specified Matrix colours** | ✅ **M10** — the four values asserted literally in unit tests *and* against the rendered custom properties in E2E, plus visual review of the built interface |
-| T-2 | All **six** presets apply correctly, including Crimson Night | ✅ **M10** — E2E; Crimson Night's two colours asserted exactly, and its derived accent asserted to differ from its gradient |
+| T-2 | All **six** presets apply correctly, including Crimson Night | ✅ **M10** — E2E; Crimson Night's two colours asserted exactly. Corrected in the M10 theme pass: `--color-accent` is now the specified colour *exactly* and only `--color-accent-legible` is lightened, so the theme stays crimson rather than drifting pink |
 | T-3 | Gradient from/to/angle/intensity apply live | ✅ **M8** — E2E; from, to, direction and intensity each assert the resolved custom property |
 | T-4 | Accent, glow, contrast, motion, and font scale apply live | ✅ **M8** — accent, glow, contrast, motion and font scale all applied and unit-tested. Accent is derived from the primary colour rather than separately chosen — `09_DESIGN_SYSTEM.md` §11.5 |
 | T-5 | **Preferences persist across reload with no flash of default theme** | ✅ **M8** — E2E reads `--gradient-from` at `readyState === "interactive"`, before React mounts, and finds the stored value |
@@ -208,7 +208,7 @@
 | A-8 | The first-run notice is announced once and is keyboard-dismissible | Manual |
 | A-9 | Every default colour pair meets AA | ✅ **M10** — computed for all six presets against tokens read out of `tokens.css`; Crimson Night needed a derived companion and got one |
 | A-10 | No status is conveyed by colour alone | Greyscale review |
-| A-11 | Syntax colours remain distinguishable under CVD simulation | Manual |
+| A-11 | Syntax colours remain distinguishable under CVD simulation | Manual — **improved** by the M10 theme pass: removing green from the syntax palette eliminated the green/red pair, the hardest for CVD. The six regex hues now sit at 31°, 65°, 191°, 208°, 265°, 317°, each above 7.5:1 on both surfaces. Simulator verification is still manual and still outstanding |
 | A-12 | Usable at 200% zoom with no horizontal scrolling | E16 |
 | A-13 | Usable at 320 px width | E15 |
 | A-14 | `prefers-reduced-motion` disables all animation | ✅ **M10** — every transition and animation collapses below 0.01 s under `prefers-reduced-motion` |
