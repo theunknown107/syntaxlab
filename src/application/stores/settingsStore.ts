@@ -21,6 +21,24 @@ export interface AppSettings {
   /** Whether the first-run explanation has been shown and acknowledged. */
   readonly hasSeenHistoryNotice: boolean;
   readonly historySort: 'created' | 'opened';
+  /**
+   * Width of the left workspace column, as a percentage — 08_UI_UX_SPEC.md §5
+   *
+   * Clamped rather than free: a divider a user can drag until one side
+   * disappears is a way to lose the interface, not a preference.
+   */
+  readonly splitPercent: number;
+}
+
+/** The narrowest either column may be dragged to. */
+export const SPLIT_MIN = 25;
+export const SPLIT_MAX = 75;
+export const SPLIT_DEFAULT = 45;
+
+/** Rejects anything that is not a usable percentage, and clamps the rest. */
+export function readSplitPercent(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return SPLIT_DEFAULT;
+  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, Math.round(value)));
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -29,6 +47,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   historyEnabled: true,
   hasSeenHistoryNotice: false,
   historySort: 'created',
+  splitPercent: SPLIT_DEFAULT,
 };
 
 function readStored(): AppSettings {
@@ -52,6 +71,7 @@ function readStored(): AppSettings {
       historyEnabled: record.historyEnabled !== false,
       hasSeenHistoryNotice: record.hasSeenHistoryNotice === true,
       historySort: record.historySort === 'opened' ? 'opened' : 'created',
+      splitPercent: readSplitPercent(record.splitPercent),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -82,6 +102,7 @@ export function updateSettings(patch: Partial<AppSettings>): void {
       historyEnabled: patch.historyEnabled ?? previous.historyEnabled,
       hasSeenHistoryNotice: patch.hasSeenHistoryNotice ?? previous.hasSeenHistoryNotice,
       historySort: patch.historySort ?? previous.historySort,
+      splitPercent: readSplitPercent(patch.splitPercent ?? previous.splitPercent),
     };
     persist(next);
     return next;

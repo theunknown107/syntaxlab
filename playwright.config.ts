@@ -46,6 +46,16 @@ export default defineConfig({
       use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
     },
     {
+      name: 'splitter-chromium',
+      testMatch: /splitter\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'splitter-firefox',
+      testMatch: /splitter\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
+    },
+    {
       name: 'json-chromium',
       testMatch: /json\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },

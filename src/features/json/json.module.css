@@ -8,7 +8,11 @@
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+  /* The left column takes the stored percentage; the splitter is a hairline
+     between them and the right column takes what is left. `minmax` with a real
+     floor is what stops a drag from closing a panel even if the stored value
+     were somehow out of range (08_UI_UX_SPEC.md §5). */
+  grid-template-columns: minmax(14rem, var(--split, 45%)) auto minmax(14rem, 1fr);
   gap: var(--panel-gap);
   align-items: start;
   width: 100%;

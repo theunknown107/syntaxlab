@@ -24,6 +24,7 @@ import { CodeEditor, type EditorSelection } from '@/components/editor/CodeEditor
 import { Button } from '@/components/primitives/Button';
 import { CopyButton } from '@/components/primitives/CopyButton';
 import { Panel } from '@/components/primitives/Panel';
+import { Splitter } from '@/components/primitives/Splitter';
 import { TreeView } from '@/components/tree/TreeView';
 import { EXAMPLES } from './examples';
 import { ExplanationView, type SpanLinkHandlers } from './ExplanationView';
@@ -210,6 +211,8 @@ export function RegexWorkspace(): React.JSX.Element {
           </Panel>
         </div>
       </ErrorBoundary>
+
+      <Splitter label="Resize the pattern and explanation panels" />
 
       <ErrorBoundary scope="analysis">
         <div className={styles.column}>

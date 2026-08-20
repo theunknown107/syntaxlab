@@ -16,6 +16,7 @@ import { useStore } from '@/components/hooks/useStore';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CodeEditor, type EditorRange, type EditorSelection } from '@/components/editor/CodeEditor';
 import { Button } from '@/components/primitives/Button';
+import { Splitter } from '@/components/primitives/Splitter';
 import { CopyButton } from '@/components/primitives/CopyButton';
 import { Panel } from '@/components/primitives/Panel';
 import {
@@ -162,6 +163,8 @@ export function JsonWorkspace(): React.JSX.Element {
           onGoTo={goTo}
         />
       </ErrorBoundary>
+
+      <Splitter label="Resize the document and structure panels" />
 
       <ErrorBoundary scope="analysis">
         <TreeColumn

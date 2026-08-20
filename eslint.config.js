@@ -83,6 +83,16 @@ export default tseslint.config(
       ...jsxA11y.flatConfigs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
 
+      /* ---- The window-splitter pattern (08_UI_UX_SPEC.md §5) ----
+         `jsx-a11y` classifies `separator` as non-interactive, which holds only
+         for the decorative kind. ARIA 1.2 defines a **focusable** separator as
+         a widget — the window splitter — required to be tabbable and to carry
+         `aria-valuenow`/`min`/`max`. The tabindex rule takes a role allowlist,
+         so it is told about it here. Its sibling rule has no such option and
+         is silenced at the one element instead — narrowing the handler list
+         globally would stop it catching real cases elsewhere. */
+      'jsx-a11y/no-noninteractive-tabindex': ['error', { tags: [], roles: ['separator'] }],
+
       /* ---- Security: banned APIs (18_CODING_STANDARDS.md §6) ---- */
       'no-eval': 'error',
       'no-implied-eval': 'error',

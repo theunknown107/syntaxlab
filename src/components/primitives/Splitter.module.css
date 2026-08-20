@@ -1,0 +1,72 @@
+/**
+ * Workspace divider — 08_UI_UX_SPEC.md §5, 09_DESIGN_SYSTEM.md §7
+ *
+ * Deliberately quiet: a hairline that gains a grip on hover and focus. A
+ * permanently visible handle would be a decoration competing with the content
+ * on every screen, for an affordance most users touch once.
+ */
+
+.splitter {
+  --splitter-hit: 0.75rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--splitter-hit);
+  height: 100%;
+  min-height: 8rem;
+  margin-inline: calc(var(--panel-gap) / -2 - var(--splitter-hit) / 2);
+  cursor: col-resize;
+  background: none;
+  border: none;
+  /* The gap already provides the visual separation; this only needs to be
+     grabbable. Widening the hit area rather than the line keeps a 12 px target
+     without drawing a 12 px band. */
+  touch-action: none;
+}
+
+.grip {
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  border-radius: 999px;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.splitter:hover .grip,
+.splitter:focus-visible .grip {
+  background: var(--color-border-accent);
+}
+
+.splitter:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* The layout stacks below this width, so there is nothing to divide. Removing
+   it from the box tree removes it from the accessibility tree too, which is
+   the point: a separator with no two things to separate is noise to a screen
+   reader. */
+@media (width <= 1023px) {
+  .splitter {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grip {
+    transition: none;
+  }
+}
+
+/* With a forced palette the hairline is dropped like every other themed
+   colour, so the grip is drawn from a system colour instead — otherwise the
+   only draggable control on the page becomes invisible. */
+@media (forced-colors: active) {
+  .splitter:hover .grip,
+  .splitter:focus-visible .grip {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+}
