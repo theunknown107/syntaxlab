@@ -197,5 +197,20 @@ export function CodeEditor({
     editor.focus();
   }, [selection]);
 
-  return <div ref={host} className={styles.editor} />;
+  // The same minimum is declared on the host as well as inside CM6's theme.
+  // The theme only applies once the view has mounted, so until then the box is
+  // two borders tall and everything below it moves when the editor appears —
+  // measured as the larger half of a 0.026 CLS on a warm load
+  // (12_PERFORMANCE.md §11.5).
+  return (
+    <div
+      ref={host}
+      className={styles.editor}
+      style={
+        minHeight === undefined
+          ? undefined
+          : ({ '--editor-min-height': minHeight } as React.CSSProperties)
+      }
+    />
+  );
 }

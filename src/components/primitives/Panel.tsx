@@ -7,6 +7,12 @@ import styles from './primitives.module.css';
  *
  * Composition over configuration: it takes children rather than fifteen
  * booleans describing what to render inside.
+ *
+ * The title is an `h2` because a panel *is* a top-level section of the
+ * workspace, directly under the page's single `h1`. It was an `h3` until M11,
+ * which put a level-2 gap in the outline — Lighthouse's `heading-order` audit
+ * found it, and a screen-reader user navigating by heading would have hit the
+ * same jump. Panels are never nested, so one level is the whole story.
  */
 export interface PanelProps {
   readonly title: string;
@@ -37,7 +43,7 @@ export function Panel({
           // A collapsible panel is still a section of the page, and losing its
           // heading would take it out of the document outline a screen-reader
           // user navigates by (08_UI_UX_SPEC.md §12.1).
-          <h3 className={styles.panelHeading}>
+          <h2 className={styles.panelHeading}>
             <button
               type="button"
               id={`${bodyId}-title`}
@@ -54,12 +60,12 @@ export function Panel({
               <span className={styles.panelTitle}>{title}</span>
               {meta !== undefined && <span className={styles.panelMeta}>{meta}</span>}
             </button>
-          </h3>
+          </h2>
         ) : (
-          <h3 id={`${bodyId}-title`} className={styles.panelTitle}>
+          <h2 id={`${bodyId}-title`} className={styles.panelTitle}>
             {title}
             {meta !== undefined && <span className={styles.panelMeta}>{meta}</span>}
-          </h3>
+          </h2>
         )}
         {actions !== undefined && <div className={styles.panelActions}>{actions}</div>}
       </div>

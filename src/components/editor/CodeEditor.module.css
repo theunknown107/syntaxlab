@@ -3,6 +3,10 @@
  * CodeMirror's own DOM, styled by `editorTheme.ts` because CM6 owns it.
  */
 .editor {
+  /* Mirrors `editorTheme`'s default. Declared here too so the space exists
+     before CodeMirror mounts; otherwise the host is two borders tall on first
+     paint and the rest of the column jumps when the view appears. */
+  min-height: var(--editor-min-height, 2.5rem);
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
