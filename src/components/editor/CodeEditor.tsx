@@ -201,7 +201,7 @@ export function CodeEditor({
   // The theme only applies once the view has mounted, so until then the box is
   // two borders tall and everything below it moves when the editor appears —
   // measured as the larger half of a 0.026 CLS on a warm load
-  // (12_PERFORMANCE.md §11.5).
+  // (12_PERFORMANCE.md §12.8).
   return (
     <div
       ref={host}

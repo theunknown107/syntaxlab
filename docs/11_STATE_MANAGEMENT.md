@@ -367,3 +367,30 @@ rather than carrying the previous one forward. A theme that reached `custom`
 by one edit and was edited back to exactly Amber **is** Amber; remembering
 `custom` would leave the drawer marking no preset selected while displaying
 one precisely. The label describes the state, not the route to it.
+
+---
+
+## M11 — the split position
+
+One field, `splitPercent`, added to `settingsStore`. It follows the rules
+already established rather than inventing any:
+
+- **localStorage, not IndexedDB.** It has to be readable synchronously during
+  the first render, like every other setting.
+- **Validated on read.** `readSplitPercent` rejects anything that is not a
+  finite number and clamps the rest to 25–75. A corrupt entry gives 45, not a
+  broken layout — asserted by an E2E test that plants a string in storage.
+- **Written once per gesture.** A drag updates a CSS custom property directly
+  and only writes the store on `pointerup`. Keyboard adjustments are discrete,
+  so they persist immediately.
+
+**It is deliberately not React state.** The value drives
+`grid-template-columns` through a custom property on the grid element, the same
+mechanism `applyTheme` uses. Holding it in state would reconcile both panels —
+including a 200-row match table — on every `pointermove`. The `Splitter`
+component seeds itself from the store once and owns the live value during a
+drag; nothing else subscribes.
+
+This is the second place in the codebase where the answer to "where does this
+state live?" is *a CSS custom property*, and for the same reason both times:
+the value changes at input frequency and only the layout cares.

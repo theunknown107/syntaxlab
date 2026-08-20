@@ -40,7 +40,7 @@ import {
 import type { KeyBinding } from '@codemirror/view';
 
 /**
- * CodeMirror's `standardKeymap`, rebuilt binding for binding — 12_PERFORMANCE.md §10.13
+ * CodeMirror's `standardKeymap`, rebuilt binding for binding — 12_PERFORMANCE.md §12.2
  *
  * **Why this file exists.** `standardKeymap` binds Enter to
  * `insertNewlineAndIndent`, which reads the syntax tree to decide the new

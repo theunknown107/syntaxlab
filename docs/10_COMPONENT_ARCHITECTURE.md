@@ -533,3 +533,39 @@ The preset swatch. It has to show a colour that is deliberately *not* the
 active theme, so it cannot come from a token. The value is a validated hex
 from our own preset table and never user input, and the swatch is
 `aria-hidden` with the preset name carrying the meaning.
+
+---
+
+## M11 — the splitter, and a heading level
+
+### `components/primitives/Splitter.tsx`
+
+A new primitive, used by both workspaces. It sits between the two `.column`
+elements as a direct grid child and writes its position to a `--split` custom
+property on its own parent — which is why it takes no callback and no value
+prop: there is nothing for a parent to own.
+
+That is unusual enough to state plainly: **the component reaches out to
+`parentElement`.** The alternative is a value prop plus a change handler
+threaded through two workspaces, and a re-render of both panels on every
+pointer move. The coupling is one line, it is documented at the call site, and
+the grid it writes to is the element it is a child of.
+
+Both workspaces pass only a label, because the two panels they divide have
+different names.
+
+### `Panel` renders `h2`, not `h3`
+
+Panels are the top-level sections of the workspace, directly under the page's
+single `h1`. They were `h3`, which left a level-2 gap in the outline that
+Lighthouse's `heading-order` audit found and a screen-reader user navigating by
+heading would have hit. Panels are never nested, so one level is the whole
+story.
+
+### `MatchResults` renders a window, not a list
+
+`MatchTable` holds `shown` state and renders `result.matches.slice(0, shown)`,
+with a "Show 200 more" control below. The window resets when `result` changes —
+holding position at row 400 of a previous result would be both wrong and slow.
+It is local state rather than store state because nothing outside the table
+cares how far the user has scrolled through it.

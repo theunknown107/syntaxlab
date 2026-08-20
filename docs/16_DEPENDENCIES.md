@@ -430,3 +430,28 @@ packages, all build-time).
 Nothing else was added. The icons are rendered from an authored SVG by the
 Chromium that Playwright already installs, rather than adding an image
 pipeline for three files that change roughly never.
+
+---
+
+## M11 — nothing added
+
+M11 is a performance milestone, which is exactly where a dependency usually
+gets added. None was.
+
+| Considered | Decision |
+|---|---|
+| A splitter/resizable-panel package | **Not used.** A separator is a role, a value, a pointer handler and five key bindings; the layout engine is CSS Grid, which was already there. `src/components/primitives/Splitter.tsx` is the whole thing. |
+| A virtualisation package for the match list | **Not used**, and would not have fitted — match rows are not a uniform height. Progressive rendering with an explicit control is 15 lines. |
+| Preact, in place of React | **Not evaluated further.** The M11 brief rules it out without overwhelming evidence, and React rendering was measured as not being the constraint. |
+| Lighthouse | **Run through `npx`, not installed.** It is a one-off audit tool, not part of the build, and adding 165 transitive packages to `devDependencies` for a number that is recorded in a document would be the wrong trade. |
+| `rollup-plugin-visualizer` | Already a dev dependency since M1. `scripts/analyze-bundle.mjs` reads the data it embeds; no new package. |
+
+**One dependency was made smaller rather than removed.** `@codemirror/commands`
+is still used for `history`, `historyKeymap` and the individual movement and
+deletion commands, but no longer for `standardKeymap` — whose Enter binding was
+the only path to `@codemirror/language`, `@lezer/highlight` and
+`@lezer/common`. Those three are now largely tree-shaken away; see
+`12_PERFORMANCE.md` §12.2.
+
+**Totals after M11: 5 runtime, 28 dev — unchanged since M9.** `npm audit`
+reports 0 vulnerabilities at `--audit-level=low`.

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The editor keymap — 12_PERFORMANCE.md §10.13
+ * The editor keymap — 12_PERFORMANCE.md §12.2
  *
  * SyntaxLab rebuilds CodeMirror's `standardKeymap` locally rather than
  * importing it, because the single `Enter` binding in the upstream array

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 /**
- * Bundle composition by package — 12_PERFORMANCE.md §10
+ * Bundle composition by package — 12_PERFORMANCE.md §12.2
  *
  *   npm run analyze && node scripts/analyze-bundle.mjs
  *

@@ -402,3 +402,35 @@ time. Previously this was a convention backed by review.
 | CVD simulation (A-11) | Visual review only. |
 | `regex-mobile › survives two timeouts` | Open, pre-existing, classified — a 15 s in-test budget on an emulated device, not a product defect. The architecture is green on 18 worker-lifecycle tests across three engines. |
 | ReDoS | Not prevented and never claimed to be. Bounded and killed, off the main thread. |
+
+---
+
+## M11 — one risk reduced, two accepted
+
+**No new risk category.** M11 removed code and rendered less of it; the surface
+it touched was already covered by the worker, CSP and storage boundaries, none
+of which changed.
+
+| Reduced | |
+|---|---|
+| **R-04, bundle budget** | Initial JS 175.05 → 166.16 KB, **inside the 170 KB target for the first time since CodeMirror arrived at M4**, and 33.8 KB under the hard limit. The headroom that had been shrinking every milestone since M8 is restored. |
+
+| Accepted, with reasoning | |
+|---|---|
+| **The keymap is maintained locally** | `src/components/editor/standardBindings.ts` is a copy of upstream's `standardKeymap` with one binding changed. If CodeMirror adds or fixes a binding, this file will not get it. Accepted because the array has been stable for years, every entry still points at upstream's own command function, and the file says in its own header what to do if a language mode is ever added: delete it and go back to `standardKeymap`. |
+| **The splitter reaches for `parentElement`** | A component writing to its own parent's style is unusual coupling. Accepted because the alternative — a value prop and a change handler threaded through two workspaces — reconciles both panels on every pointer move, and the coupling is one documented line. |
+
+| Not a risk, because | |
+|---|---|
+| No dependency was added | A splitter package, a virtualiser and Lighthouse were each considered and each declined. `16_DEPENDENCIES.md` records why. |
+| The CSP, workers and storage boundaries are untouched | Verified by diff across every M11 commit, plus a fresh execution-sink scan: no `innerHTML`, no `dangerouslySetInnerHTML`, no `eval`, no `new Function`, and **no dynamic `import()`** — the last being the one an optimisation milestone is most likely to introduce. |
+| The progressive match list cannot hide a result | The count is still the true count, the control states how many of how many are shown, and every returned match is reachable. The list is not filtered, only deferred. |
+| The splitter cannot be used to lose the interface | Clamped 25–75 in the store, with a `minmax(14rem, …)` floor in the grid as a second guard. Asserted by dragging far past both viewport edges. |
+
+### Known issues carried forward
+
+| | |
+|---|---|
+| `regex-mobile › survives two timeouts` | **Now passing, but marginal.** Failing since M8 on a hard-coded 15 s in-test assertion budget on an emulated Pixel 5. After M11 it passes 3/3 in isolation and in the full matrix, with no change to the test or the worker architecture — the milestone most likely removed enough work for the run to fit inside the budget. Recorded as a marginal test that now passes, not as a proven repair. |
+| Scattered E2E flake under parallel load | Unchanged since M7: a different test each full-matrix run, always passing in isolation. Two instances during this milestone (`workers-firefox`, then `json-mobile`), each verified alone and classified. Not concealed with a retry. |
+| Real-device testing | **Not run at M11** — no physical device. Emulated viewports are not the same thing and are not claimed to be. Carried to M12. |

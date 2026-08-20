@@ -130,7 +130,7 @@ function truncationNotice(result: RegexExecResult): string | null {
 }
 
 /**
- * How many rows are put in the document at once — 12_PERFORMANCE.md §11.3
+ * How many rows are put in the document at once — 12_PERFORMANCE.md §12.3
  *
  * A pattern like `[\w.]+@[\w.]+` over a 200 KB subject returns the full
  * 10 000 matches the worker is allowed to send. Rendering all of them built

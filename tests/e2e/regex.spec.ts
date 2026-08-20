@@ -390,7 +390,7 @@ test('renders a large match list progressively rather than all at once', async (
   await expect(matches.getByText(/4,000 matches/)).toBeVisible({ timeout: 15_000 });
 
   // The count is 4 000; the document holds 200. Rendering all of them cost
-  // 130 000 nodes and a second of layout — 12_PERFORMANCE.md §11.3.
+  // 130 000 nodes and a second of layout — 12_PERFORMANCE.md §12.3.
   await expect(page.locator('tbody tr')).toHaveCount(200);
 
   const showMore = page.getByRole('button', { name: /Show 200 more/ });

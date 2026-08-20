@@ -144,7 +144,7 @@ Debounce is on the **trailing** edge with no leading call, and it is cancelled o
 |---|---|
 | JSON tree | ✅ above 500 visible rows |
 | Regex AST tree | ❌ — realistic patterns produce tens of nodes |
-| Match table | ✅ above 200 rows |
+| Match table | ✅ above 200 rows — **built at M11**, as progressive rendering rather than windowing; rows are not a uniform height (§12.3) |
 | Token table | ❌ — bounded by pattern length |
 | History list | ❌ — paginated at 50 |
 | Next runs | ❌ — 10 rows |
@@ -831,3 +831,339 @@ between persisted data and `setProperty` — was never needed. The two audit
 scripts run at development time and ship nothing.
 
 Still under the 200 KB hard budget with 25 KB to spare.
+
+---
+
+## 12. M11 — measure, identify, fix, measure again
+
+M11 is the refinement milestone. Nothing here was changed on a hunch: every
+item below started as a number, and the ones that turned out not to be problems
+are recorded too, because "we looked and it was fine" is the more useful half
+of a performance report.
+
+### 12.1 The baseline
+
+Production build, production headers, Chromium, median of five, before any M11
+change. `node scripts/measure-m11.mjs`.
+
+| | median | range |
+|---|---|---|
+| **Startup** — cold FCP / LCP / domInteractive | 117 / 117 / 50 ms | |
+| Startup — warm (service worker) | 134 / 134 / 46 ms | |
+| Startup — offline (network cut) | 117 / 117 / 49 ms | |
+| Regex analysis — short | 217 ms | 203–235 |
+| Regex analysis — medium, named groups | 222 ms | 205–232 |
+| Regex analysis — large, 40 alternatives | 272 ms | 256–279 |
+| Regex analysis — malformed | 216 ms | 205–220 |
+| Regex analysis — 20-deep nesting | 232 ms | 223–236 |
+| **Regex execution — 64 KB subject** | **1110 ms** | 1047–1130 |
+| JSON — 98 KB | 75 ms | 66–83 |
+| JSON — 488 KB | 129 ms | 119–132 |
+| JSON — 977 KB | 194 ms | 141–206 |
+| JSON tree — expand all (500 KB) | 87 ms | 68–285 |
+| JSON — format (500 KB) | 76 ms | 59–132 |
+| History drawer open | 31 ms | 26–111 |
+| Theme switch | 43 ms | 28–57 |
+
+Build: 3.2 s for `vite build`, 7.6 s including `tsc --noEmit`.
+
+**One outlier.** Everything is under 300 ms except regex execution, which is
+four times the next slowest thing on the list. That is where M11 went.
+
+### 12.2 Bundle composition
+
+`npm run analyze && node scripts/analyze-bundle.mjs` reports the treemap as
+gzipped bytes per package, which is the shape a budget decision needs.
+
+| Group | gz | Share |
+|---|---|---|
+| CodeMirror (view, state, language, commands, Lezer, style-mod) | 182.1 KB | **60%** |
+| React (react, react-dom, scheduler) | 48.2 KB | 16% |
+| Application code | ~74 KB | 24% |
+
+CodeMirror dominates, and inside it one import chain was pure waste.
+
+```mermaid
+flowchart LR
+    APP["CodeEditor.tsx"]
+    CMD["@codemirror/commands<br/>9.15 KB"]
+    KEY["standardKeymap"]
+    ENTER["Enter →<br/>insertNewlineAndIndent"]
+    LANG["@codemirror/language<br/>9.50 KB"]
+    HL["@lezer/highlight<br/>6.42 KB"]
+    COM["@lezer/common<br/>15.11 KB"]
+
+    APP -->|"history, historyKeymap"| CMD
+    APP -->|"standardKeymap"| KEY
+    KEY --> ENTER
+    ENTER -->|"getIndentation, syntaxTree"| LANG
+    LANG --> HL --> COM
+
+    classDef waste stroke-width:3px,stroke-dasharray:4 3
+    class ENTER,LANG,HL,COM waste
+```
+
+**One keybinding reached the entire Lezer stack.** SyntaxLab configures no
+language at all — no parser, no `LanguageSupport`, no syntax tree; regex and
+JSON are tokenised by the domain layer in a worker and painted through
+`Decoration`. With no indent service to consult, `getIndentation` already falls
+back to copying the current line's leading whitespace, which is exactly what
+the exported `insertNewlineKeepIndent` does directly.
+
+`src/components/editor/standardBindings.ts` rebuilds the keymap binding for
+binding from the individual command exports, with Enter pointed at the
+language-free newline. Everything else is still upstream's function: bidi, word
+boundaries and grapheme clusters are the last things worth reimplementing.
+
+| | Initial JS |
+|---|---|
+| M10 baseline | 175.05 KB |
+| Ceiling — keymap dropped entirely | 160.56 KB |
+| **Shipped — keymap rebuilt, all bindings kept** | **165.34 KB** |
+
+**−9.71 KB, and under the 170 KB target for the first time since M4.** The
+4.78 KB difference from the ceiling is the movement commands, which are kept.
+
+**Where it stops.** 10.91 KB of the stack remains, held by `deleteCharBackward`
+— it uses `getIndentUnit` so Backspace deletes back to a tab stop inside
+indentation. Recovering the last 6.42 KB would mean reimplementing
+grapheme-aware deletion, which is not a trade worth making.
+
+**One behavioural loss.** With the cursor between an opening and closing
+bracket, upstream inserts two breaks and leaves the cursor on an indented blank
+line. The editor has no bracket auto-closing, so the cursor only lands there if
+the user typed both, and the JSON workspace has a Format action. Pinned by four
+keymap tests on Chromium and Firefox.
+
+### 12.3 The regex execution outlier
+
+1110 ms, against 300 ms for everything else. Decomposed rather than guessed at.
+
+```mermaid
+flowchart TD
+    T["Keystroke or paste"]
+    D{"debounceForSize<br/>(subject length)"}
+    W["Execution worker<br/>scan + clone back"]
+    V["validate-on-read<br/>per match"]
+    R["React render<br/>one row per match"]
+    P["Layout + paint"]
+
+    T --> D -->|"600 ms above 50 KB"| W --> V --> R --> P
+
+    classDef cost stroke-width:3px
+    class D,R cost
+```
+
+Two probes separated the terms. The same 200 KB subject with a pattern
+matching once, then with one matching 12 800 times:
+
+| | total | work behind the debounce |
+|---|---|---|
+| 1 match | 702 ms | ~102 ms |
+| 12 800 matches | 1720 ms | ~1120 ms |
+
+**A full second was the result volume alone.** A main-thread CPU profile
+confirmed it: 45% idle, 33% V8 internals, and the application's own JavaScript
+barely registering. The DOM was the cost — 10 000 matches became **130 002
+nodes**.
+
+Two cheaper hypotheses were tested first and both rejected:
+
+| | wall | layout |
+|---|---|---|
+| auto table layout (as shipped) | 1555 ms | 351 ms |
+| `table-layout: fixed` | 1519 ms | 278 ms |
+| `content-visibility: auto` on rows | 1591 ms | 330 ms |
+
+Neither moves wall time. Auto layout is not the problem, and Chromium ignores
+containment inside a table. The expense is *creating* the nodes, so the fix is
+to not create them.
+
+The match table now renders 200 rows with a "Show 200 more" control that states
+how far through the list you are. Every returned match stays reachable. A new
+result resets the window.
+
+| 200 KB subject, 12 800 matches | before | after |
+|---|---|---|
+| wall | 1629 ms | **755 ms** |
+| layout | 349 ms | **15 ms** |
+| style recalculation | 162 ms | **8 ms** |
+| script | 149 ms | **27 ms** |
+| DOM nodes | 130 002 | **2 684** |
+| heap | +36 MB | **+10 MB** |
+
+Work behind the debounce: ~1029 ms to ~155 ms.
+
+**A virtualiser was not used and would not have fitted.** Match rows are not a
+uniform height — a matched value runs to 2 000 characters and a capture list is
+as long as the pattern has groups — so the fixed-row windowing the JSON tree
+uses does not transfer. §3.3 has specified "match table: virtualised above 200
+rows" since M1; this is that requirement met, by the means the data allows.
+
+### 12.4 The debounce, verified rather than changed
+
+With the render cost gone, the debounce is 600 of the remaining 755 ms — the
+dominant term by a wide margin. It was left alone deliberately.
+
+Measured work behind it is 67 ms at 1 KB and ~155 ms at 200 KB with 12 800
+matches. A 600 ms trailing debounce on the largest tier is roughly four times
+the work it is coalescing, which is the right order: the tier exists so that
+typing a pattern against a large subject does not queue a scan per keystroke,
+and an execution already in flight cannot be interrupted — only superseded
+after the fact. Shortening it would trade CPU on a low-powered device, which
+this milestone did not measure, for 200 ms on an action taken once.
+
+The size-aware tiers §3.2 specifies are implemented and behaving as specified.
+
+### 12.5 Large JSON, measured and left alone
+
+§11 of the M11 brief asks for a hard look at large documents. It found nothing
+to fix.
+
+| Document | keystroke latency | tree rows in the DOM | heap |
+|---|---|---|---|
+| 98 KB | 5 ms (max 10) | 42 | 10 MB |
+| 488 KB | 7 ms (max 9) | 42 | 35 MB |
+| 977 KB | 9 ms (max 10) | 42 | 64 MB |
+
+Typing stays inside a single frame at every size, and **the row count in the
+document does not grow with the document** — the windowing in `JsonTree.tsx` is
+doing exactly what it was built to do.
+
+| Operation, 1 MB | |
+|---|---|
+| search | 19 ms median |
+| collapse all | 114 ms, DOM drops to 1 row |
+| minify | 79 ms |
+| format | 76 ms |
+
+Search does not scan the DOM, collapsed branches really are cheap, and analysis
+remains off the main thread. No change was warranted and none was made.
+
+### 12.6 React rendering, audited
+
+Commit counts were taken on the production build by installing a minimal
+`__REACT_DEVTOOLS_GLOBAL_HOOK__` before the bundle loads — no profiling build,
+no change to the application.
+
+| Interaction | Commits |
+|---|---|
+| 10 characters into the pattern | 13 |
+| 10 characters into the test string | 14 |
+| 10 characters into the JSON editor | 15 |
+| Switch mode | 2 |
+| Open the appearance drawer | 2 |
+| **Change theme preset** | **1** |
+
+Roughly one commit per keystroke plus one for the result, which is the floor
+for a controlled editor. The theme claim in `09_DESIGN_SYSTEM.md` §11.1 — that
+a theme change re-renders nothing outside the drawer — holds.
+
+`ModeSuggestion` subscribes to the whole workspace store rather than to
+selected fields. That is the anti-pattern `useStore`'s own documentation warns
+about, and it is correct here: `suggestionFor(state)` reads six fields and does
+no computation, the component returns `null` most of the time, and the store is
+already the thing changing. **No `memo`, `useMemo` or `useCallback` was added
+anywhere.** Nothing measured justified one.
+
+### 12.7 Visual cost, audited
+
+`09_DESIGN_SYSTEM.md` forbids most of what makes a dark interface expensive.
+The audit confirms it held:
+
+| | Count |
+|---|---|
+| `backdrop-filter` | **0** |
+| `filter: blur()` | **0** |
+| `@keyframes` | **0** |
+| `box-shadow` | 1 |
+| transitions | 5, all on `transform`, `background`, `background-color`, `border-color` |
+
+The glow is a `box-shadow`, not a filter. The gradient is a CSS
+`linear-gradient`. Nothing to simplify.
+
+### 12.8 Layout shift
+
+Found by the Lighthouse baseline and then measured directly with a
+`layout-shift` observer rather than taken from a score.
+
+The editor's minimum height lived only inside CodeMirror's theme, which applies
+after the view mounts — until then the host is two borders tall and the column
+below it moves. The same minimum is now declared on the host.
+
+| CLS | before | after |
+|---|---|---|
+| first visit | 0.0394 | 0.0417 |
+| **second visit** | **0.0257** | **0.0022** |
+
+The warm load, which is the normal case for an installed PWA, is effectively
+shift-free. First visit is unchanged because it is dominated by a 0.0394 shift
+from the first-run history notice appearing above `main` — genuinely
+once-per-user, and reserving space for it would cost every subsequent visitor a
+permanent empty gap. Both figures were already inside the 0.1 "good" threshold.
+
+### 12.9 Lighthouse baseline
+
+Production build, production headers, Lighthouse 13.4.1 via `npx` — **not added
+as a dependency**. Its defaults are a simulated mid-tier phone: 4x CPU slowdown
+and roughly 1.6 Mbps. That is why its paint numbers are seconds where the
+direct measurement in §12.1 is milliseconds; both are true of different
+machines.
+
+| | Baseline | After M11 |
+|---|---|---|
+| Performance | 73 | **78** |
+| Accessibility | 98 | **100** |
+| Best Practices | 100 | 100 |
+| SEO | 91 | 91 |
+| Cumulative Layout Shift | 0.145 | **0.071** |
+| Total Blocking Time | 10 ms | 20 ms |
+| First Contentful Paint | 3.8 s | 3.8 s |
+
+Accessibility reached 100 by fixing a real defect: `Panel` titles were `h3`
+directly under the page's single `h1`, leaving a level-2 gap that a screen
+reader navigating by heading would hit. Panels are never nested and each is a
+top-level section of the workspace, so they are `h2`.
+
+Two audits still report and neither is a defect:
+
+- **`valid-source-maps`** wants source maps the production build deliberately
+  does not ship.
+- **`robots-txt`** fails with `CSP violation`. The file is valid and served;
+  Lighthouse's own fetch is blocked by the site's Content-Security-Policy. The
+  policy was not widened for a scanner.
+
+Lighthouse at or above 95 remains an M12 release gate, not an M11 requirement.
+
+### 12.10 The budget after M11
+
+| | M10 | After M11 | Delta |
+|---|---|---|---|
+| **Initial JS** | 175.05 KB | **166.16 KB** | **−8.89 KB** |
+| Worker chunks | 19.56 KB | 19.56 KB | — |
+| Service worker | 5.93 KB | 5.93 KB | — |
+| CSS | 7.94 KB | 8.18 KB | +0.24 KB |
+| Icons + manifest | 15.81 KB | 15.81 KB | — |
+| Total precache | 226.74 KB | 218.08 KB | −8.66 KB |
+
+Initial JS is **3.84 KB under the 170 KB target** and 33.8 KB under the 200 KB
+hard limit — the first time it has been inside the target since CodeMirror
+arrived at M4.
+
+The keymap change alone took it to 165.34 KB. The splitter, the progressive
+match list and the reserved editor height then added 0.82 KB of JS and 0.24 KB
+of CSS between them, which the 9.71 KB saving paid for twelve times over.
+
+**No dependency was added, changed or removed.** Five runtime, twenty-eight dev.
+
+### 12.11 What is still the bottleneck
+
+| Rank | Cost | Why it stays |
+|---|---|---|
+| 1 | **The 600 ms debounce** on a large test subject | Deliberate. §12.4. |
+| 2 | **CodeMirror, 60% of the bundle** | The editor is the product. The 10.91 KB Lezer remnant is held by Backspace's indent-aware deletion. |
+| 3 | **React, 16%** | No evidence for a Preact swap; the M11 brief rules it out without overwhelming evidence, and rendering was measured as not being the constraint. |
+| 4 | First-visit CLS from the first-run notice | Once per user; reserving space would cost everyone else. |
+
+**Not measured, and named rather than absorbed:** interaction latency on a real
+low-powered device. Lighthouse's 4x CPU throttle is a simulation, not a phone.

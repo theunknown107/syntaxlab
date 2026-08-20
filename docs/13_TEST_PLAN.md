@@ -952,3 +952,37 @@ isolation — 3 runs out of 3 at M10.
 `json › suggestion can be dismissed`, which passes in isolation and is the
 scattered environment flake characterised at M7 — a different test each run,
 never the same one twice.
+
+---
+
+## M11 — performance and refinement suites
+
+Three new Playwright projects, plus two tests folded into the existing regex
+spec. All of them exist because M11 changed something that could break
+silently.
+
+| Project | Spec | What it pins |
+|---|---|---|
+| `editor-chromium`, `editor-firefox` | `editor-keys.spec.ts` | The keymap is rebuilt locally rather than imported (`12_PERFORMANCE.md` §12.2), so the bindings a developer would notice losing are asserted: indent-preserving Enter, Backspace/arrows/Home/End, Mod-a with undo and redo, and Tab still leaving the editor instead of becoming a keyboard trap. |
+| `splitter-chromium`, `splitter-firefox` | `splitter.spec.ts` | Drag, clamping under a drag far past the viewport edge, full keyboard operation, persistence across reload and mode switch, absence when the layout stacks, a hostile stored value, and axe. |
+| — | `regex.spec.ts` (+2) | The match window holds at 200 while the count still reports 4 000, "Show more" grows it, and a new pattern resets it. |
+
+Both new specs use `keyboard.insertText` rather than the clipboard for bulk
+input: it dispatches one input event instead of thousands of key events, and it
+needs no clipboard permission, which differs across the three engines.
+
+### Measurement scripts
+
+Not tests — they produce numbers, and are run deliberately rather than in CI.
+
+| Script | |
+|---|---|
+| `scripts/measure-m11.mjs` | The M11 baseline: startup cold/warm/offline, regex analysis across five pattern shapes, regex execution, JSON at three sizes, tree expand, format, history open, theme switch. |
+| `scripts/analyze-bundle.mjs` | Reads the treemap `rollup-plugin-visualizer` embeds and prints gzipped bytes per npm package or app directory. |
+
+### Measured, not changed
+
+M11 also looked hard at three things and left them alone, which is recorded so
+a later milestone does not repeat the work: large-JSON interaction
+(`12_PERFORMANCE.md` §12.5), React commit counts (§12.6), and the visual effect
+inventory (§12.7).

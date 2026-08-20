@@ -1,7 +1,7 @@
 import { chromium } from '@playwright/test';
 
 /**
- * The M11 baseline — 12_PERFORMANCE.md §11
+ * The M11 baseline — 12_PERFORMANCE.md §12.1
  *
  *   npm run build && node scripts/serve-production.mjs 4183 &
  *   node scripts/measure-m11.mjs

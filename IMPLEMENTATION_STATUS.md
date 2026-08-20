@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M10 complete, incl. the theme correction pass → M11 next (awaiting approval)
+**Current milestone:** M11 complete → M12 next (awaiting approval)
 **Last updated:** 2026-08-20
 
 > Living document, updated at the end of every milestone. The architecture
@@ -437,7 +437,7 @@ let two grammars disagree about spans the explanation already refers to.
 
 ### Known limitations at M4
 
-- **The split is not resizable** and **mobile does not use tabs** (`08_UI_UX_SPEC.md` §5, §18). Panels stack instead. Both are queued for M11; neither blocks use at 360 px, which is asserted.
+- **The split is not resizable** and **mobile does not use tabs** (`08_UI_UX_SPEC.md` §5, §18). Panels stack instead. Both are queued for M11; neither blocks use at 360 px, which is asserted. *(M11: the split is now resizable; the mobile tab bar was evaluated and deliberately declined — deviation D48.)*
 - **Zero-length matches are not highlighted in the editor**, only listed in the match table. A mark decoration needs a non-empty range and tinting one character would claim the match covered something it did not.
 - **Capture offsets require the `d` flag**, as the engine does. The flag is never added silently, because that would run a different pattern from the one on screen.
 - **No history, theme drawer, help dialog or header actions.** M7, M8, M10.
@@ -792,7 +792,7 @@ second opinion about where those are.
 
 - **No JSON explanation panel.** The domain produces one (`JsonAnalysis.explanation`) and the UI does not render it: the status line, findings and tree already answer what the explanation says, and showing both would be the duplication the M5 review removed from the explanation itself. Queued for reconsideration at M11.
 - **No syntax highlighting inside the JSON editor** — only error decorations. Colour lives in the tree, which is the primary object on this screen.
-- **The split is still not resizable**, and mobile stacks rather than using tabs. M11, as at M4.
+- **The split is still not resizable**, and mobile stacks rather than using tabs. M11, as at M4. *(Resolved at M11: the splitter is built; the tab bar is declined — D48.)*
 - **Search is capped at 500 matches.** A query matching more says how many it found up to the cap; there is no "load more".
 - **One flaky E2E observed**: `workers-firefox › actually processes the payload` failed once under full parallel load and passed on every isolated and subsequent full run. Not reproduced; recorded rather than dismissed.
 
@@ -1716,3 +1716,153 @@ figure for `#a6a6a6`).
 pixels anywhere" — `--color-success` is `#00FF41` in every theme including
 Crimson Night, because green *means* success in this design system and breaking
 that to satisfy a visual rule would trade a real signal for a cosmetic one.
+
+---
+
+## M11 — objective and outcome
+
+**Objective:** the refinement milestone. Make what exists faster, smoother and
+more coherent — by measuring first, not by rewriting.
+
+**Outcome:** one real bottleneck found and fixed, one long-outstanding feature
+built, three areas measured and deliberately left alone, and the initial bundle
+back **inside its 170 KB target for the first time since CodeMirror arrived at
+M4**. No dependency added.
+
+### The method
+
+Every change below started as a number. Two measurement tools were written
+first — `scripts/measure-m11.mjs` for interaction latency and
+`scripts/analyze-bundle.mjs` for bundle composition — and the full baseline is
+in `12_PERFORMANCE.md` §12.1.
+
+### What the baseline said
+
+Everything was under 300 ms except one thing:
+
+| | |
+|---|---|
+| Startup, cold / warm / offline (FCP) | 117 / 134 / 117 ms |
+| Regex analysis, five pattern shapes | 216–272 ms |
+| JSON, 98 KB / 488 KB / 977 KB | 75 / 129 / 194 ms |
+| Tree expand-all, format, history, theme | 87 / 76 / 31 / 43 ms |
+| **Regex execution, 64 KB subject** | **1110 ms** |
+
+### The two changes that mattered
+
+**1. One keybinding was importing the Lezer stack.** `standardKeymap` binds
+Enter to `insertNewlineAndIndent`, which reads the syntax tree — the only thing
+in SyntaxLab reaching `@codemirror/language`, `@lezer/highlight` and
+`@lezer/common`. The app configures no language at all, so that code could
+never do anything. The keymap is rebuilt binding for binding from the
+individual command exports, with Enter on the language-free
+`insertNewlineKeepIndent`.
+
+**Initial JS 175.05 → 165.34 KB.** The ceiling was measured at 160.56 KB by
+dropping the keymap entirely; the difference is the movement commands, which
+are kept because bidi, word boundaries and grapheme clusters are the last
+things worth reimplementing.
+
+**2. Ten thousand match rows were being rendered at once.** 130 002 DOM nodes,
+349 ms of layout, 162 ms of style, 36 MB of heap. `table-layout: fixed` and
+`content-visibility: auto` were both measured first and both did nothing — the
+cost is creating the nodes. The table now renders 200 with a "Show 200 more"
+control.
+
+| 200 KB subject, 12 800 matches | before | after |
+|---|---|---|
+| wall | 1629 ms | **755 ms** |
+| DOM nodes | 130 002 | **2 684** |
+| heap | +36 MB | **+10 MB** |
+
+600 ms of the remaining 755 is the input debounce, which was verified as
+appropriate and deliberately left alone (`12_PERFORMANCE.md` §12.4).
+
+### The split, finally
+
+`08_UI_UX_SPEC.md` §5 has specified a draggable divider since M1 and
+IMPLEMENTATION_STATUS has carried it as "queued for M11" since M4. Built, in
+both workspaces, with no library: clamped 25–75 so it cannot hide a panel,
+fully keyboard-operable, persisted, and removed from the accessibility tree
+when the layout stacks. The drag writes a CSS custom property rather than React
+state, so it does not reconcile a 200-row table on every pointermove.
+
+### Measured and left alone
+
+Recorded so a later milestone does not repeat the work.
+
+| Area | Finding |
+|---|---|
+| **Large JSON** | Keystroke latency 5–9 ms from 98 KB to 977 KB, and **42 tree rows in the DOM regardless of document size** — the windowing works. Search 19 ms at 1 MB, collapse-all 114 ms, minify 79 ms. No change warranted. |
+| **React rendering** | Commit counts on the production build: ~1 per keystroke, 2 per mode switch, **1 for a theme change**. No `memo`, `useMemo` or `useCallback` was added anywhere. |
+| **Visual cost** | Zero `backdrop-filter`, zero blur filters, zero `@keyframes`, one `box-shadow`, five transitions all on cheap properties. The design system already forbade what a visual audit looks for. |
+| **Desktop layout** | Reviewed at 1280/1440/1920. Nothing cramped, no change made. |
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck / ESLint / Stylelint / Prettier | ✅ clean |
+| Unit tests | ✅ **2 167 passed** (36 files) |
+| E2E, full matrix | **649 passed, 9 skipped, 1 failed** across 31 projects |
+| Production build | ✅ 3.2 s (7.6 s with `tsc`) |
+| **Initial JS** | ✅ **166.16 KB** — under the 170 KB target, 33.8 KB under the hard limit |
+| Lighthouse | Performance 73 → **78**, Accessibility 98 → **100**, Best Practices 100, SEO 91 |
+| `npm audit` | ✅ 0 vulnerabilities at `--audit-level=low` |
+| Execution-sink scan | ✅ none anywhere; no dynamic imports; CSP untouched |
+| Runtime dependencies | 5, unchanged, all exact-pinned |
+
+The single failure is classified, not concealed: **`json-mobile › the
+suggestion can be dismissed`** passes in isolation. It is the scattered
+contention flake characterised at M7 — a different test each full-matrix run
+under eight workers, always passing alone.
+
+### The M10 mobile timeout failure appears to have been fixed as a side effect
+
+`regex-mobile › survives two timeouts in a row` has been failing since M8. M10
+characterised it precisely: not a product defect, but a hard-coded **15 s
+in-test assertion budget** on an emulated Pixel 5 after two deliberate 2 s
+timeouts.
+
+After M11 it **passes — three runs out of three in isolation, and in the full
+matrix.** Nothing was done to the test or to the worker architecture. The most
+likely explanation is the obvious one: this milestone removed enough work from
+the path that the run now fits inside the budget it was overrunning.
+
+Stated as it is rather than as a fix: it is a **marginal test that now passes**,
+not a proven repair. If it fails again on slower hardware, the fix is the one
+M10 named — the budget belongs in the test, not in the product.
+
+### Defects found and fixed during M11
+
+| Found by | Defect |
+|---|---|
+| **Lighthouse `heading-order`** | `Panel` titles were `h3` under the page's single `h1` — a level-2 gap a screen-reader user navigating by heading would hit. Now `h2`. Accessibility 98 → 100. |
+| **Layout-shift observer** | The editor's minimum height existed only inside CodeMirror's theme, which applies after mount, so the column jumped on every load. Second-visit CLS 0.0257 → **0.0022**. |
+| **Mobile screenshot review** | Below 560 px the header was a stretch column, so the lone Appearance button ran full width and read as a text field, in a three-row *sticky* header. 145 → 113 px at 360 and 390. |
+| **Writing the match-list test** | The first draft of the indent assertion counted a line that does not exist. The behaviour was right; the expectation was wrong. |
+
+### Not done, and why
+
+| Item | State |
+|---|---|
+| **Screen-reader pass** | **NOT RUN.** Unchanged from M10 — NVDA and JAWS are not installed and Narrator cannot be driven from a non-interactive shell. The splitter's accessibility is asserted through roles, values and keyboard operation, which is the data a screen reader consumes, not the experience of using one. Release gate. |
+| **CVD simulation** | **NOT RUN.** No simulator available. Unchanged from M10, where removing green from the syntax palette improved the position on paper. Release gate. |
+| **Lighthouse ≥ 95** | Baseline recorded (78). An M12 gate, deliberately not pursued as an M11 requirement. |
+| **CSP on a preview deployment** | Still open from M9. Deploying is outside this milestone. |
+| **Low-powered device latency** | **NOT MEASURED.** Lighthouse's 4× CPU throttle is a simulation, not a phone. Named rather than absorbed. |
+
+### Dependencies at M11
+
+**None added, none changed, none removed.** 5 runtime, 28 dev. Lighthouse was
+run through `npx` and is not in `package.json`; `rollup-plugin-visualizer` was
+already a dev dependency.
+
+### Deviations at M11
+
+| # | Deviation | Reason |
+|---|---|---|
+| D46 | **`standardKeymap` is rebuilt locally rather than imported** | One binding reached the whole Lezer stack for 9.71 KB, in an app with no language configured. All other bindings are still upstream's functions. Costs the bracket-explode on Enter, which needs bracket auto-closing the editor does not have. |
+| D47 | **The match table renders progressively rather than being virtualised** | `12_PERFORMANCE.md` §3.3 specified windowing. Match rows are not a uniform height — a value runs to 2 000 characters — so fixed-row windowing does not transfer. Same outcome, different means. |
+| D48 | **Mobile keeps the stacked layout rather than adopting tabs** | `08_UI_UX_SPEC.md` §18 specifies tabs. Tabs put the input and its result on opposite sides of a mode switch, which is the loop the user is iterating on. Evaluated at 360/390/414 px with zero overflow and green a11y suites. |
+| D49 | **`jsx-a11y`'s separator rules are configured, not obeyed** | ARIA 1.2 defines a focusable separator as the window-splitter widget. The role allowlist is used where the rule offers one, and the sibling rule is silenced at the single element rather than by narrowing its handler list globally. |

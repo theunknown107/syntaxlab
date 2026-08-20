@@ -180,8 +180,9 @@ Mobile is deliberately a different interface, not a squeezed desktop one — per
 >
 > The example picker, the permanent ECMAScript label, the character count, the
 > AST tree, the group table and the warning list are all as specified. The
-> resizable split (§5) and the mobile tab bar (§18) are **not** built — the
-> panels stack instead; both are queued for M11.
+> resizable split (§5) **is built at M11**. The mobile tab bar (§18) was
+> evaluated at M11 and **deliberately declined** — the panels stack instead;
+> see "M11 — the split, and the mobile decision" at the end of this document.
 
 **Input pane**
 - CodeMirror with regex-aware highlighting (metacharacters, classes, groups, quantifiers each get a distinct hue from the token palette)
@@ -610,7 +611,7 @@ Explanations are the one place where warmth is appropriate — they are teaching
 
 **Tablet:** panels stack, the input pane is sticky at the top when scrolling the analysis, actions move to a sticky footer, and drawers become full-width sheets.
 
-**Mobile:** tabs replace the two-column split; the editor gets a compact toolbar; the tree view drops to indent-only (no connector lines); tables become stacked key/value rows; the theme drawer becomes full-screen. Font size never drops below 16 px in inputs, because iOS zooms the viewport below that.
+**Mobile:** *(superseded at M11 — the stacked layout is kept deliberately; see the M11 section at the end of this document.)* tabs replace the two-column split; the editor gets a compact toolbar; the tree view drops to indent-only (no connector lines); tables become stacked key/value rows; the theme drawer becomes full-screen. Font size never drops below 16 px in inputs, because iOS zooms the viewport below that.
 
 **Print:** an unglamorous but genuinely useful stylesheet — input plus explanation only, black on white, no chrome. Developers do paste explanations into documentation and tickets.
 
@@ -635,3 +636,108 @@ what the chip shows is what the theme applies.
 
 Nothing else in §8 or §10 changed. The controls, the contrast note, the reset
 and the settings mirror are as M8 built them.
+
+---
+
+## M11 — the split, and the mobile decision
+
+### The resizable split, as built
+
+§5 has asked for this since M1 — "developers reflexively drag panel dividers;
+not honouring that feels broken" — and it is now in both workspaces. No
+library: a separator is a role, a value, a pointer handler and five key
+bindings, and the layout engine is CSS Grid, which was already there.
+
+```mermaid
+flowchart TD
+    subgraph Input
+        P["pointerdown → capture<br/>pointermove"]
+        K["ArrowLeft / ArrowRight<br/>Home / End / Enter"]
+        DC["double-click"]
+    end
+
+    CL{"clamp 25–75<br/>readSplitPercent"}
+    VAR["--split on the grid element<br/>style.setProperty"]
+    GRID["grid-template-columns:<br/>minmax(14rem, var(--split)) auto minmax(14rem, 1fr)"]
+    LS[("localStorage<br/>syntaxlab.settings.v1")]
+
+    P --> CL
+    K --> CL
+    DC --> CL
+    CL --> VAR --> GRID
+    CL -->|"pointerup, or immediately for a key"| LS
+    LS -->|"on load, validated"| VAR
+
+    classDef guard stroke-width:3px
+    class CL guard
+```
+
+Four decisions worth keeping:
+
+| | |
+|---|---|
+| **The drag does not re-render the workspace** | Position is written to a CSS custom property, the same mechanism the theme uses. Holding it in React state would reconcile both panels — including a 200-row match table — on every `pointermove`. |
+| **It cannot be dragged into uselessness** | Clamped to 25–75 in the store, with the grid's `minmax(14rem, …)` floor as a second guard. A divider that can hide half the interface is a way to lose work, not a preference. |
+| **It works without a mouse** | Arrows move it by 2%, Home and End go to the limits, Enter resets — a keyboard user cannot double-click. `aria-valuenow`, `aria-valuemin`, `aria-valuemax` and `aria-valuetext` are all present. |
+| **It vanishes when the layout stacks** | Below 1024 px CSS removes it from the box tree, which removes it from the accessibility tree. A separator with nothing to separate is noise to a screen reader. |
+
+`jsx-a11y` classifies `separator` as non-interactive, which is true only of the
+decorative kind — ARIA 1.2 defines a **focusable** separator as the window
+splitter widget. The lint configuration was taught the role rather than the
+markup being made less correct.
+
+Persisted as `splitPercent` in settings, validated on read like every other
+stored value: a corrupt entry falls back to 45 rather than breaking the layout.
+
+### The mobile tab bar — reconsidered and declined
+
+§18 above specifies "tabs replace the two-column split" on mobile. **M11
+evaluated that and is keeping the stacked layout.** The reasons are about the
+workflow rather than about effort:
+
+1. **The loop is pattern → test → result.** Tabs put the input and its result
+   on opposite sides of a mode switch, so every edit of the thing you are
+   iterating on costs a tap to see what it did. Scrolling is cheaper than
+   switching.
+2. **The stack is already ordered results-first.** Matches sit above the
+   explanation, so the answer is the next thing you see, not the last.
+3. **Tabs add permanent chrome and a state to lose.** A tab bar costs vertical
+   space on every screen and introduces a "which tab was I on" question that
+   stacking does not have.
+4. **Nothing is broken.** Measured at 360, 390 and 414 px: zero horizontal
+   overflow, every control reachable, the axe and keyboard suites green.
+
+What M11 *did* change on mobile is the header. It was a stretch column below
+560 px, so every direct child became full width — the lone Appearance button
+ran edge to edge and read as a text field — and it stacked to three rows while
+being `position: sticky`. That was 145 px of permanent chrome on a 780 px
+screen. It now wraps at natural widths:
+
+| | before | after |
+|---|---|---|
+| 360 px | 145 px | **113 px** |
+| 390 px | 145 px | **113 px** |
+| 414 px | 101 px | 113 px |
+
+414 px gains 12 px by wrapping like its narrower siblings instead of squeezing
+onto one line; 360 and 390 give back 32 px of sticky viewport, which is the
+case that mattered.
+
+**This is a deliberate departure from §18 and is recorded as deviation D48.**
+If a future milestone has evidence that tabs are better, the layout is one
+media query away.
+
+### Desktop, reviewed
+
+Reviewed by screenshot at 1280, 1440 and 1920 px. The two-column split holds
+its proportions, nothing is cramped, and the only empty space is the tail of
+the shorter column — which is inherent to two columns of unequal content and
+would be filled only by decoration. No change was made, which is the correct
+outcome for a review that found nothing.
+
+### Panel headings
+
+Panel titles were `h3` directly under the page's single `h1`, leaving a level-2
+gap in the outline. Panels are never nested and each is a top-level section of
+the workspace, so they are now `h2`. Found by Lighthouse's `heading-order`
+audit; a screen-reader user navigating by heading would have hit the same jump.
