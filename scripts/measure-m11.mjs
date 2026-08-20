@@ -75,6 +75,7 @@ async function time(page, action, settled) {
   return Date.now() - started;
 }
 
+/* eslint-disable-next-line max-params -- setup/action/settled plus a sink reads better positionally here than an options bag; every call site passes all of them in this order. */
 async function repeat(page, label, setup, action, settled, results) {
   const samples = [];
   for (let index = 0; index < REPEATS; index += 1) {
