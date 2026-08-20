@@ -104,6 +104,21 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
     },
     {
+      name: 'hardening-chromium',
+      testMatch: /hardening\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'hardening-firefox',
+      testMatch: /hardening\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'hardening-mobile',
+      testMatch: /hardening\.spec\.ts/,
+      use: { ...devices['Pixel 5'], baseURL: 'http://localhost:4173' },
+    },
+    {
       /*
        * Offline runs against port 4183, which serves dist/ with the *real*
        * production headers. `vite preview` sends none, and a service worker

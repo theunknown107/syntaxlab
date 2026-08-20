@@ -49,10 +49,28 @@
   background: var(--gradient-primary);
 }
 
+/*
+ * Forced colors — verified against computed values, not assumed.
+ *
+ * Two things stop working when the OS takes over the palette: the gradient
+ * underline is dropped (background-image is not painted in forced colors), and
+ * every segment loses its surface, so an *unselected* tab renders as bare text
+ * with no border and stops reading as a control at all. Measured.
+ *
+ * So each segment gets a real border, and the selected one keeps the system
+ * highlight pair. `forced-color-adjust: none` is used on exactly this one rule
+ * and only to opt into `Highlight`/`HighlightText` together — the pair the OS
+ * guarantees contrast between.
+ */
 @media (forced-colors: active) {
+  .segment {
+    border: 1px solid ButtonBorder;
+  }
+
   .segment[aria-checked='true'] {
     forced-color-adjust: none;
-    background: highlight;
-    color: highlighttext;
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
   }
 }
