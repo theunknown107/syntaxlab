@@ -104,6 +104,13 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
     },
     {
+      // The accessibility tree is a Chromium/CDP capability, so this project
+      // is Chromium-only by construction rather than by choice.
+      name: 'a11y-chromium',
+      testMatch: /a11y-tree\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
       name: 'hardening-chromium',
       testMatch: /hardening\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
