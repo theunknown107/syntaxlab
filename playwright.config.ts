@@ -34,6 +34,18 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
     },
     {
+      // The editor keymap is rebuilt locally rather than imported; these pin
+      // the bindings that change would be most likely to break silently.
+      name: 'editor-chromium',
+      testMatch: /editor-keys\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'editor-firefox',
+      testMatch: /editor-keys\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
+    },
+    {
       name: 'json-chromium',
       testMatch: /json\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },

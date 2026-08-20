@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { EditorState, StateEffect, StateField, type Extension } from '@codemirror/state';
-import { history, historyKeymap, standardKeymap } from '@codemirror/commands';
+import { history, historyKeymap } from '@codemirror/commands';
 import {
   Decoration,
   EditorView,
@@ -12,6 +12,7 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import { editorTheme } from './editorTheme';
+import { standardBindings } from './standardBindings';
 import styles from './CodeEditor.module.css';
 
 /**
@@ -30,7 +31,7 @@ import styles from './CodeEditor.module.css';
  *   2. **Limits are enforced in the editor, not only downstream.** A paste
  *      that would exceed `maxLength` is rejected as a transaction, so the
  *      oversized text never enters the document at all.
- *   3. **Tab is not bound.** `standardKeymap` leaves it alone, so focus moves
+ *   3. **Tab is not bound.** `standardBindings` leaves it alone, so focus moves
  *      out of the editor the way it does from any other control. This is a
  *      deliberate omission rather than an oversight: binding Tab to indent
  *      would create the keyboard trap `08_UI_UX_SPEC.md` §12.3 calls out.
@@ -146,7 +147,7 @@ export function CodeEditor({
         doc: value,
         extensions: [
           history(),
-          keymap.of([...standardKeymap, ...historyKeymap]),
+          keymap.of([...standardBindings, ...historyKeymap]),
           drawSelection(),
           highlightSpecialChars(),
           EditorView.lineWrapping,
