@@ -374,3 +374,25 @@ What this does **not** claim: that the theme system is unbreakable. It claims
 that the values which reach `setProperty` have matched an explicit pattern,
 that the check is a positive match rather than a filter, and that the
 behaviour is tested in three engines.
+
+
+---
+
+## M10 — hostile input, exercised end to end
+
+The boundaries were already argued in the M5–M9 sections. M10's contribution is
+that they are now driven with payloads through the real application, in a real
+browser, and asserted on what the DOM actually contains.
+
+| Surface | Payloads | Assertion |
+|---|---|---|
+| Regex editor | 8 shapes — script tags, `onerror` images, `svg onload`, `javascript:` URLs, quote-breakouts, iframes | No dialog, no `img[src]`, no `iframe/object/embed`, no inline `<script>`, no `javascript:` href |
+| JSON keys and values | The same shapes, plus `__proto__` and `constructor` as keys | Rendered as text; `'polluted' in {}` is false |
+| History, via the UI | A hostile pattern captured, then reloaded | Rendered as text after a round trip through IndexedDB |
+| History, planted in IndexedDB | A record whose title, input and tags are all payloads | Same, and the app still renders |
+| History search | Markup, `*`, `"]`, `\` | The drawer survives; nothing becomes a selector or an element |
+| Theme storage | 18 payloads (M8) | Only `#RRGGBB` reaches a custom property |
+
+**The one claim being made:** these specific classes of payload, on these
+paths, produce no script execution and no injected element. Not that the
+application is immune to everything.

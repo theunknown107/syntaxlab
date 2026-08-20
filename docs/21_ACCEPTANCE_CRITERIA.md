@@ -128,8 +128,8 @@
 
 | # | Criterion | Verification |
 |---|---|---|
-| T-1 | The default theme matches `09_DESIGN_SYSTEM.md` | ✅ **M8** — visual review of the built interface at 1280×800; screenshots of default, Amber and Mono |
-| T-2 | All five presets apply correctly | ✅ **M8** — E2E, all five |
+| T-1 | The default theme matches `09_DESIGN_SYSTEM.md` — **the four specified Matrix colours** | ✅ **M10** — the four values asserted literally in unit tests *and* against the rendered custom properties in E2E, plus visual review of the built interface |
+| T-2 | All **six** presets apply correctly, including Crimson Night | ✅ **M10** — E2E; Crimson Night's two colours asserted exactly, and its derived accent asserted to differ from its gradient |
 | T-3 | Gradient from/to/angle/intensity apply live | ✅ **M8** — E2E; from, to, direction and intensity each assert the resolved custom property |
 | T-4 | Accent, glow, contrast, motion, and font scale apply live | ✅ **M8** — accent, glow, contrast, motion and font scale all applied and unit-tested. Accent is derived from the primary colour rather than separately chosen — `09_DESIGN_SYSTEM.md` §11.5 |
 | T-5 | **Preferences persist across reload with no flash of default theme** | ✅ **M8** — E2E reads `--gradient-from` at `readyState === "interactive"`, before React mounts, and finds the stored value |
@@ -173,19 +173,19 @@
 
 | # | Criterion | Verification |
 |---|---|---|
-| S-1 | **Every XSS payload renders as visible text; the canary never fires** | Security §7.1 |
-| S-2 | **No `eval`, `new Function`, or `dangerouslySetInnerHTML` in `src/`** | ESLint + CI grep |
+| S-1 | **Every XSS payload renders as visible text; the canary never fires** | ✅ **M10** — 8 payload shapes through the regex editor, JSON keys/values, history via the UI and via IndexedDB, and search; no dialog, no injected element |
+| S-2 | **No `eval`, `new Function`, or `dangerouslySetInnerHTML` in `src/`** | ✅ **M10** — repository-wide grep: none of `innerHTML`, `dangerouslySetInnerHTML`, `eval`, `new Function`, `document.write`, `insertAdjacentHTML` appears anywhere |
 | S-3 | The CSP is present on production and no violation occurs during a full session | E18 |
 | S-4 | **Zero network requests after initial load** (excluding SW update checks) | E17 |
-| S-5 | Prototype-pollution payloads leave `Object.prototype` untouched | Security §7.2 |
+| S-5 | Prototype-pollution payloads leave `Object.prototype` untouched | ✅ **M10** — asserted through the real JSON tree with `__proto__` and `constructor` as keys; `'polluted' in {}` is false |
 | S-6 | Every input limit is enforced at all three layers | Security §7.4 |
 | S-7 | Oversized inputs are rejected cleanly with no crash or hang | Security §7.4 |
-| S-8 | Tampered storage records are quarantined, not executed or crashed on | Security §7.5 |
+| S-8 | Tampered storage records are quarantined, not executed or crashed on | ✅ **M10** — a record whose title, input and tags are all payloads is planted in IndexedDB; it renders as text and the app survives |
 | S-9 | Theme injection is rejected by the hex allowlist | ✅ **M8** — unit and browser-level |
 | S-10 | Malicious import files are rejected with a specific reason | Security §7.7 |
 | S-11 | Clipboard writes are `text/plain` only, never `text/html` | Code review |
 | S-12 | All security headers are present in production | Post-deploy checklist |
-| S-13 | `npm audit --audit-level=high` is clean | CI |
+| S-13 | `npm audit --audit-level=high` is clean | ✅ **M10** — clean at `--audit-level=low`, which is stricter than the criterion |
 | S-14 | No copyleft licences in the dependency tree | CI |
 | S-15 | Production errors contain no user content, stack traces, or internals | Code review |
 | S-16 | **Every claim in `05_SECURITY.md` §17 maps to a passing test** | Manual review |
@@ -198,24 +198,24 @@
 
 | # | Criterion | Verification |
 |---|---|---|
-| A-1 | **Zero critical or serious axe violations on every view** | axe CI |
-| A-2 | Every action is reachable and operable by keyboard alone | E11 |
-| A-3 | Focus is always visible with ≥ 3:1 contrast | Manual + axe |
-| A-4 | Dialogs and drawers trap focus and restore it on close | Unit + manual |
+| A-1 | **Zero critical or serious axe violations on every view** | ✅ **M10** — axe clean on the workspace, both drawers, high-contrast mode and a custom theme |
+| A-2 | Every action is reachable and operable by keyboard alone | ✅ **M10** — skip link, mode switching by arrow key, both overlays, and 30 tab stops audited |
+| A-3 | Focus is always visible with ≥ 3:1 contrast | ✅ **M10** — asserted on the focused element *and its ancestors*, because CodeMirror sets `outline: none` on itself and the wrapper draws the ring |
+| A-4 | Dialogs and drawers trap focus and restore it on close | ✅ **M10** — both drawers trap focus and restore it to their opener; the transient `<body>` step as Chromium wraps the cycle is the cycle working, not a leak |
 | A-5 | Analysis results announce a useful summary via a live region | Manual, screen reader |
 | A-6 | Announcements are debounced and not spammy while typing | Manual |
 | A-7 | Errors announce via `role="alert"` | Manual |
 | A-8 | The first-run notice is announced once and is keyboard-dismissible | Manual |
-| A-9 | Every default colour pair meets AA | Automated contrast check |
+| A-9 | Every default colour pair meets AA | ✅ **M10** — computed for all six presets against tokens read out of `tokens.css`; Crimson Night needed a derived companion and got one |
 | A-10 | No status is conveyed by colour alone | Greyscale review |
 | A-11 | Syntax colours remain distinguishable under CVD simulation | Manual |
 | A-12 | Usable at 200% zoom with no horizontal scrolling | E16 |
 | A-13 | Usable at 320 px width | E15 |
-| A-14 | `prefers-reduced-motion` disables all animation | E20 |
-| A-15 | **A full analysis can be completed with a screen reader** | Manual, NVDA + VoiceOver |
-| A-16 | Semantic landmarks, one `h1`, hierarchical headings | axe + manual |
-| A-17 | Every control is labelled; icon buttons have accessible names | axe |
-| A-18 | Lighthouse accessibility ≥ 95 | Lighthouse CI |
+| A-14 | `prefers-reduced-motion` disables all animation | ✅ **M10** — every transition and animation collapses below 0.01 s under `prefers-reduced-motion` |
+| A-15 | **A full analysis can be completed with a screen reader** | ❌ **NOT RUN** — no screen reader is available in this environment (NVDA/JAWS absent; Narrator cannot be driven or heard from a non-interactive shell). The accessibility *tree* is audited instead. This remains a release gate. |
+| A-16 | Semantic landmarks, one `h1`, hierarchical headings | ✅ **M10** — one `main`, one `banner`, exactly one `h1` naming the product |
+| A-17 | Every control is labelled; icon buttons have accessible names | ✅ **M10** — every control in all four surfaces checked for an accessible name via `ariaSnapshot` |
+| A-18 | Lighthouse accessibility ≥ 95 | ⚠️ **NOT RUN** — Lighthouse was not executed. axe is clean across the views above; the two are not equivalent. |
 
 ---
 

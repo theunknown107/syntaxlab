@@ -771,14 +771,30 @@ operation of every control, focus trapping, Escape, and focus restoration.
 
 ### Two measurement notes, so the numbers are not overread
 
-**Forced colors.** Playwright's `forcedColors: 'active'` flips the media query
-but does not apply a real forced palette, so axe measures our own colours
-against a mode the browser has not entered. Measured: the plain application
-reports **29 color-contrast nodes** under this emulation with no theme UI on
-screen at all. The rule is therefore excluded from that one test and the
-structural behaviour is asserted instead. **Real forced-colors validation
-needs an OS high-contrast mode and has not been performed** — it is a manual
-pre-release check, listed in §12.
+**Forced colors.** *(Corrected at M10 — the paragraph that stood here was
+wrong, and the correction changed what could be tested.)*
+
+What M8 and M9 recorded: that `forcedColors: 'active'` only flips the media
+query, so axe was measuring a mode the browser had not entered.
+
+What is actually true, measured at M10: **the browser does apply a real forced
+palette.** `document.body` computes to the system foreground on the system
+background, and background *images* are dropped. What is unreliable is
+**axe's own `color-contrast` rule**, which reads authored colours rather than
+computed ones and therefore reports our dark palette against a forced light
+background. The 29 nodes were axe misreading, not the emulation failing.
+
+The consequence is that forced colors *can* be validated here, and M10 does —
+by reading `getComputedStyle` rather than asking axe. See §17.
+
+Two further measurements worth keeping:
+
+- `test.use({ forcedColors })` inside a `describe` block **does not reach the
+  page**; both media queries read false. `page.emulateMedia()` does.
+- Chromium's forced palette is light and Firefox's is dark, so an assertion
+  naming a specific colour can only ever pass on one engine. The checks assert
+  that our authored background is gone and that what replaced it carries high
+  contrast.
 
 **Focus restoration.** WebKit on macOS does not focus a `<button>` when it is
 clicked, so a mouse-opened dialog has no opener to return to on that engine.
@@ -863,3 +879,56 @@ predates M9: it fails identically at the M8 commit `a13910e`, with the PWA
 plugin disabled, and passes on `regex-chromium`. It is device-emulation
 specific and is an open issue against the M4 execution-timeout tests, not an
 M9 regression. Recorded rather than left for someone to rediscover.
+
+---
+
+## 17. M10 — hardening
+
+### What was added
+
+| Suite | Tests | Covers |
+|---|---|---|
+| `tests/unit/theme/contrast.test.ts` | 18 | Every preset's accent against the real surface, the fixed tokens read out of `tokens.css`, and which presets needed a lightened companion |
+| `tests/e2e/hardening.spec.ts` | 17 × 3 projects | Forced colors on computed values, hostile input through every editor and store, keyboard-only operation, reduced motion |
+| `tests/e2e/a11y-tree.spec.ts` | 8 | Accessible names for every control, landmarks, exposed state, live regions |
+
+### Forced colors, properly
+
+Asserted on `getComputedStyle`, not on axe — see the correction in §16. The
+assertions are engine-neutral because Chromium's forced palette is light and
+Firefox's is dark: what is checked is that our authored background is gone and
+that what replaced it carries the contrast the OS guarantees.
+
+**Found and fixed:** an unselected mode tab had no border under forced colors
+and read as plain text rather than a control.
+
+### Screen readers — NOT RUN
+
+No screen reader is available in this environment. NVDA and JAWS are not
+installed; Narrator exists but cannot be driven or heard from a
+non-interactive shell. **§7's manual screen-reader pass has not been
+performed** and is a release gate.
+
+What stands in its place is the accessibility-*tree* audit above, which checks
+the data a screen reader consumes. It cannot say how a screen reader phrases
+something. It can say that a control has no name, which is the defect class
+that ships.
+
+### The known mobile regex failure, classified
+
+`regex-mobile › survives two timeouts in a row` still fails, repeatably, in
+isolation — 3 runs out of 3 at M10.
+
+| Question | Evidence |
+|---|---|
+| Is it M10's? | No. It failed identically at the M8 commit `a13910e` and with the PWA plugin disabled at M9. |
+| Is it the product? | The architecture invariant is green: **18** worker timeout/terminate/respawn tests pass across Chromium, Firefox and WebKit. `regex-chromium` passes the same test. |
+| What is it, then? | A hard-coded **15 s assertion budget inside the test**, on an emulated Pixel 5, after two deliberate 2 s timeouts. Raising `--timeout` changes nothing, because the inner `toBeVisible({ timeout: 15_000 })` is what expires. |
+| Fixed at M10? | No, and deliberately not papered over with a retry. It is an open issue against the M4 execution-timeout tests. |
+
+### Full matrix at M10
+
+**601 passed, 9 skipped, 1 failed** across 26 projects. The single failure was
+`json › suggestion can be dismissed`, which passes in isolation and is the
+scattered environment flake characterised at M7 — a different test each run,
+never the same one twice.

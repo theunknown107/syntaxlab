@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M9 complete → M10 next (awaiting approval)
+**Current milestone:** M10 complete → M11 next (awaiting approval)
 **Last updated:** 2026-08-20
 
 > Living document, updated at the end of every milestone. The architecture
@@ -35,8 +35,8 @@
 | M7 | History and storage | ✅ **Complete** |
 | M8 | Theme customisation | ✅ **Complete** |
 | M9 | PWA and offline | ✅ **Complete** |
-| M10 | Accessibility and security hardening | ⬜ Next |
-| M11 | Performance measurement | ⬜ |
+| M10 | Accessibility and security hardening | ✅ **Complete** |
+| M11 | Performance measurement | ⬜ Next |
 | M12 | Integration, E2E, release QA | ⬜ |
 | M13 | V1.0 release | ⬜ |
 
@@ -1158,12 +1158,11 @@ whole interface in high-contrast mode, the drawer in high-contrast mode, and a
 custom theme with the analysis panes populated. Keyboard operation of every
 control, focus trapping, Escape, and focus restoration all covered.
 
-**One honest limitation.** Playwright's `forcedColors: 'active'` flips the
-media query without applying a real forced palette — measured, the plain app
-reports 29 color-contrast nodes under it with no theme UI on screen. That rule
-is excluded from the one forced-colors test, structural behaviour is asserted
-instead, and **real forced-colors validation still needs an OS high-contrast
-mode and has not been performed.**
+**One honest limitation** *(superseded at M10 — see the M10 section).* This
+was recorded as "Playwright flips the media query without applying a real
+forced palette". That was wrong: the browser does apply one. The unreliable
+part is axe's `color-contrast` rule, which reads authored rather than computed
+colours. M10 validates forced colors properly, against computed values.
 
 ### Dependencies added at M8
 
@@ -1367,6 +1366,150 @@ predates Vite 7). devDependency. Its runtime helper is deliberately unused.
 - **The update flow is tested on Chromium only.**
 - **`regex-mobile › survives two timeouts in a row` fails in isolation** — pre-existing, verified at the M8 commit and with the PWA disabled. An open issue against the M4 execution-timeout tests.
 - **No runtime caching**, deliberately. The app makes no requests that were unknown at build time, and `connect-src 'none'` blocks the APIs that would make them.
+
+---
+
+## M10 — objective and outcome
+
+**Objective:** the hardening milestone — accessibility, security audit, and the
+theme decision the product owner added to it. No new features.
+
+**Outcome:** the theme change is done exactly as specified and pinned by tests.
+The audit and the accessibility work are done. **Three things are not, and are
+named rather than absorbed:** the screen-reader pass, the Lighthouse
+accessibility score, and CSP verification on a preview deployment.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean |
+| ESLint / Stylelint / Prettier | ✅ clean (0 errors, 0 warnings) |
+| Unit tests | ✅ **2 155 passed** (35 files, +21 from M9) |
+| E2E, full matrix | **601 passed, 9 skipped, 1 failed** across 26 projects |
+| Production build | ✅ |
+| Bundle | ⚠️ **174.81 KB initial** (target 170, hard 200) · +0.29 KB from M9 |
+| `npm audit` | ✅ 0 vulnerabilities at `--audit-level=low` |
+| JSONTestSuite | ✅ **644 conformance tests**, corpus byte-identical |
+| Execution-sink scan | ✅ none exist anywhere in the repository |
+| Runtime dependencies | 5, unchanged, all exact-pinned |
+
+The single E2E failure was `json › suggestion can be dismissed`, which passes
+in isolation — the scattered environment flake characterised at M7, a different
+test each run.
+
+### The theme decision
+
+**Matrix is now the four specified colours, exactly**, as a real four-stop
+ramp: `#00FF41 → #008F11 → #003B00 → #0D0208`. A two-stop approximation of a
+four-colour ramp is a different palette, so the gradient model gained two
+middle stops. They are written down in exactly one place — the `--matrix-*`
+primitives — and everything else references them. The old `#00ff88` / `#003d1f`
+are gone from the repository.
+
+**Crimson Night uses `#DC143C` and `#343434`, exactly.** `#DC143C` measures
+**3.67:1** against the interface surface, below AA. The rule is to move the
+derived token and never the colour that was asked for, so the accent — which
+carries the focus ring — is `lightenToPass('#DC143C')` = **`#e34363` at
+4.58:1**. The gradient still shows `#DC143C`.
+
+Schema 1 → 2, with migration: a version-1 record keeps its two colours and has
+its middle stops interpolated, reproducing exactly what it was already
+painting.
+
+Measured contrast for all six presets is recorded in `09_DESIGN_SYSTEM.md`
+§12.3 and asserted by a test that reads the fixed tokens **out of `tokens.css`**
+rather than restating them.
+
+### Forced colors — a correction, and what it enabled
+
+M8 and M9 both recorded that the harness could not really exercise forced
+colors: "flips the media query without applying a real forced palette". **That
+was wrong.** Measured at M10: the browser does apply one — `body` computes to
+the system foreground on the system background and background *images* are
+dropped. What is unreliable is **axe's `color-contrast` rule**, which reads
+authored rather than computed colours. The 29 nodes M9 dismissed were axe
+misreading, not the emulation failing.
+
+Both documents are corrected in place rather than left standing.
+
+Because of the correction, forced colors is now genuinely validated, on
+computed values, on two engines with opposite polarities (Chromium light,
+Firefox dark). **It immediately found a defect:** with the palette forced,
+every mode-selector segment lost its surface and an *unselected* tab rendered
+as bare text with no border — it stopped reading as a control. Fixed.
+
+Two further measurements worth keeping: `test.use({ forcedColors })` inside a
+`describe` does not reach the page at all, and `page.emulateMedia()` does.
+
+### The security audit
+
+Every sink in the repository was enumerated, not sampled.
+
+| Finding | |
+|---|---|
+| Execution sinks | **None.** `innerHTML`, `dangerouslySetInnerHTML`, `eval`, `new Function`, `document.write`, `insertAdjacentHTML` appear nowhere in `src/`, `public/`, `scripts/` or `tests/`. |
+| CSS sinks | 9 `setProperty` calls, all theme, all behind `readTheme` at the `setTheme` choke point |
+| URL sinks | One `createObjectURL` (export, revoked immediately), two `location.reload` behind user actions, one `new URL(location.href)` for the `?mode=` enum check |
+| Worker boundary | Validated both ways; unchanged since M2/M4 |
+| Prototype pollution | Structural — the JSON CST is an array of pairs, `toPlainValue` uses `Object.create(null)` + `defineProperty`, and the import reviver drops `__proto__` |
+| CSP | Reviewed, unchanged. No `unsafe-eval`, no new origins. The service-worker block from M9 is a *narrower* policy for a second context; the page's is byte-for-byte unchanged. |
+| Supply chain | 5 runtime dependencies, exact-pinned; 0 vulnerabilities at `--audit-level=low` |
+
+**The regex invariant is now proved by the module graph**, not by review: one
+`new RegExp` in the codebase, and every main-thread reference to that module is
+an `import type` that TypeScript erases. No main-thread path can run a user
+pattern even by mistake.
+
+Hostile payloads — 8 shapes — were driven through the regex editor, JSON keys
+and values, history via the UI, history planted directly in IndexedDB, and
+history search. No dialog, no injected element, no inline script, no
+`javascript:` href.
+
+### Defects found and fixed during M10
+
+| Found by | Defect |
+|---|---|
+| **Forced-colors validation** | An unselected mode tab had no border and stopped reading as a control. |
+| Wiring the palette | A temporal-dead-zone crash: `DEFAULT_THEME` is built at module load and now calls `lightenToPass`, which read `SURFACE_HEX` declared later. The whole theme module threw on import. |
+| Writing the contrast audit | The first draft restated `--gray-300` as `#c3d2c9`; the real token is `#9aada3`. It now reads `tokens.css`. |
+| Auditing the M9 docs | The forced-colors claim in two documents was wrong in mechanism. |
+| Test review | The focus-trap assertion checked the wrong property, and the focus-visibility assertion checked only the focused node — CodeMirror sets `outline: none` on itself and the wrapper draws the ring. |
+
+### Known issues, classified
+
+**`regex-mobile › survives two timeouts in a row`** — still failing, 3 runs out
+of 3 in isolation. Not M10's: it fails identically at the M8 commit `a13910e`
+and with the PWA plugin disabled. It is a hard-coded **15 s assertion budget
+inside the test** on an emulated Pixel 5 after two deliberate 2 s timeouts;
+raising `--timeout` changes nothing. The architecture is green — 18 worker
+timeout/terminate/respawn tests pass across three engines, and
+`regex-chromium` passes this same test. Open against the M4 tests, not
+concealed with a retry.
+
+### Not done, and why
+
+| Item | State |
+|---|---|
+| **Screen-reader pass (A-15, 10.2)** | **NOT RUN.** NVDA and JAWS are not installed; Narrator exists but cannot be driven or heard from a non-interactive shell. The accessibility *tree* is audited instead — every control checked for a name, plus landmarks, exposed state and live regions — which is the data a screen reader consumes, not the experience of using one. Release gate. |
+| **CodeMirror screen-reader decision (Q-12, 10.7)** | Cannot be decided without the above. |
+| **Lighthouse ≥ 95 (A-18)** | Not run. axe is clean across the workspace, both drawers, high-contrast mode and a custom theme; the two are not equivalent. |
+| **CSP on a preview deployment (10.9)** | Still open from M9. Deploying is outside the milestone's remit. |
+| **CVD simulation (A-11)** | Visual review only. |
+
+### Dependencies at M10
+
+**None added, none changed, none removed.** 5 runtime, 28 dev.
+
+### Deviations at M10
+
+| # | Deviation | Reason |
+|---|---|---|
+| D38 | **The gradient carries four stops, not two** | The specified Matrix palette is a four-colour ramp; two stops would be a different palette. Schema 1 → 2 with migration. |
+| D39 | **Crimson Night's accent is not its primary colour** | `#DC143C` is 3.67:1. The derived token moves; the specified colour does not. |
+| D40 | **`--green-500` now resolves to `--matrix-bright`** | So there is one canonical Matrix value rather than a near-duplicate green for success and selection. |
+| D41 | **Forced colors is asserted on computed values, not via axe** | axe reads authored colours in that mode. Measured. |
+| D42 | **The a11y-tree suite is Chromium-only** | It reads `ariaSnapshot`, and one engine's accessible-name computation is enough to catch a *missing* name, which is what it is for. |
 
 ---
 

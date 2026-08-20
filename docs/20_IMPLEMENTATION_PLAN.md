@@ -315,7 +315,7 @@ both stated rather than absorbed:
 
 ---
 
-### M10 — Accessibility and security hardening *(2–2.5 days)*
+### M10 — Accessibility and security hardening *(2–2.5 days)* — ✅ **COMPLETE**, with three items outstanding
 
 **Dependencies:** M7, M8, M9.
 
@@ -336,6 +336,20 @@ both stated rather than absorbed:
 | 10.13 | **Verify every claim in `05_SECURITY.md` §17 maps to a passing test** |
 
 **Acceptance:** zero critical/serious axe violations; a full analysis completable with a screen reader; every security test passes; no published claim lacks a test.
+
+**Outcome.** The theme decision the product owner added to this milestone is
+done: Matrix is the four specified colours exactly, Crimson Night exists with
+its two, and both are pinned by tests. The audit and the accessibility work are
+done. Three deliverables are **not**, and are named rather than absorbed:
+
+| # | State |
+|---|---|
+| 10.2 | **NOT RUN.** No screen reader exists in this environment. The accessibility *tree* is audited instead, which is not the same thing. Release gate. |
+| 10.7 | **Not decided.** Q-12 needs a screen reader to answer; it cannot be settled without 10.2. |
+| 10.9 | **NOT RUN.** Same preview-deployment gate M9 left open — deploying is outside the milestone's remit. |
+
+10.1, 10.3–10.6, 10.8, 10.10–10.13 are complete. 10.6's CVD half is a visual
+review rather than a simulation.
 
 **Definition of done:** both audits complete with no unaddressed findings.
 

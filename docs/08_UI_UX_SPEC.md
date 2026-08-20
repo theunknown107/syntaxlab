@@ -612,3 +612,25 @@ Explanations are the one place where warmth is appropriate — they are teaching
 **Mobile:** tabs replace the two-column split; the editor gets a compact toolbar; the tree view drops to indent-only (no connector lines); tables become stacked key/value rows; the theme drawer becomes full-screen. Font size never drops below 16 px in inputs, because iOS zooms the viewport below that.
 
 **Print:** an unglamorous but genuinely useful stylesheet — input plus explanation only, black on white, no chrome. Developers do paste explanations into documentation and tickets.
+
+---
+
+## M10 — the preset list, as built
+
+Six presets. Matrix is the default and is the specified four-colour ramp;
+Crimson Night is new.
+
+| Preset | Primary | Secondary | Notes |
+|---|---|---|---|
+| **Matrix** *(default)* | `#00FF41` | `#0D0208` | Four stops: `#00FF41 → #008F11 → #003B00 → #0D0208` |
+| **Crimson Night** | `#DC143C` | `#343434` | Accent derived to `#e34363`; the gradient keeps `#DC143C` |
+| Emerald | `#10b981` | `#064e3b` | |
+| Deep Cyan | `#22d3ee` | `#0e4f5c` | |
+| Amber Console | `#fbbf24` | `#78350f` | |
+| Mono | `#9aada3` | `#1f2a24` | |
+
+The preset chip's swatch previews all four stops rather than the two ends, so
+what the chip shows is what the theme applies.
+
+Nothing else in §8 or §10 changed. The controls, the contrast note, the reset
+and the settings mirror are as M8 built them.

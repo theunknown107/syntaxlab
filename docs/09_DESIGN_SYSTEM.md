@@ -582,3 +582,108 @@ that become a user preference would make an accessibility guarantee optional.
 | Accent as its own control | Derived from the primary colour | See above. |
 | `backgroundDarkness` in the model | Not implemented | Nothing reads it, and no token exists for it. Adding a control for a value with no effect would be theatre. |
 | Self-hosted subsetted `woff2` (§5) | **System stacks only** | The font files are not in the repository and M8 did not add them — fetching typefaces was out of scope and the licensing needs deciding. `tokens.css` says so at the point of definition. Unchanged from M1; recorded here rather than left as a silent gap between §5 and the build. |
+
+
+---
+
+## 12. M10 — the specified palettes
+
+### 12.1 Matrix, as given
+
+The default is now the four colours the product owner specified. They are
+**given rather than chosen**, so they are reproduced exactly and written down
+in exactly one place — the `--matrix-*` primitives in `tokens.css`.
+
+| Value | Role in the ramp |
+|---|---|
+| `#00FF41` | `from` — the primary colour, and what the accent derives from |
+| `#008F11` | `mid1` |
+| `#003B00` | `mid2` |
+| `#0D0208` | `to` — the near-black the ramp resolves into |
+
+**Four stops, not two.** A two-stop approximation of a four-colour ramp is a
+different palette. The gradient model therefore carries `from`, `mid1`, `mid2`
+and `to`; a preset either names its middle pair or it is interpolated in sRGB
+at even thirds.
+
+**Ordered brightest to darkest**, so `from` is the primary — the colour the
+user edits, and the one the accent comes from. Reversed, the accent would be
+near-black.
+
+### 12.2 Crimson Night
+
+`#DC143C` primary and `#343434` secondary, both exact. The middle stops are
+interpolated between them.
+
+**`#DC143C` measures 3.67:1 against the interface surface, which is below AA.**
+The rule is to move the derived token and never the colour that was asked for,
+so the *accent* — which carries the focus ring and accent text — is
+`lightenToPass('#DC143C')` = **`#e34363` at 4.58:1**. The gradient still shows
+`#DC143C` exactly.
+
+```mermaid
+flowchart LR
+    P["specified primary<br/>#DC143C"] --> G["gradient stop<br/>#DC143C — unchanged"]
+    P --> C{"ratio vs surface"}
+    C -->|"3.67:1, below AA"| L["lightenToPass()<br/>steps toward white"]
+    L --> A["accent #e34363<br/>4.58:1 — passes"]
+    C -->|"already ≥ 4.5"| A2["accent = primary<br/>as Matrix does"]
+```
+
+### 12.3 Measured contrast, every preset
+
+Computed by `tests/unit/theme/contrast.test.ts`, which reads the fixed tokens
+out of `tokens.css` rather than restating them — a guard that measures the
+wrong background is worse than no guard, and that mistake was made once
+already at M8.
+
+| Preset | Accent | Ratio vs surface |
+|---|---|---|
+| Matrix | `#00FF41` | **13.42** |
+| Crimson Night | `#e34363` *(derived)* | **4.58** |
+| Emerald | `#10b981` | 7.22 |
+| Deep Cyan | `#22d3ee` | 10.14 |
+| Amber Console | `#fbbf24` | 10.98 |
+| Mono | `#9aada3` | 7.75 |
+
+Only Crimson Night needed a lightened companion; the test asserts that too, so
+a future preset that quietly needs one is visible in the diff.
+
+Status colours — success, error, warning, info — and the focus ring are **not
+themeable**, unchanged from §11.5. An error must look like an error whatever
+palette is active, and a focus ring a user could make invisible is a keyboard
+trap they cannot see. An E2E test switches to Crimson Night and asserts
+`--color-error` does not move.
+
+### 12.4 Schema 1 → 2
+
+The gradient gained two stops, so the persisted schema is version 2. A
+version-1 record keeps its two colours untouched and has its middle stops
+interpolated — which reproduces exactly what a two-stop gradient was already
+painting. The pre-paint bootstrap validates the same way and now writes four
+hexes instead of two.
+
+### 12.5 Forced colors, validated properly
+
+M8 and M9 both recorded that the test harness could not really exercise forced
+colors. That was wrong, and M10 corrects it: the browser **does** apply a
+forced palette. What is unreliable is axe's `color-contrast` rule.
+
+Validated against computed values, on Chromium (light forced palette) and
+Firefox (dark):
+
+| Property | Result |
+|---|---|
+| The authored background is replaced | ✅ |
+| Foreground/background contrast after forcing | > 7:1 on both engines |
+| Decorative gradients | dropped by the engine — no clash |
+| Focus ring | still drawn, non-zero width |
+| Errors and warnings | still say what they are, in words |
+| Controls distinguishable | **fixed at M10** — see below |
+
+**What it found.** With the palette forced, every segment of the mode selector
+lost its surface, and an *unselected* tab rendered as bare text with no border
+— it stopped reading as a control at all. Each segment now takes a real
+`ButtonBorder`, and the selected one keeps the `Highlight`/`HighlightText`
+pair. That is the only place in the codebase using `forced-color-adjust: none`,
+and it is used to opt *into* a system pair rather than out of forcing.

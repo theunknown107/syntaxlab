@@ -550,3 +550,127 @@ Automated tests do not find design flaws. Before release: a manual review agains
 | "Defence-in-depth reduces risk" | "Foolproof" / "guaranteed secure" / "100% private" | None of these are testable properties |
 
 **Rule:** a claim that cannot be traced to a passing test in `13_TEST_PLAN.md` does not get published. Claiming an untested security property is itself a defect, and an unfalsifiable claim ("completely safe") is worse than a modest one because it cannot be verified or refuted by a user.
+
+
+---
+
+## M10 — the audit, in full
+
+Every sink in the repository was enumerated rather than sampled. The scan
+covered `src/`, `public/`, `scripts/` and `tests/`, not only the files M10
+touched.
+
+### The sinks that exist, and what reaches them
+
+```mermaid
+flowchart TB
+    subgraph untrusted["Untrusted input"]
+        U1["Regex pattern · test subject"]
+        U2["JSON document"]
+        U3["localStorage · IndexedDB · sessionStorage"]
+        U4["Import file"]
+        U5["?mode= in the URL"]
+    end
+
+    subgraph gates["Validation"]
+        G1["domain/regex parser"]
+        G2["domain/json parser"]
+        G3["readTheme · readEntry"]
+        G4["readEnvelope + JSON.parse reviver"]
+        G5["three-value enum check"]
+    end
+
+    subgraph sinks["The only sinks in the codebase"]
+        S1["React text children<br/>(escaped by construction)"]
+        S2["style.setProperty ×9<br/>theme only"]
+        S3["dataset.contrast / .motion"]
+        S4["URL.createObjectURL<br/>export only"]
+        S5["location.reload"]
+    end
+
+    U1 --> G1 --> S1
+    U2 --> G2 --> S1
+    U3 --> G3 --> S2
+    G3 --> S3
+    U4 --> G4 --> S1
+    U5 --> G5
+
+    NONE["innerHTML · dangerouslySetInnerHTML<br/>eval · new Function · document.write<br/>insertAdjacentHTML"]:::gone
+    classDef gone stroke-dasharray: 4 4
+```
+
+**`innerHTML`, `dangerouslySetInnerHTML`, `eval`, `new Function`,
+`document.write` and `insertAdjacentHTML` do not appear anywhere in the
+repository.** That is a grep result, not a policy statement.
+
+### The regex-execution invariant, proved by imports
+
+```mermaid
+flowchart LR
+    EXEC["domain/regex/execute.ts<br/>the only `new RegExp` in the codebase"]
+    W["workers/exec.worker.ts"]
+    M["main thread<br/>workspaceStore · MatchResults · viewModel · protocol"]
+
+    W -->|"value import — runs it"| EXEC
+    M -.->|"`import type` only<br/>erased at compile time"| EXEC
+```
+
+There is exactly one `new RegExp` on user input in the entire codebase. Every
+main-thread reference to that module is an `import type`, which TypeScript
+erases — so no main-thread code path can execute a user pattern even by
+mistake. The invariant is enforced by the module graph rather than by
+discipline.
+
+Timeout → `terminate()` → respawn is exercised by 18 worker-lifecycle tests
+across Chromium, Firefox and WebKit, all green.
+
+**Not claimed:** that ReDoS is prevented. A pattern can still burn its full
+budget. What is guaranteed is that it burns it off the main thread and is
+killed.
+
+### Persisted data
+
+```mermaid
+flowchart LR
+    subgraph stores["Three stores, three shapes of hostility"]
+        LS[("localStorage<br/>theme · settings")]
+        IDB[("IndexedDB<br/>history")]
+        SS[("sessionStorage<br/>editor buffers across an update")]
+    end
+
+    LS --> V1["readTheme<br/>allowlist hex · bounded ints · enums"]
+    IDB --> V2["readEntry<br/>rebuilt field by field"]
+    SS --> V3["JSON.parse + per-field checks<br/>applied through ordinary setters"]
+
+    V1 --> OK["application state"]
+    V2 --> OK
+    V3 --> OK
+
+    V1 -.->|"reject"| D["that field's default"]
+    V2 -.->|"reject"| Q["quarantined, never deleted"]
+    V3 -.->|"reject"| I["ignored"]
+```
+
+Cache Storage holds application assets only; a test types a distinctive string,
+lets it reach history, then reads every text response in the cache back and
+asserts the string does not appear.
+
+### CSP, in two contexts
+
+```mermaid
+flowchart TB
+    H["public/_headers"]
+    H --> P["/*  — the page<br/>default-src 'none'<br/>script-src 'self'<br/>connect-src 'none'<br/>worker-src 'self'"]
+    H --> S["/sw.js · /workbox-*.js<br/>default-src 'none'<br/>script-src 'self'<br/>connect-src 'self'"]
+    P --> PAGE["Page: makes no requests at all"]
+    S --> SW["Service worker: fetches only<br/>same-origin assets it is about to cache"]
+```
+
+Reviewed at M10 and unchanged. No `unsafe-eval`, no new origins, no
+`unsafe-inline` for scripts. The single `style-src 'unsafe-inline'` predates
+M10 and remains recorded as residual risk RR-02, not a shortcut.
+
+**Nothing was weakened to make a test pass.** The one CSP change in the
+project's history — the service-worker block added at M9 — is a *narrower*
+policy for a second execution context, and the page's policy is byte-for-byte
+what it was.

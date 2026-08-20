@@ -373,3 +373,32 @@ exists so that class of defect is reachable from a test.
 
 - Offline on real Safari is unverified by automation (harness limitation, documented).
 - The preview-deployment verification in the M9 definition of done is outstanding and remains a release gate.
+
+---
+
+## M10 — what the audit changed
+
+**No new risk.** The audit enumerated every sink in the repository rather than
+sampling, and found no execution sink at all: `innerHTML`,
+`dangerouslySetInnerHTML`, `eval`, `new Function`, `document.write` and
+`insertAdjacentHTML` appear nowhere. The only sinks are React text children,
+nine `setProperty` calls that all pass through `readTheme`, two `dataset`
+writes, one `createObjectURL` for export, and two `location.reload` calls
+behind user actions.
+
+**One risk is now better evidenced than argued.** The regex-execution
+invariant — user patterns never run on the main thread — is enforced by the
+module graph: there is exactly one `new RegExp` in the codebase, and every
+main-thread reference to that module is an `import type`, erased at compile
+time. Previously this was a convention backed by review.
+
+### Residual, and honestly rated
+
+| Item | State |
+|---|---|
+| Screen-reader verification | **Not performed.** No screen reader in this environment. The tree is audited; how it *sounds* is unverified. Release gate. |
+| Lighthouse accessibility ≥ 95 (A-18) | Not run. axe is clean; the two are not equivalent. |
+| CSP verification on a preview deployment | Still open from M9. |
+| CVD simulation (A-11) | Visual review only. |
+| `regex-mobile › survives two timeouts` | Open, pre-existing, classified — a 15 s in-test budget on an emulated device, not a product defect. The architecture is green on 18 worker-lifecycle tests across three engines. |
+| ReDoS | Not prevented and never claimed to be. Bounded and killed, off the main thread. |

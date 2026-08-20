@@ -788,3 +788,26 @@ worker's own context. They are now budgeted separately, exactly as worker
 chunks were split out at M5 for the same reason — a figure that names a load
 which does not happen is not conservative, it is wrong. Both remain inside
 "Total precache", which is the honest everything-at-once number.
+
+
+---
+
+### 10.11 M10 — the hardening baseline
+
+M10 is not a performance milestone; the number is recorded so a later one can
+see what it inherited.
+
+| | M9 | M10 | Delta |
+|---|---|---|---|
+| Initial JS | 174.52 KB | **174.81 KB** | +0.29 KB |
+| CSS | 7.73 KB | 7.83 KB | +0.10 KB |
+| Service worker | 5.93 KB | 5.93 KB | — |
+| Total precache | 226.00 KB | 226.39 KB | +0.39 KB |
+
+The theme change added a second preset and two gradient stops; the forced-colors
+fix added one CSS rule. Everything else M10 produced is tests, which ship
+nothing.
+
+Still 4.81 KB over the 170 KB target and 25 KB under the hard budget. The
+17.04 KB CodeMirror lead measured at M8 is untouched and remains the available
+move when the editor risk is worth taking.
