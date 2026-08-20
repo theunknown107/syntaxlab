@@ -16,6 +16,7 @@ import {
   DIRECTIONS,
   directionFor,
   FONT_SCALES,
+  interpolateStops,
   isDefaultTheme,
   lightenToPass,
   MOTION_MODES,
@@ -23,6 +24,7 @@ import {
   SURFACE_HEX,
   verdictFor,
   type ThemePreferences,
+  type ThemePreset,
 } from '@/domain/theme/preferences';
 
 import styles from './theme.module.css';
@@ -87,6 +89,18 @@ export function ThemeDrawer({ open, onClose }: ThemeDrawerProps): React.JSX.Elem
   );
 }
 
+/**
+ * The preview gradient for a preset chip.
+ *
+ * Built from the same four stops the theme itself uses, so the swatch shows
+ * the ramp rather than a two-colour approximation of it. Every value is a
+ * validated hex from our own preset table — never user input.
+ */
+function swatchFor(preset: ThemePreset): string {
+  const [mid1, mid2] = preset.mid ?? interpolateStops(preset.from, preset.to);
+  return `linear-gradient(135deg, ${preset.from}, ${mid1}, ${mid2}, ${preset.to})`;
+}
+
 function describe(theme: ThemePreferences): string {
   const preset = PRESETS.find((candidate) => candidate.id === theme.preset);
   return preset === undefined ? 'a custom theme' : preset.name;
@@ -129,7 +143,7 @@ function Presets({ theme }: { readonly theme: ThemePreferences }): React.JSX.Ele
                 // *not* the active theme, so it cannot come from a token. The
                 // value is a validated hex from our own preset table, never
                 // user input.
-                style={{ background: `linear-gradient(135deg, ${preset.from}, ${preset.to})` }}
+                style={{ background: swatchFor(preset) }}
               />
               <span className={styles.presetName}>{preset.name}</span>
             </button>

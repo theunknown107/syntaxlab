@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   angleFor,
+  mixHex,
   contrastRatio,
   DEFAULT_THEME,
   DIRECTIONS,
@@ -93,7 +94,14 @@ function stored(overrides: Record<string, unknown> = {}): Record<string, unknown
   return {
     schemaVersion: 1,
     preset: 'cyan',
-    gradient: { from: '#22d3ee', to: '#0e4f5c', angleDeg: 145, intensity: 35 },
+    gradient: {
+      from: '#22d3ee',
+      mid1: '#1cb2c7',
+      mid2: '#1590a1',
+      to: '#0e4f5c',
+      angleDeg: 145,
+      intensity: 35,
+    },
     accent: '#22d3ee',
     glowIntensity: 25,
     contrastMode: 'normal',
@@ -109,6 +117,8 @@ describe('readTheme — valid input', () => {
     expect(theme.preset).toBe('cyan');
     expect(theme.gradient).toEqual({
       from: '#22d3ee',
+      mid1: '#1cb2c7',
+      mid2: '#1590a1',
       to: '#0e4f5c',
       angleDeg: 145,
       intensity: 35,
@@ -318,9 +328,10 @@ describe('readTheme — schema versions', () => {
  * ------------------------------------------------------------------ */
 
 describe('presets', () => {
-  it('has the five documented presets, default first', () => {
+  it('has the six documented presets, default first', () => {
     expect(PRESETS.map((preset) => preset.id)).toEqual([
       'matrix',
+      'crimsonNight',
       'emerald',
       'cyan',
       'amber',
@@ -340,15 +351,51 @@ describe('presets', () => {
     }
   });
 
-  it('keeps the default identity exactly as documented', () => {
-    // The hacker-green default is the product's identity; a drift here would
-    // be a silent rebrand.
+  it('uses the four specified Matrix colours, exactly', () => {
+    // These values are given rather than chosen. A drift here — including a
+    // case change or a near-miss shade — is a silent rebrand, so they are
+    // asserted literally.
     expect(DEFAULT_THEME.gradient).toEqual({
-      from: '#00ff88',
-      to: '#003d1f',
+      from: '#00FF41',
+      mid1: '#008F11',
+      mid2: '#003B00',
+      to: '#0D0208',
       angleDeg: 135,
       intensity: 40,
     });
+
+    const stops = [
+      DEFAULT_THEME.gradient.from,
+      DEFAULT_THEME.gradient.mid1,
+      DEFAULT_THEME.gradient.mid2,
+      DEFAULT_THEME.gradient.to,
+    ].map((value) => value.toUpperCase());
+    expect(stops).toEqual(['#00FF41', '#008F11', '#003B00', '#0D0208']);
+  });
+
+  it('defines Crimson Night with the two specified colours, exactly', () => {
+    const crimson = presetById('crimsonNight');
+    expect(crimson?.from).toBe('#DC143C');
+    expect(crimson?.to).toBe('#343434');
+  });
+
+  it('keeps a specified colour in the gradient even when it fails contrast', () => {
+    // #DC143C measures 3.67:1 against the surface. The rule is to fix the
+    // derived token, never the colour that was asked for.
+    const theme = themeFromPreset(presetById('crimsonNight')!);
+    expect(theme.gradient.from).toBe('#DC143C');
+    expect(verdictFor(theme.gradient.from)).not.toBe('pass');
+
+    // …and the accent, which carries the focus ring, is lightened until it
+    // does pass.
+    expect(theme.accent).not.toBe('#DC143C');
+    expect(verdictFor(theme.accent)).toBe('pass');
+  });
+
+  it('interpolates the middle stops for a two-colour preset', () => {
+    const theme = themeFromPreset(presetById('crimsonNight')!);
+    expect(theme.gradient.mid1).toBe(mixHex('#DC143C', '#343434', 1 / 3));
+    expect(theme.gradient.mid2).toBe(mixHex('#DC143C', '#343434', 2 / 3));
   });
 
   it('gives every preset an accent that is readable on the surface', () => {
@@ -467,9 +514,12 @@ describe('derived state', () => {
     expect(isDefaultTheme(themeFromPreset(PRESETS[2]!))).toBe(false);
   });
 
-  it('derives the accent from the gradient start', () => {
+  it('derives the accent from the gradient start, lightened only if it must be', () => {
     for (const preset of PRESETS) {
-      expect(themeFromPreset(preset).accent).toBe(preset.from);
+      const theme = themeFromPreset(preset);
+      expect(theme.accent).toBe(lightenToPass(preset.from));
+      // Whatever happens to the accent, the gradient keeps the exact colour.
+      expect(theme.gradient.from).toBe(preset.from);
     }
   });
 

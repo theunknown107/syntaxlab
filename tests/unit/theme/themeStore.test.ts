@@ -50,11 +50,13 @@ describe('applyTheme', () => {
   it('writes the whole theme into custom properties', () => {
     applyTheme(DEFAULT_THEME);
 
-    expect(property('--gradient-from')).toBe('#00ff88');
-    expect(property('--gradient-to')).toBe('#003d1f');
+    expect(property('--gradient-from')).toBe('#00FF41');
+    expect(property('--gradient-mid-1')).toBe('#008F11');
+    expect(property('--gradient-mid-2')).toBe('#003B00');
+    expect(property('--gradient-to')).toBe('#0D0208');
     expect(property('--gradient-angle')).toBe('135deg');
     expect(property('--gradient-intensity')).toBe('0.4');
-    expect(property('--color-accent')).toBe('#00ff88');
+    expect(property('--color-accent')).toBe('#00FF41');
     expect(property('--glow-intensity')).toBe('0.25');
     expect(property('--font-scale')).toBe('1');
     expect(root.dataset.contrast).toBe('normal');
@@ -137,7 +139,7 @@ describe('presets', () => {
     selectPreset('matrix');
     selectPreset('neon-gamer');
     expect(themeStore.getState().preset).toBe('matrix');
-    expect(property('--gradient-from')).toBe('#00ff88');
+    expect(property('--gradient-from')).toBe('#00FF41');
   });
 
   it('keeps the accessibility settings when the colour scheme changes', () => {
@@ -194,7 +196,7 @@ describe('reset', () => {
     resetTheme();
 
     expect(themeStore.getState()).toEqual(DEFAULT_THEME);
-    expect(property('--gradient-from')).toBe('#00ff88');
+    expect(property('--gradient-from')).toBe('#00FF41');
     expect(property('--font-scale')).toBe('1');
     // Persisted at once, not on a debounce: reset is a deliberate act.
     expect(stored()).toEqual(DEFAULT_THEME);
@@ -222,7 +224,7 @@ describe('reading back from storage', () => {
     localStorage.setItem(THEME_STORAGE_KEY, '{not json');
     reloadTheme();
     expect(themeStore.getState()).toEqual(DEFAULT_THEME);
-    expect(property('--gradient-from')).toBe('#00ff88');
+    expect(property('--gradient-from')).toBe('#00FF41');
   });
 
   it('never writes an unvalidated value into CSS, whatever storage holds', () => {

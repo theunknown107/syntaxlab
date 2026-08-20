@@ -53,12 +53,49 @@ test.beforeEach(async ({ page }) => {
  * The default identity
  * ------------------------------------------------------------------ */
 
-test('ships the hacker-green default', async ({ page }) => {
-  // The product's identity. A drift here is a silent rebrand.
-  expect(await token(page, '--gradient-from')).toBe('#00ff88');
-  expect(await token(page, '--gradient-to')).toBe('#003d1f');
+test('ships the Matrix default, with all four specified colours', async ({ page }) => {
+  // These values are given rather than chosen. Asserted against the *rendered*
+  // custom properties, so a drift anywhere between the preset table, the
+  // stylesheet and the bootstrap shows up here.
+  expect((await token(page, '--gradient-from')).toLowerCase()).toBe('#00ff41');
+  expect((await token(page, '--gradient-mid-1')).toLowerCase()).toBe('#008f11');
+  expect((await token(page, '--gradient-mid-2')).toLowerCase()).toBe('#003b00');
+  expect((await token(page, '--gradient-to')).toLowerCase()).toBe('#0d0208');
+  expect((await token(page, '--color-accent')).toLowerCase()).toBe('#00ff41');
   expect(await token(page, '--gradient-angle')).toBe('135deg');
-  expect(await token(page, '--gradient-intensity')).toBe('0.4');
+  expect(await token(page, '--gradient-intensity')).toMatch(/^0?\.4$/);
+});
+
+test('offers Crimson Night, with the two specified colours exactly', async ({ page }) => {
+  await openDrawer(page);
+  await drawer(page).getByRole('radio', { name: 'Crimson Night' }).click();
+
+  expect((await token(page, '--gradient-from')).toLowerCase()).toBe('#dc143c');
+  expect((await token(page, '--gradient-to')).toLowerCase()).toBe('#343434');
+
+  // The accent is a lightened companion, because #DC143C is 3.67:1 against the
+  // surface. The gradient keeps the requested colour; only the derived token
+  // moves.
+  const accent = (await token(page, '--color-accent')).toLowerCase();
+  expect(accent).not.toBe('#dc143c');
+  await expect(drawer(page).getByText(/Passes AA|Low contrast|Fails accessibility/)).toBeVisible();
+
+  await closeDrawer(page);
+  await page.reload();
+  expect((await token(page, '--gradient-from')).toLowerCase()).toBe('#dc143c');
+});
+
+test('Crimson Night leaves the semantic status colours alone', async ({ page }) => {
+  const before = await token(page, '--color-error');
+  await openDrawer(page);
+  await drawer(page).getByRole('radio', { name: 'Crimson Night' }).click();
+  await closeDrawer(page);
+
+  // An error must look like an error whatever the theme is. Status colours are
+  // deliberately not customisable (09_DESIGN_SYSTEM.md §11.5).
+  expect(await token(page, '--color-error')).toBe(before);
+  expect(await token(page, '--color-warning')).not.toBe('');
+  expect(await token(page, '--color-success')).not.toBe('');
 });
 
 /* ------------------------------------------------------------------ *
@@ -121,11 +158,11 @@ test('resets to the default without a reload', async ({ page }) => {
 
   await drawer(page).getByRole('button', { name: 'Reset to default' }).click();
 
-  expect(await token(page, '--gradient-from')).toBe('#00ff88');
+  expect((await token(page, '--gradient-from')).toLowerCase()).toBe('#00ff41');
   await expect(drawer(page).getByText('Using the default SyntaxLab theme.')).toBeVisible();
   // Reset is a deliberate act, so it persists at once rather than on a debounce.
   await page.reload();
-  expect(await token(page, '--gradient-from')).toBe('#00ff88');
+  expect((await token(page, '--gradient-from')).toLowerCase()).toBe('#00ff41');
 });
 
 /* ------------------------------------------------------------------ *
@@ -187,7 +224,7 @@ const PAYLOADS: readonly (readonly [string, string])[] = [
   ['an HTML fragment', '{"accent":"<style>body{display:none}</style>"}'],
   ['a style-tag escape', '{"gradient":{"from":"</style><script>alert(1)</script>"}}'],
   ['an oversized hex', '{"gradient":{"from":"#123456789"}}'],
-  ['a custom-property escape', '{"gradient":{"from":"#00ff88; --color-bg: red"}}'],
+  ['a custom-property escape', '{"gradient":{"from":"#00ff41; --color-bg: red"}}'],
   ['NaN and Infinity', '{"gradient":{"angleDeg":null,"intensity":null},"glowIntensity":null}'],
   ['an out-of-range intensity', '{"gradient":{"intensity":100000,"angleDeg":-9999}}'],
   ['an unknown direction', '{"gradient":{"angleDeg":"90deg; --color-bg: red"}}'],
@@ -289,12 +326,25 @@ test('the drawer traps focus, closes on Escape, and restores focus', async ({ pa
   await page.keyboard.press('Enter');
   await expect(drawer(page)).toBeVisible();
 
-  for (let index = 0; index < 15; index += 1) await page.keyboard.press('Tab');
-  const inside = await page.evaluate(() => {
-    const dialog = document.querySelector('dialog[open]');
-    return dialog?.contains(document.activeElement) ?? false;
-  });
-  expect(inside).toBe(true);
+  // Tabbed right around the cycle and past it. What must never happen is
+  // focus reaching an interactive element *behind* the dialog. Chromium parks
+  // focus on <body> for a single step as it wraps past the last focusable,
+  // which is the cycle working rather than the trap leaking — measured, and
+  // the next Tab returns inside.
+  const escapes: string[] = [];
+  for (let index = 0; index < 20; index += 1) {
+    await page.keyboard.press('Tab');
+    const outside = await page.evaluate(() => {
+      const dialog = document.querySelector('dialog[open]');
+      const active = document.activeElement;
+      if (active === null || dialog === null) return null;
+      if (dialog.contains(active)) return null;
+      if (active === document.body || active === document.documentElement) return null;
+      return `${active.tagName}:${active.getAttribute('aria-label') ?? ''}`;
+    });
+    if (outside !== null) escapes.push(outside);
+  }
+  expect(escapes).toEqual([]);
 
   await page.keyboard.press('Escape');
   await expect(drawer(page)).toBeHidden();

@@ -1,5 +1,7 @@
 import {
   DEFAULT_THEME,
+  interpolateStops,
+  lightenToPass,
   presetById,
   presetIdFor,
   readTheme,
@@ -57,6 +59,8 @@ export function applyTheme(theme: ThemePreferences): void {
   const style = root.style;
 
   style.setProperty('--gradient-from', theme.gradient.from);
+  style.setProperty('--gradient-mid-1', theme.gradient.mid1);
+  style.setProperty('--gradient-mid-2', theme.gradient.mid2);
   style.setProperty('--gradient-to', theme.gradient.to);
   style.setProperty('--gradient-angle', `${theme.gradient.angleDeg}deg`);
   style.setProperty('--gradient-intensity', String(theme.gradient.intensity / 100));
@@ -144,13 +148,22 @@ export function selectPreset(id: string): void {
  */
 export function updateGradient(patch: Partial<ThemePreferences['gradient']>): void {
   const current = themeStore.getState();
-  const gradient = { ...current.gradient, ...patch };
+  const ends = { ...current.gradient, ...patch };
+
+  // Editing either end re-derives the middle stops. Keeping the old ones would
+  // leave a crimson ramp running through green, which is not a gradient anyone
+  // asked for. An edit that only changes the angle or intensity leaves them
+  // alone, so a preset that names its own stops — Matrix — keeps them.
+  const endsMoved = patch.from !== undefined || patch.to !== undefined;
+  const [mid1, mid2] = endsMoved ? interpolateStops(ends.from, ends.to) : [ends.mid1, ends.mid2];
+  const gradient = { ...ends, mid1, mid2 };
+
   setTheme({
     ...current,
     gradient,
-    // The accent follows the start colour, so the focus ring and the gradient
-    // are always the same hue family.
-    accent: gradient.from,
+    // The accent follows the start colour, lightened only as far as legibility
+    // requires. The gradient itself always keeps the chosen colour exactly.
+    accent: lightenToPass(gradient.from),
     preset: presetIdFor(gradient),
   });
 }

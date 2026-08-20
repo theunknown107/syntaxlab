@@ -24,7 +24,7 @@
   'use strict';
 
   var HEX = /^#[0-9a-fA-F]{6}$/;
-  var SCHEMA_VERSION = 1;
+  var SCHEMA_VERSION = 2;
   var FONT_SCALES = [0.875, 1, 1.125, 1.25];
   var root = document.documentElement;
 
@@ -83,6 +83,8 @@
 
   var gradient = theme.gradient && typeof theme.gradient === 'object' ? theme.gradient : {};
   applyHex('--gradient-from', gradient.from);
+  applyHex('--gradient-mid-1', gradient.mid1);
+  applyHex('--gradient-mid-2', gradient.mid2);
   applyHex('--gradient-to', gradient.to);
   applyHex('--color-accent', theme.accent);
   applyAngle('--gradient-angle', gradient.angleDeg);

@@ -16,14 +16,23 @@
      1. PRIMITIVES
      ============================================================ */
 
+  /* ---- The Matrix ramp ----
+     These four values are given rather than chosen, and this is the single
+     place they are written down (09_DESIGN_SYSTEM.md §12). Everything that
+     needs one of them references it from here. */
+  --matrix-bright: #00ff41;
+  --matrix-mid: #008f11;
+  --matrix-deep: #003b00;
+  --matrix-base: #0d0208;
+
   /* Greens — six steps, deliberately not ten. Each has a job:
      accent, hover, active, border, glow, deep-gradient stop. */
   --green-100: #d4f5e2;
   --green-300: #6ee7a0;
-  --green-500: #00ff88; /* signature accent */
+  --green-500: var(--matrix-bright); /* signature accent, and success */
   --green-600: #00cc6a;
   --green-700: #059648;
-  --green-900: #003d1f;
+  --green-900: var(--matrix-deep);
 
   /* Neutrals. --gray-950 is a green-tinted near-black, not pure #000:
      pure black against bright text causes halation and is fatiguing
@@ -65,7 +74,7 @@
   --color-text-disabled: var(--gray-500);
 
   /* Accent — the customisable axis (M8 rewrites --color-accent) */
-  --color-accent: var(--green-500);
+  --color-accent: var(--matrix-bright);
   --color-accent-hover: var(--green-300);
   --color-accent-active: var(--green-600);
   --color-accent-subtle: color-mix(in oklab, var(--color-accent) 12%, transparent);
@@ -116,14 +125,20 @@
      Intensity multiplies alpha rather than swapping colours, so the M8
      customisation slider is one continuous axis from invisible to bold
      and can never produce a broken-looking state. */
-  --gradient-from: var(--green-500);
-  --gradient-to: var(--green-900);
+  /* The Matrix ramp, exactly as specified (09_DESIGN_SYSTEM.md §12).
+     Four stops because the palette is a ramp, not a two-colour blend. */
+  --gradient-from: var(--matrix-bright);
+  --gradient-mid-1: var(--matrix-mid);
+  --gradient-mid-2: var(--matrix-deep);
+  --gradient-to: var(--matrix-base);
   --gradient-angle: 135deg;
   --gradient-intensity: 0.4;
 
   --gradient-primary: linear-gradient(
     var(--gradient-angle),
     color-mix(in oklab, var(--gradient-from) calc(var(--gradient-intensity) * 100%), transparent),
+    color-mix(in oklab, var(--gradient-mid-1) calc(var(--gradient-intensity) * 100%), transparent),
+    color-mix(in oklab, var(--gradient-mid-2) calc(var(--gradient-intensity) * 100%), transparent),
     color-mix(in oklab, var(--gradient-to) calc(var(--gradient-intensity) * 100%), transparent)
   );
 
@@ -262,14 +277,20 @@
    rather than losing colour entirely. */
 @supports not (color: color-mix(in oklab, red, blue)) {
   :root {
-    --color-accent-subtle: rgb(0 255 136 / 0.12);
+    --color-accent-subtle: rgb(0 255 65 / 0.12);
     --color-selection: #2a4a3a;
-    --color-match-a: rgb(0 255 136 / 0.22);
+    --color-match-a: rgb(0 255 65 / 0.22);
     --color-match-b: rgb(74 158 255 / 0.24);
-    --color-border-accent: rgb(0 255 136 / 0.4);
-    --color-success-bg: rgb(0 255 136 / 0.1);
-    --gradient-primary: linear-gradient(135deg, rgb(0 255 136 / 0.4), rgb(0 61 31 / 0.4));
-    --gradient-subtle: linear-gradient(135deg, rgb(0 255 136 / 0.1), transparent);
-    --glow-accent: 0 0 5px rgb(0 255 136 / 0.3);
+    --color-border-accent: rgb(0 255 65 / 0.4);
+    --color-success-bg: rgb(0 255 65 / 0.1);
+    --gradient-primary: linear-gradient(
+      135deg,
+      rgb(0 255 65 / 0.4),
+      rgb(0 143 17 / 0.4),
+      rgb(0 59 0 / 0.4),
+      rgb(13 2 8 / 0.4)
+    );
+    --gradient-subtle: linear-gradient(135deg, rgb(0 255 65 / 0.1), transparent);
+    --glow-accent: 0 0 5px rgb(0 255 65 / 0.3);
   }
 }

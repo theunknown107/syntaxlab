@@ -13,12 +13,30 @@
  * recognised as hostile, because it is simply not `/^#[0-9a-fA-F]{6}$/`.
  */
 
-export const THEME_SCHEMA_VERSION = 1;
+/**
+ * Bumped to 2 at M10, when the gradient gained two intermediate stops.
+ *
+ * A version-1 record is migrated rather than discarded: its two colours are
+ * kept exactly and the middle stops are interpolated, which is what a
+ * two-stop gradient was already displaying.
+ */
+export const THEME_SCHEMA_VERSION = 2;
 
 /** `#RRGGBB`, and nothing else. Not `#RGB`, not `rgb()`, not a colour name. */
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 export type HexColor = string;
+
+/**
+ * The surface the accent is judged against.
+ *
+ * This is `--color-surface` at rest, which resolves to `--gray-900` in
+ * `styles/tokens.css`. It is duplicated here because the domain cannot read
+ * CSS, and `tests/unit/theme/preferences.test.ts` asserts the two agree so the
+ * duplication cannot drift — a guard measuring against the wrong background is
+ * worse than no guard, because it reports confidently.
+ */
+export const SURFACE_HEX = '#101613';
 
 /**
  * Gradient direction as a closed set.
@@ -54,8 +72,23 @@ export interface ThemePreferences {
   readonly schemaVersion: number;
   /** A preset id, or `'custom'` once the user changes a colour by hand. */
   readonly preset: string;
+  /**
+   * Four stops, always.
+   *
+   * `from` and `to` are the two the user edits — the primary and secondary
+   * colours. `mid1` and `mid2` sit between them and exist because the Matrix
+   * palette is a four-colour ramp, not a two-colour blend, and approximating
+   * it with two stops would not be the palette that was specified.
+   *
+   * A preset either names all four (Matrix does) or names two, in which case
+   * the middle pair is interpolated in sRGB at one and two thirds. Storing all
+   * four rather than deriving them at paint time keeps the pre-paint bootstrap
+   * free of colour maths: it writes four validated hex values and nothing else.
+   */
   readonly gradient: {
     readonly from: HexColor;
+    readonly mid1: HexColor;
+    readonly mid2: HexColor;
     readonly to: HexColor;
     readonly angleDeg: number;
     readonly intensity: number;
@@ -76,6 +109,8 @@ export interface ThemePreset {
   readonly name: string;
   readonly from: HexColor;
   readonly to: HexColor;
+  /** Named explicitly only where the palette is a ramp rather than a blend. */
+  readonly mid?: readonly [HexColor, HexColor];
   readonly angleDeg: number;
   /** 0–100. */
   readonly intensity: number;
@@ -89,17 +124,51 @@ export interface ThemePreset {
  * to make for no gain. Mono is deliberately part of the set — the tool with no
  * colour theatre at all is a legitimate preference, not a degraded mode.
  */
+/**
+ * The Matrix palette — the product's identity, and the default.
+ *
+ * These four values are given, not chosen, and are reproduced exactly:
+ *
+ *   #00FF41  the bright green the accent derives from
+ *   #008F11  mid
+ *   #003B00  deep green
+ *   #0D0208  the near-black the ramp resolves into
+ *
+ * Ordered brightest to darkest so that `from` is the primary colour — the one
+ * the user edits and the one the accent comes from — which is the same shape
+ * every other preset has. Reversing them would make the accent near-black.
+ */
 const MATRIX: ThemePreset = {
   id: 'matrix',
   name: 'Matrix',
-  from: '#00ff88',
-  to: '#003d1f',
+  from: '#00FF41',
+  mid: ['#008F11', '#003B00'],
+  to: '#0D0208',
   angleDeg: 135,
   intensity: 40,
 };
 
+/**
+ * Crimson Night.
+ *
+ * The two colours are given: `#DC143C` primary, `#343434` secondary. Both are
+ * reproduced exactly. The middle stops are interpolated between them, and the
+ * accent is derived by `lightenToPass` — `#DC143C` measures **3.67:1** against
+ * the interface surface, which is below AA, and the rule is to fix the derived
+ * token rather than alter a colour that was specified.
+ */
+const CRIMSON_NIGHT: ThemePreset = {
+  id: 'crimsonNight',
+  name: 'Crimson Night',
+  from: '#DC143C',
+  to: '#343434',
+  angleDeg: 135,
+  intensity: 35,
+};
+
 export const PRESETS: readonly ThemePreset[] = [
   MATRIX,
+  CRIMSON_NIGHT,
   {
     id: 'emerald',
     name: 'Emerald',
@@ -144,11 +213,14 @@ export function presetById(id: string): ThemePreset | null {
 export const DEFAULT_THEME: ThemePreferences = themeFromPreset(MATRIX);
 
 export function themeFromPreset(preset: ThemePreset): ThemePreferences {
+  const [mid1, mid2] = preset.mid ?? interpolateStops(preset.from, preset.to);
   return {
     schemaVersion: THEME_SCHEMA_VERSION,
     preset: preset.id,
     gradient: {
       from: preset.from,
+      mid1,
+      mid2,
       to: preset.to,
       angleDeg: preset.angleDeg,
       intensity: preset.intensity,
@@ -156,7 +228,12 @@ export function themeFromPreset(preset: ThemePreset): ThemePreferences {
     // Derived, never separately chosen. An amber gradient with a green focus
     // ring is incoherent, and one fewer control is one fewer way to build an
     // unreadable interface (09_DESIGN_SYSTEM.md §4.5).
-    accent: preset.from,
+    //
+    // Lightened until it reaches AA against the interface surface. The
+    // *gradient* keeps the colour exactly as specified; only this derived
+    // token moves, which is the rule when a requested colour is too dark to
+    // carry a focus ring (09_DESIGN_SYSTEM.md §11.4).
+    accent: lightenToPass(preset.from),
     glowIntensity: 25,
     contrastMode: 'normal',
     reducedMotion: 'system',
@@ -170,6 +247,38 @@ export function themeFromPreset(preset: ThemePreset): ThemePreferences {
 
 export function isHexColor(value: unknown): value is HexColor {
   return typeof value === 'string' && HEX.test(value);
+}
+
+function channelOf(hex: HexColor, index: number): number {
+  return Number.parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16);
+}
+
+function toHexColor(r: number, g: number, b: number): HexColor {
+  const part = (value: number): string =>
+    Math.max(0, Math.min(255, Math.round(value)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${part(r)}${part(g)}${part(b)}`;
+}
+
+/** Blends two colours in sRGB. `t` of 0 is `a`, 1 is `b`. */
+export function mixHex(a: HexColor, b: HexColor, t: number): HexColor {
+  return toHexColor(
+    channelOf(a, 0) + (channelOf(b, 0) - channelOf(a, 0)) * t,
+    channelOf(a, 1) + (channelOf(b, 1) - channelOf(a, 1)) * t,
+    channelOf(a, 2) + (channelOf(b, 2) - channelOf(a, 2)) * t,
+  );
+}
+
+/**
+ * The two middle stops for a palette that names only its ends.
+ *
+ * Even thirds, in sRGB — the same interpolation the browser would have
+ * performed for a two-stop gradient, made explicit so the stored theme holds
+ * four concrete colours and the pre-paint bootstrap needs no colour maths.
+ */
+export function interpolateStops(from: HexColor, to: HexColor): [HexColor, HexColor] {
+  return [mixHex(from, to, 1 / 3), mixHex(from, to, 2 / 3)];
 }
 
 /** A finite integer inside `[min, max]`, or null. Never NaN, never Infinity. */
@@ -210,20 +319,28 @@ export function readTheme(value: unknown): ThemePreferences {
 
   const gradient = isRecord(migrated.gradient) ? migrated.gradient : {};
   const from = isHexColor(gradient.from) ? gradient.from : DEFAULT_THEME.gradient.from;
+  const to = isHexColor(gradient.to) ? gradient.to : DEFAULT_THEME.gradient.to;
+
+  // Absent or corrupt middle stops are interpolated rather than defaulted to
+  // the Matrix ones: a stored theme with a valid crimson pair and a damaged
+  // middle should stay crimson.
+  const [defaultMid1, defaultMid2] = interpolateStops(from, to);
 
   return {
     schemaVersion: THEME_SCHEMA_VERSION,
     preset: readPresetId(migrated.preset),
     gradient: {
       from,
-      to: isHexColor(gradient.to) ? gradient.to : DEFAULT_THEME.gradient.to,
+      mid1: isHexColor(gradient.mid1) ? gradient.mid1 : defaultMid1,
+      mid2: isHexColor(gradient.mid2) ? gradient.mid2 : defaultMid2,
+      to,
       angleDeg: readInt(gradient.angleDeg, 0, 359) ?? DEFAULT_THEME.gradient.angleDeg,
       intensity: readInt(gradient.intensity, 0, 100) ?? DEFAULT_THEME.gradient.intensity,
     },
-    // Falls back to the gradient's own start colour rather than to the default
-    // green: a stored theme with a valid amber gradient and a corrupt accent
-    // should stay amber.
-    accent: isHexColor(migrated.accent) ? migrated.accent : from,
+    // Falls back to a companion derived from the gradient's own start colour
+    // rather than to the default green: a stored theme with a valid amber
+    // gradient and a corrupt accent should stay amber.
+    accent: isHexColor(migrated.accent) ? migrated.accent : lightenToPass(from),
     glowIntensity: readInt(migrated.glowIntensity, 0, 100) ?? DEFAULT_THEME.glowIntensity,
     contrastMode: readEnum(migrated.contrastMode, CONTRAST_MODES) ?? 'normal',
     reducedMotion: readEnum(migrated.reducedMotion, MOTION_MODES) ?? 'system',
@@ -261,7 +378,13 @@ function migrate(record: Record<string, unknown>): Record<string, unknown> | nul
     return record;
   }
   const parsed = readInt(version, 1, THEME_SCHEMA_VERSION);
-  return parsed === null ? null : record;
+  if (parsed === null) return null;
+
+  // Version 1 → 2 needs no rewriting here. A v1 record has `from` and `to` and
+  // no middle stops; `readTheme` interpolates them, which reproduces exactly
+  // what a two-stop gradient was already painting. The user's two colours are
+  // carried across untouched.
+  return record;
 }
 
 /* ------------------------------------------------------------------ *
@@ -288,17 +411,6 @@ export function contrastRatio(a: HexColor, b: HexColor): number {
   const darker = Math.min(first, second);
   return (lighter + 0.05) / (darker + 0.05);
 }
-
-/**
- * The surface the accent is judged against.
- *
- * This is `--color-surface` at rest, which resolves to `--gray-900` in
- * `styles/tokens.css`. It is duplicated here because the domain cannot read
- * CSS, and `tests/unit/theme/preferences.test.ts` asserts the two agree so the
- * duplication cannot drift — a guard measuring against the wrong background is
- * worse than no guard, because it reports confidently.
- */
-export const SURFACE_HEX = '#101613';
 
 export type ContrastVerdict = 'pass' | 'low' | 'fail';
 
@@ -380,13 +492,17 @@ export function angleFor(id: DirectionId): number {
  * no preset as selected while displaying one exactly.
  */
 export function presetIdFor(gradient: ThemePreferences['gradient']): string {
-  const match = PRESETS.find(
-    (preset) =>
+  const match = PRESETS.find((preset) => {
+    const [mid1, mid2] = preset.mid ?? interpolateStops(preset.from, preset.to);
+    return (
       gradient.from === preset.from &&
       gradient.to === preset.to &&
+      gradient.mid1 === mid1 &&
+      gradient.mid2 === mid2 &&
       gradient.angleDeg === preset.angleDeg &&
-      gradient.intensity === preset.intensity,
-  );
+      gradient.intensity === preset.intensity
+    );
+  });
   return match?.id ?? 'custom';
 }
 

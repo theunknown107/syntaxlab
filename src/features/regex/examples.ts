@@ -67,7 +67,7 @@ export const EXAMPLES: readonly RegexExample[] = [
     label: 'Hex colour',
     pattern: '#(?:[0-9a-f]{3}|[0-9a-f]{6})\\b',
     flags: 'gi',
-    subject: 'Accent #00ff88, surface #101613, shorthand #0f8.',
+    subject: 'Accent #00ff41, surface #101613, shorthand #0f8.',
   },
   {
     id: 'log-line',
