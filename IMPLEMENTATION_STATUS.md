@@ -2145,7 +2145,7 @@ detection result `unknown`, which is not a mode.
 | `parser.test.ts` — grammar, the 5-field lock, limits | 33 |
 | `semantics.test.ts` — OR rule, Sunday convention, timezone, spans | 22 |
 | `corpus.test.ts` — the golden corpus, 59 expressions | 78 |
-| `property.test.ts` — 13 properties, 1 200 runs each, fixed seed 20260821 | 13 |
+| `property.test.ts` — 11 fast-check properties at 1 200 runs each, fixed seed 20260821, plus 2 deterministic checks | 13 |
 | `protocol.test.ts` — the `analysis.cron` boundary | 21 |
 | **Cron total** | **167** |
 

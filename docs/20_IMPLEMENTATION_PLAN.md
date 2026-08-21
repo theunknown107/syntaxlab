@@ -431,7 +431,7 @@ The milestone was re-scoped at its start: **M14 is the domain representation, no
 | 14.9 | Golden corpus: 100+ expressions | ⚠️ **59 hand-written expressions — 27 valid, 24 invalid, 8 foreign — producing 78 test cases. Not 100+.** Padding a corpus whose whole value is that a person read every entry would have made the number true and the corpus worse. |
 | 14.10 | `analysis.cron` on the long-lived worker + exhaustive result validation | ✅ *(added — it was implied by the architecture but not listed)* |
 
-**Tests:** 146 cases. Field boundaries; DOM/DOW; refusal tests for 6-field, 7-field, Quartz and Jenkins; 13 properties at 1 200 runs each with a fixed seed; the worker boundary. Leap years, DST skip/repeat and unsatisfiable-schedule termination move to M16 with the code they test.
+**Tests:** 146 cases. Field boundaries; DOM/DOW; refusal tests for 6-field, 7-field, Quartz and Jenkins; 11 fast-check properties at 1 200 runs each with a fixed seed; the worker boundary. Leap years, DST skip/repeat and unsatisfiable-schedule termination move to M16 with the code they test.
 
 **Acceptance:** no 6/7-field expression is ever parsed ✅; C-I1 holds at the level a UI-less milestone can hold it — every analysis carries a timezone section ✅; every DST case correctly labelled ➡️ M16.
 
