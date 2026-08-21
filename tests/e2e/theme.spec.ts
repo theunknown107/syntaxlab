@@ -312,10 +312,24 @@ test('a valid field survives beside a corrupt one', async ({ page }) => {
   );
   await page.reload();
 
+  // Polled, not sampled once.
+  //
+  // The theme is applied twice by design: `theme-bootstrap.js` runs before
+  // first paint and writes only what it can validate — so a hostile `accent`
+  // becomes the *default*, never the payload — and the module then derives the
+  // accent from the surviving gradient colour. Chromium finishes the second
+  // step before a test can look; WebKit takes a few tens of milliseconds, and
+  // reading at one instant caught it mid-handover and reported a product
+  // defect that is not there. Measured: WebKit shows #00ff41 at 0 ms and
+  // #22d3ee from 50 ms onward, and both engines settle on the same value.
+  //
+  // The security property holds throughout either way: at no point in that
+  // window is the hostile value applied.
+  await expect.poll(async () => token(page, '--color-accent'), { timeout: 10_000 }).toBe('#22d3ee');
+
   expect(await token(page, '--gradient-from')).toBe('#22d3ee');
   expect(await token(page, '--gradient-angle')).toBe('90deg');
   expect(await token(page, '--gradient-to')).toMatch(/^#[0-9a-fA-F]{6}$/);
-  expect(await token(page, '--color-accent')).toBe('#22d3ee');
 });
 
 /* ------------------------------------------------------------------ *

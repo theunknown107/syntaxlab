@@ -818,3 +818,116 @@ reloads and is the worst class of bug this app can ship.
 `features/pwa` imports `application/pwa`, which imports `infrastructure/pwa` —
 the same layering every other feature follows, enforced by the ESLint boundary
 policy.
+
+---
+
+## SyntaxLab V1.0 — system overview
+
+One picture of the whole shipped product, at the altitude where the important
+facts are visible and nothing else is. The detailed diagrams elsewhere in this
+document and in `04`, `05`, `06` and `07` are the levels below this one.
+
+```mermaid
+flowchart TB
+    User(["Developer"])
+
+    subgraph Tab["Browser tab — the only place anything runs"]
+        direction TB
+        UI["React shell<br/>Regex · JSON · History · Appearance"]
+        APP["Application layer<br/>stores, scheduling, capture"]
+        DOM["Domain layer<br/>parsers, explainers, validators"]
+    end
+
+    subgraph Threads["Web Workers — where untrusted input is executed"]
+        AW["Analysis worker<br/><i>long-lived</i>"]
+        EW["Execution worker<br/><i>disposable — terminate is the interrupt</i>"]
+    end
+
+    subgraph Local["This browser profile"]
+        IDB[("IndexedDB<br/>history")]
+        LS[("localStorage<br/>theme · settings")]
+        CS[("Cache Storage<br/>app shell only")]
+    end
+
+    SW["Service worker<br/>precache, offline"]
+    CDN["Cloudflare Pages<br/><i>static files + _headers</i>"]
+
+    User --> UI
+    UI <--> APP
+    APP --> DOM
+    APP <-->|"structured clone,<br/>validated both ways"| AW
+    APP <-->|"structured clone,<br/>validated both ways"| EW
+    APP <--> IDB
+    APP <--> LS
+    SW --> CS
+    CDN -.->|"first visit only"| SW
+
+    NOSERVER["No server, no account,<br/>no analytics, no third-party origin"]
+
+    classDef boundary stroke-width:3px
+    classDef note fill:none,stroke:none
+    class Threads,Local boundary
+    class NOSERVER note
+```
+
+**What the picture is asserting**, each of which is enforced somewhere:
+
+| | Enforced by |
+|---|---|
+| A user's regex, JSON and history never leave the tab | `connect-src 'none'`, and no `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource` or `sendBeacon` anywhere in `src/` — asserted by an E2E test that fails on any cross-origin request |
+| User input is only ever *executed* on a worker thread | One `new RegExp` in the codebase, in the execution worker; every main-thread reference to that module is an `import type` TypeScript erases |
+| A runaway pattern can always be stopped | The execution worker is disposable; `terminate()` is the only reliable interrupt, and the client respawns eagerly |
+| The network is optional after the first visit | Precache-only service worker; offline suites drive the real product with the context offline |
+| Nothing third-party is fetched at runtime | No external fonts, no CDN, no analytics — system font stack, self-hosted everything |
+
+**The one thing not in the picture is a server**, and that is the point. Cloudflare Pages
+serves files and headers; there is no Worker, Function, KV, D1 or R2, because
+any of them would put a machine in the request path and make "nothing leaves
+your browser" false.
+
+### A complete session, end to end
+
+What the four M12 journeys actually walk through, and where each step is
+handled. Every arrow crossing into `Workers` is a structured clone that is
+validated on arrival and on return.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Developer
+    participant E as Editor
+    participant S as Workspace store
+    participant W as Workers
+    participant H as History
+    participant D as IndexedDB
+
+    U->>E: types a pattern
+    E->>S: value change
+    S->>S: debounce, sized by input
+    S->>W: analyse
+    W-->>S: AST, explanation, warnings
+    S-->>U: explanation, structure, tokens
+
+    U->>E: types a test string
+    S->>W: execute (own worker, 2 s deadline)
+    alt completes
+        W-->>S: matches, capped and clipped
+    else overruns
+        S->>W: terminate, respawn
+        W-->>S: TIMEOUT
+    end
+    S-->>U: matches, or a timeout that says so
+
+    Note over S,H: two seconds of quiet, then capture
+    S->>H: schedule capture
+    H->>D: write, validated
+    U->>H: reopen later
+    D-->>H: record
+    H->>H: validate on read
+    H-->>S: restore, after confirming a replacement
+```
+
+**The two waits in that diagram are deliberate and both were mistaken for bugs
+during M12's own test writing**: the size-aware analysis debounce, and the
+two-second quiet period before an analysis is recorded. A journey that moves
+faster than a person is testing something no user will ever do.
