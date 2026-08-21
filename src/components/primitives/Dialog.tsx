@@ -23,7 +23,10 @@ interface ModalProps {
   readonly describedBy?: string;
 }
 
-function useDialog(open: boolean, onClose: () => void): React.RefObject<HTMLDialogElement | null> {
+// React 18's `RefObject<T>` already types `current` as `T | null`; writing
+// `RefObject<T | null>` is the React 19 spelling and does not fit the `ref`
+// prop these dialogs pass it to.
+function useDialog(open: boolean, onClose: () => void): React.RefObject<HTMLDialogElement> {
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {

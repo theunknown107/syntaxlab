@@ -350,7 +350,7 @@ function TreeColumn(props: TreeColumnProps): React.JSX.Element {
 
       <Panel
         title="Structure"
-        meta={rows.length > 0 ? `${rows.length.toLocaleString('en')} rows` : undefined}
+        {...(rows.length > 0 ? { meta: `${rows.length.toLocaleString('en')} rows` } : {})}
         actions={
           analysis?.cst != null && (
             <>

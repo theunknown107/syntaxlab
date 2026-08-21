@@ -5,7 +5,7 @@ import { analyzeJson } from '@/domain/json/analyze';
 import { analyzeCron } from '@/domain/cron/analyze';
 import {
   describeRequestRejection,
-  isAnalysisOp,
+  isAnalysisRequest,
   parseWorkerRequest,
   type AnalysisEchoPayload,
   type AnalysisEchoResult,
@@ -136,7 +136,7 @@ scope.onmessage = (event: MessageEvent<unknown>): void => {
     return;
   }
 
-  if (!isAnalysisOp(request.op)) {
+  if (!isAnalysisRequest(request)) {
     // Execution operations belong to the disposable worker. Receiving one
     // here means a routing bug, not a user error.
     respond({
@@ -157,9 +157,9 @@ scope.onmessage = (event: MessageEvent<unknown>): void => {
       id: request.id,
       ok: false,
       error: domainError('INTERNAL', 'The analysis engine hit an unexpected error.', {
-        detail: import.meta.env.DEV
-          ? truncateForMessage(error instanceof Error ? error.message : String(error))
-          : undefined,
+        ...(import.meta.env.DEV && {
+          detail: truncateForMessage(error instanceof Error ? error.message : String(error)),
+        }),
       }),
     });
   }

@@ -23,6 +23,7 @@ import {
   PRESETS,
   SURFACE_HEX,
   verdictFor,
+  type MotionMode,
   type ThemePreferences,
   type ThemePreset,
 } from '@/domain/theme/preferences';
@@ -374,7 +375,9 @@ function Interface({ theme }: { readonly theme: ThemePreferences }): React.JSX.E
   );
 }
 
-const MOTION_LABELS: Readonly<Record<string, string>> = {
+// Keyed by `MotionMode` rather than `string`: a total record indexes to a
+// string, where an index signature indexes to `string | undefined`.
+const MOTION_LABELS: Readonly<Record<MotionMode, string>> = {
   system: 'Follow system',
   always: 'Allow motion',
   never: 'No motion',

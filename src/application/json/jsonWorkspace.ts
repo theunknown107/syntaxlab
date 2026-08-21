@@ -49,12 +49,14 @@ function cancelTimer(): void {
  * ------------------------------------------------------------------ */
 
 function fromDomainError(error: DomainError): WorkspaceFailure {
-  const failure: { message: string; hint?: string; span?: DomainError['span'] } = {
+  // Spread the optional fields in rather than assigning them: under
+  // `exactOptionalPropertyTypes` a key holding undefined is not the same as an
+  // absent key, and a failure with no hint should have no hint key.
+  return {
     message: error.message,
+    ...(error.hint !== undefined && { hint: error.hint }),
+    ...(error.span !== undefined && { span: error.span }),
   };
-  if (error.hint !== undefined) failure.hint = error.hint;
-  if (error.span !== undefined) failure.span = error.span;
-  return failure;
 }
 
 function fromWorkerError(error: WorkerError): WorkspaceFailure {

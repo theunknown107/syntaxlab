@@ -202,7 +202,7 @@ export function executeRegex(input: ExecuteRegexInput): Result<RegexExecResult> 
   } catch (error) {
     return err(
       domainError('SYNTAX', 'This pattern cannot be compiled by the JavaScript engine.', {
-        hint: error instanceof Error ? error.message : undefined,
+        ...(error instanceof Error && { hint: error.message }),
       }),
     );
   }

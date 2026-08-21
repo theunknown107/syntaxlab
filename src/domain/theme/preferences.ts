@@ -531,12 +531,11 @@ export function directionFor(angleDeg: number): DirectionId {
   // rather than leaving every radio unselected.
   if (match) return match.id;
 
-  let nearest = DIRECTIONS[0];
-  for (const direction of DIRECTIONS) {
-    if (Math.abs(direction.angleDeg - angleDeg) < Math.abs(nearest.angleDeg - angleDeg)) {
-      nearest = direction;
-    }
-  }
+  // reduce rather than a `let`: `DIRECTIONS[0]` narrows to that one entry's
+  // literal type, so nothing else in the tuple can be assigned to it.
+  const nearest = DIRECTIONS.reduce((best, direction) =>
+    Math.abs(direction.angleDeg - angleDeg) < Math.abs(best.angleDeg - angleDeg) ? direction : best,
+  );
   return nearest.id;
 }
 

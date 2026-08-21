@@ -247,7 +247,9 @@ describe('a malformed success payload never reaches application state', () => {
 
   it('does not accept a prototype-polluting payload', () => {
     const payload: unknown = JSON.parse(
-      JSON.stringify(analysis('{}')).replace('{', '{"__proto__":{"polluted":true},', 1),
+      // `String.replace` with a string pattern already replaces only the
+      // first occurrence, which is the one that matters here.
+      JSON.stringify(analysis('{}')).replace('{', '{"__proto__":{"polluted":true},'),
     );
     isValidJsonAnalysis(payload);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();

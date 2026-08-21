@@ -134,9 +134,18 @@ export const standardBindings: readonly KeyBinding[] = [
   { mac: 'Mod-Backspace', run: deleteLineBoundaryBackward, preventDefault: true },
   { mac: 'Mod-Delete', run: deleteLineBoundaryForward, preventDefault: true },
   // macOS additionally gets the emacs-style Ctrl bindings, as upstream does.
-  ...emacsStyleKeymap.map((binding) => ({
-    mac: binding.key,
-    run: binding.run,
-    ...(binding.shift === undefined ? {} : { shift: binding.shift }),
-  })),
+  // flatMap rather than map: upstream types both `key` and `run` as optional,
+  // and a binding missing either has nothing to bind. Dropping those is what
+  // the old `map` did in effect, minus the undefined it smuggled through.
+  ...emacsStyleKeymap.flatMap((binding) =>
+    binding.key === undefined || binding.run === undefined
+      ? []
+      : [
+          {
+            mac: binding.key,
+            run: binding.run,
+            ...(binding.shift === undefined ? {} : { shift: binding.shift }),
+          },
+        ],
+  ),
 ];

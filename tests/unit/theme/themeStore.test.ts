@@ -277,6 +277,8 @@ describe('the setProperty boundary', () => {
       // does not run at runtime, so the type here proves nothing.
       gradient: {
         from: 'red; background: url(https://attacker.example)',
+        mid1: 'expression(alert(1))',
+        mid2: '#00FF41; --injected: 1',
         to: 'url(x)',
         angleDeg: Number.POSITIVE_INFINITY,
         intensity: 100_000,

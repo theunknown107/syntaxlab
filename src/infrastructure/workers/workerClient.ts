@@ -151,7 +151,10 @@ export class WorkerClient {
         settle: resolve as (result: Result<unknown, WorkerError>) => void,
       });
 
-      const request: WorkerRequest<TOp> = { id, op, payload };
+      // `op` and `payload` are correlated by the one type parameter, but
+      // `WorkerRequest` distributes over `TOp` and TypeScript will not check
+      // the pair against a single branch of the result.
+      const request = { id, op, payload } as WorkerRequest<TOp>;
       try {
         worker.postMessage(request);
       } catch {

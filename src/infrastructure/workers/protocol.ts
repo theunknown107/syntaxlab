@@ -237,6 +237,22 @@ export function isExecOp(value: unknown): value is ExecOp {
   return EXEC_OPS.includes(value as ExecOp);
 }
 
+/**
+ * The same split, at the whole-request level.
+ *
+ * A guard on `request.op` alone does not narrow `request`: `WorkerRequest` is
+ * a distributive union, and TypeScript will not carry a user-defined predicate
+ * on a property back to the object holding it. Each worker needs the narrowed
+ * request, so the narrowing lives here once rather than as a cast in both.
+ */
+export function isAnalysisRequest(request: WorkerRequest): request is AnalysisRequest {
+  return isAnalysisOp(request.op);
+}
+
+export function isExecRequest(request: WorkerRequest): request is ExecRequest {
+  return isExecOp(request.op);
+}
+
 /** Per-operation payload validators. Each narrows `unknown` structurally. */
 const PAYLOAD_VALIDATORS: {
   [TOp in WorkerOp]: (payload: unknown) => payload is PayloadFor<TOp>;

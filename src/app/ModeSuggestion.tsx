@@ -27,16 +27,20 @@ export function ModeSuggestion(): React.JSX.Element | null {
   const state = useStore(workspaceStore, (current) => current);
   const suggestion = suggestionFor(state);
   const detected = state.detected;
+  // Narrowed once, here. `unknown` is a detection result, not a mode: there is
+  // nothing to switch to and nothing to label, so it is filtered out before
+  // either the effect or the render can reach it.
+  const detectedMode = detected && detected.type !== 'unknown' ? detected.type : null;
 
   // The auto-switch. In an effect rather than during render because it is a
   // state change, and it only ever fires into an empty editor.
   useEffect(() => {
-    if (suggestion.auto && detected && detected.type !== state.mode) setMode(detected.type);
-  }, [suggestion.auto, detected, state.mode]);
+    if (suggestion.auto && detectedMode && detectedMode !== state.mode) setMode(detectedMode);
+  }, [suggestion.auto, detectedMode, state.mode]);
 
-  if (!suggestion.show || !detected || detected.type === 'unknown') return null;
+  if (!suggestion.show || detectedMode === null) return null;
 
-  const label = MODE_LABELS[detected.type];
+  const label = MODE_LABELS[detectedMode];
 
   return (
     <div className={styles.bar} role="status">
@@ -45,7 +49,7 @@ export function ModeSuggestion(): React.JSX.Element | null {
       </span>
       <Button
         onClick={() => {
-          setMode(detected.type);
+          setMode(detectedMode);
         }}
         variant="secondary"
       >

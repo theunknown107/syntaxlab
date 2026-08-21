@@ -184,7 +184,7 @@ export function isValidRegexAnalysis(value: unknown): value is RegexAnalysis {
  * Execution results — added at M4
  * ------------------------------------------------------------------ */
 
-function isOffset(value: unknown, max: number): boolean {
+function isOffset(value: unknown, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
 }
 
@@ -242,14 +242,13 @@ const TRUNCATIONS = new Set(['none', 'matchCount', 'outputSize']);
 export function isValidRegexExecResult(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (value.kind !== 'regexExec') return false;
-  if (typeof value.subjectLength !== 'number' || !Number.isInteger(value.subjectLength)) {
-    return false;
-  }
-  if (value.subjectLength < 0) return false;
+  // Read into a local first: narrowing a property does not survive into the
+  // `matches.every` callback below, but narrowing a const binding does.
+  const subjectLength = value.subjectLength;
+  if (typeof subjectLength !== 'number' || !Number.isInteger(subjectLength)) return false;
+  if (subjectLength < 0) return false;
   if (typeof value.findsAll !== 'boolean' || typeof value.hasIndices !== 'boolean') return false;
   if (typeof value.elapsedMs !== 'number' || !Number.isFinite(value.elapsedMs)) return false;
   if (typeof value.truncated !== 'string' || !TRUNCATIONS.has(value.truncated)) return false;
-  return (
-    Array.isArray(value.matches) && value.matches.every((m) => isMatch(m, value.subjectLength))
-  );
+  return Array.isArray(value.matches) && value.matches.every((m) => isMatch(m, subjectLength));
 }

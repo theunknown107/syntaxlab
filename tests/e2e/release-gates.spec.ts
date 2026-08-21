@@ -254,9 +254,11 @@ test.describe('brand icons', () => {
     ]);
 
     for (const { href } of declared) {
-      const response = await request.get(`${ORIGIN}${href}`);
-      expect(response.status(), href).toBe(200);
-      expect((await response.body()).length, href).toBeGreaterThan(100);
+      expect(href, 'every declared icon needs an href').not.toBeNull();
+      const path = href ?? '';
+      const response = await request.get(`${ORIGIN}${path}`);
+      expect(response.status(), path).toBe(200);
+      expect((await response.body()).length, path).toBeGreaterThan(100);
     }
   });
 

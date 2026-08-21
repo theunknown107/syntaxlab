@@ -2,7 +2,7 @@
 import { domainError } from '@/domain/shared/result';
 import { executeRegex } from '@/domain/regex/execute';
 import {
-  isExecOp,
+  isExecRequest,
   parseWorkerRequest,
   type ExecRegexPayload,
   type ExecRequest,
@@ -80,7 +80,7 @@ scope.onmessage = (event: MessageEvent<unknown>): void => {
 
   if (!request) return; // uncorrelatable — discard
 
-  if (!isExecOp(request.op)) {
+  if (!isExecRequest(request)) {
     scope.postMessage({
       id: request.id,
       ok: false,

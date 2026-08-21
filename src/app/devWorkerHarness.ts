@@ -55,7 +55,10 @@ function toOutcome(result: {
   error?: { code: string; message: string };
 }): HarnessOutcome {
   if (result.ok) return { ok: true, value: result.value };
-  return { ok: false, code: result.error?.code, message: result.error?.message };
+  // Spread rather than read field by field: `exactOptionalPropertyTypes` draws
+  // a distinction between an absent key and one holding undefined, and an
+  // absent error should leave both keys absent.
+  return result.error ? { ok: false, ...result.error } : { ok: false };
 }
 
 export function installDevWorkerHarness(): void {
