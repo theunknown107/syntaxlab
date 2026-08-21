@@ -73,7 +73,12 @@ export function UpdateBanner(): React.JSX.Element | null {
     return (
       <aside className={styles.toast} role="status">
         <span>Ready to work offline.</span>
-        <button type="button" className={styles.action} onClick={acknowledgeOfflineReady}>
+        <button
+          type="button"
+          className={styles.action}
+          aria-label="Dismiss the offline notice"
+          onClick={acknowledgeOfflineReady}
+        >
           Dismiss
         </button>
       </aside>

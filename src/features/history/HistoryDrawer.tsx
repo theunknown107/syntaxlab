@@ -504,7 +504,12 @@ function UndoBar({ title }: { readonly title: string }): React.JSX.Element {
       >
         Undo
       </button>
-      <button type="button" className={styles.rowAction} onClick={dismissUndo}>
+      <button
+        type="button"
+        className={styles.rowAction}
+        aria-label="Dismiss the undo offer"
+        onClick={dismissUndo}
+      >
         Dismiss
       </button>
     </div>

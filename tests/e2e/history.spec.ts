@@ -141,7 +141,7 @@ test('deletes an entry and brings it back with undo', async ({ page }) => {
   // The row, specifically: the undo bar names the deleted entry too.
   await expect(drawer(page).getByRole('button', { name: 'Open /ab+c/g' })).toBeHidden();
 
-  await drawer(page).getByRole('button', { name: 'Undo' }).click();
+  await drawer(page).getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(drawer(page).getByRole('button', { name: 'Open /ab+c/g' })).toBeVisible();
 
   // Really back, not just on screen.

@@ -356,7 +356,7 @@ test('the suggestion can be dismissed for the session', async ({ page }) => {
   await pattern(page).fill('{"a":1}');
 
   await expect(page.getByText('This looks like JSON.')).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: 'Dismiss' }).click();
+  await page.getByRole('button', { name: 'Dismiss this suggestion' }).click();
   await expect(page.getByText('This looks like JSON.')).toHaveCount(0);
 });
 

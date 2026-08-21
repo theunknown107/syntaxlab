@@ -51,7 +51,12 @@ export function ModeSuggestion(): React.JSX.Element | null {
       >
         Switch to {label}
       </Button>
-      <Button onClick={dismissSuggestion} variant="ghost">
+      {/* Named for what it dismisses. Three different things in this app
+          offer a "Dismiss" button, and a screen-reader user listing the
+          buttons on the page would otherwise hear the same word three times
+          with no way to tell them apart. The visible text is unchanged, and
+          the accessible name still begins with it (WCAG 2.5.3). */}
+      <Button onClick={dismissSuggestion} variant="ghost" ariaLabel="Dismiss this suggestion">
         Dismiss
       </Button>
     </div>
