@@ -51,7 +51,7 @@ CodeMirror arrived at M4.
 | Unit | **2 167 passed**, 36 files | **PASS** |
 | JSONTestSuite conformance | **644 cases**, corpus checksums intact | **PASS** |
 | End-to-end, full matrix | **674 passed, 0 failed, 11 skipped** | **PASS** |
-| Full matrix repeatability | two consecutive clean runs | **PASS** |
+| Full matrix repeatability | two consecutive clean runs; a third run hit the dev-server contention flake described below | **PASS** |
 
 ### The 11 skips, in full
 
@@ -64,11 +64,30 @@ reason rather than silently absent.
 | 3 | `regex-webkit` — the three timeout tests | JavaScriptCore optimises the catastrophic patterns and cannot be made to time out by one. |
 | 2 | `release-webkit` — Journeys A and B | The offline *portion* only; everything before it runs on WebKit. |
 
-### Flakes: none outstanding
+### Flakes: four fixed, one remaining and understood
 
 M12 set out to classify the scattered flakes the project had carried since M7.
-**All of them had causes, and all are fixed.** No test is retried, quarantined
-or loosened.
+**Four had product- or test-logic causes, and all four are fixed.** No test is
+retried, quarantined or loosened.
+
+**One remains**, and it is a different category from the four below:
+
+| | |
+|---|---|
+| `workers-*` — occasional timeout in `ready()` | The three `workers` projects are the only ones that run against the **Vite development server**, because driving the real worker harness needs a global that production compiles out. Under an eight-way parallel matrix that single dev server is a shared bottleneck: it transforms modules on demand, and the wait for the harness global occasionally exceeds the test timeout. |
+
+Evidence that it is contention and not a defect: the same test passes **3 runs
+out of 3 in isolation** and the whole project passes **22 out of 22** on its
+own. It has appeared as a different test in the project each time — the
+signature of load, not of logic.
+
+**It cannot affect the shipped artefact**, because the dev server is not the
+shipped artefact. Not fixed by raising a timeout or adding a retry, both of
+which would hide it. What would close it: warming the dev server's module graph
+before the matrix starts, or running the `workers` projects serially.
+
+**The four that were fixed**, each carried for milestones as "environmental"
+and each turning out to have a specific, findable cause:
 
 | Long-standing failure | Real cause, found at M12 |
 |---|---|

@@ -1014,8 +1014,19 @@ classifying it and found it. There were four:
 | `history-webkit › a record from a newer version` | Opening IndexedDB while the app's own open was in flight settles no event at all on WebKit | The test lets the repository load first |
 | `theme-webkit › a valid field survives` | Read a custom property at one instant during the pre-paint → hydration handover | Polls for the settled value; the expectation is unchanged |
 
-**No test is retried, quarantined, or loosened.** The full matrix is
-674 passed / 0 failed / 11 skipped, twice consecutively.
+**No test is retried, quarantined, or loosened.** The full matrix ran
+674 passed / 0 failed / 11 skipped twice consecutively.
+
+**One flake remains and is a different category.** The three `workers`
+projects are the only ones driving the **Vite development server**, because the
+real worker harness needs a global that production compiles out. Under the
+eight-way parallel matrix that single dev server is a shared bottleneck, and
+the wait for the harness global occasionally overruns. The same test passes 3/3
+in isolation and the project passes 22/22 alone. It cannot affect the shipped
+artefact, because the dev server is not the shipped artefact — and it is not
+being fixed with a retry or a longer timeout, either of which would hide it.
+Closing it means warming the module graph before the matrix, or running those
+three projects serially.
 
 ### The 11 skips
 

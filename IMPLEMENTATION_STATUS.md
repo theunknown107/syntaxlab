@@ -1905,6 +1905,14 @@ application.
 
 **Full matrix now: 674 passed, 0 failed, 11 skipped — twice in a row.**
 
+**One flake remains, and it is a different animal.** The three `workers`
+projects are the only ones driving the Vite **development** server, because the
+real worker harness needs a global that production compiles out. Under the
+eight-way parallel matrix that single dev server is a shared bottleneck and the
+wait for the harness global occasionally overruns; the same test passes 3/3
+alone and its project passes 22/22. It cannot reach the shipped artefact, and
+it is documented rather than papered over with a retry or a longer timeout.
+
 ### What was built
 
 | | |

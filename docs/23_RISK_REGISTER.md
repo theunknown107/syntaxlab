@@ -471,7 +471,7 @@ rather than assumed.
 
 | Reduced | |
 |---|---|
-| **Test-suite trust** | The "scattered environment flake" carried since M7 is gone, because it was never environmental. Four distinct causes, all found and fixed, and the full matrix is clean twice consecutively. A suite that fails at random teaches you to ignore it, which is the actual risk. |
+| **Test-suite trust** | The "scattered environment flake" carried since M7 was four distinct causes, not one, and none was environmental — an appending `fill()`, three buttons sharing an accessible name, an IndexedDB open that settles no event on WebKit, and an assertion read mid-hydration. All four found and fixed; the full matrix ran clean twice consecutively. A suite that fails at random teaches you to ignore it, which is the actual risk. **One genuine contention flake remains**, confined to the three projects that drive the Vite dev server, which is not the shipped artefact; it is documented rather than retried. |
 | **R-06, service-worker bug bricks cached copies** | The update lifecycle is exercised end to end against the real headers: a new version waits, is announced, never self-reloads, keeps the editor's contents when accepted, and replaces the old precache rather than accumulating. |
 
 | Accepted, with reasoning | |
