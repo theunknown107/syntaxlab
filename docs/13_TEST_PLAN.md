@@ -343,7 +343,7 @@ Coverage is a floor, not a goal. A 95%-covered parser with no fuzz testing is le
 |---|---|---|
 | `tests/unit/cron/parser.test.ts` — grammar, the 5-field lock, limits | 33 | ✅ |
 | `tests/unit/cron/semantics.test.ts` — OR rule, Sunday convention, timezone, spans | 22 | ✅ |
-| `tests/unit/cron/corpus.test.ts` — the golden corpus | 78 | ✅ |
+| `tests/unit/cron/corpus.test.ts` — the golden corpus: **59 hand-written expressions**, 27 valid, 24 invalid, 8 from other schedulers | 78 | ✅ |
 | `tests/unit/cron/property.test.ts` — 13 properties, 1 200 runs each, fixed seed | 13 | ✅ |
 | `tests/unit/protocol.test.ts` — the `analysis.cron` boundary | 21 | ✅ |
 
@@ -389,7 +389,7 @@ Regex is tested differentially against `new RegExp`, and JSON against `JSON.pars
 |---|---|
 | Reference implementation as an oracle | **Not used.** No cron dependency is installed (`16_DEPENDENCIES.md` §6, and the M14 brief's dependency discipline). |
 | Where a reference *is* consulted | As documentation, for the two places we had to choose a reading — the `n/m` step base and the DOM/DOW rule. Both are documented Vixie/cronie behaviour, and both are named in the output rather than applied silently. |
-| What plays the oracle's role instead | The **golden corpus**: 78 hand-read cases whose expected answers are judgements, not derivations. |
+| What plays the oracle's role instead | The **golden corpus**: 59 expressions whose expected answers are judgements written by hand, not derivations. |
 
 **Where a comparison would be invalid, stated exactly.** If a reference implementation were ever wired in, these are the axes on which a disagreement would prove nothing about our correctness:
 

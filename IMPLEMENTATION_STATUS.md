@@ -2144,14 +2144,15 @@ detection result `unknown`, which is not a mode.
 |---|---|
 | `parser.test.ts` — grammar, the 5-field lock, limits | 33 |
 | `semantics.test.ts` — OR rule, Sunday convention, timezone, spans | 22 |
-| `corpus.test.ts` — the golden corpus | 78 |
+| `corpus.test.ts` — the golden corpus, 59 expressions | 78 |
 | `property.test.ts` — 13 properties, 1 200 runs each, fixed seed 20260821 | 13 |
 | `protocol.test.ts` — the `analysis.cron` boundary | 21 |
 | **Cron total** | **167** |
 
-The corpus is 78 cases, not the 100+ the plan named. Every case was read by a
-person and its expected answer written by hand; padding it to reach a round
-number would have made the count true and the corpus worse. The third block is
+The corpus is **59 expressions** — 27 valid, 24 invalid, 8 from other
+schedulers — producing 78 test cases. The plan named 100+. Every entry was
+read by a person and its expected answer written by hand; padding it to reach
+a round number would have made the count true and the corpus worse. The third block is
 the one that keeps the dialect honest: eight expressions that are valid in
 *another* scheduler, each asserted to be refused **and** to name the scheduler
 it came from.

@@ -268,7 +268,7 @@
 
 | # | Criterion | Verification | M14 |
 |---|---|---|---|
-| C-1 | A valid 5-field expression produces a correct plain-English summary | Golden corpus | ✅ 78 cases, hand-read |
+| C-1 | A valid 5-field expression produces a correct plain-English summary | Golden corpus | ✅ 27 valid expressions, each read by hand |
 | C-2 | The field table shows raw value, resolved values, and meaning per field | Unit | ✅ the data; **M15** for the table |
 | C-3 | The next 10 execution times are correct in the selected mode | Unit | **M16** |
 | C-4 | **Every displayed time carries a timezone label** (invariant C-I1) | E4 + code review | ✅ at the level M14 can hold it: every analysis carries a `cron-timezone` section. **M15** for display. |

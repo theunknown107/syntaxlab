@@ -428,7 +428,7 @@ The milestone was re-scoped at its start: **M14 is the domain representation, no
 | 14.6 | DST anomaly detection | ➡️ **M16.** The mode-level caveat ships at M14. |
 | 14.7 | DOM/DOW OR-rule + always-on warning | ✅ |
 | 14.8 | `cron/explain.ts` | ✅ plus `warnings.ts`, `analyze.ts`, `validate.ts` |
-| 14.9 | Golden corpus: 100+ expressions | ⚠️ **78 hand-read cases, not 100+.** Padding a corpus whose value is that every case was read by a person would have made the number true and the corpus worse. |
+| 14.9 | Golden corpus: 100+ expressions | ⚠️ **59 hand-written expressions — 27 valid, 24 invalid, 8 foreign — producing 78 test cases. Not 100+.** Padding a corpus whose whole value is that a person read every entry would have made the number true and the corpus worse. |
 | 14.10 | `analysis.cron` on the long-lived worker + exhaustive result validation | ✅ *(added — it was implied by the architecture but not listed)* |
 
 **Tests:** 146 cases. Field boundaries; DOM/DOW; refusal tests for 6-field, 7-field, Quartz and Jenkins; 13 properties at 1 200 runs each with a fixed seed; the worker boundary. Leap years, DST skip/repeat and unsatisfiable-schedule termination move to M16 with the code they test.
