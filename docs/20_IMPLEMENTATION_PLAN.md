@@ -414,25 +414,32 @@ review rather than a simulation.
 
 Begins only after V1.0 ships. Scope is locked by `01_PRD.md` §8 and `04_PARSER_ARCHITECTURE.md` §4.
 
-### M14 — Cron domain *(2–2.5 days)*
+### M14 — Cron domain — ✅ **COMPLETE**, with the schedule executor moved to M16
 
-| # | Deliverable |
-|---|---|
-| 14.1 | `cron/parser.ts` — **standard 5-field only**, per-field range tables, names, macros |
-| 14.2 | **Field-count refusal path** — 6/7 fields produce the educational message, never a guess |
-| 14.3 | Foreign-syntax recognition (`L W # ? H`) mapped to the scheduler it comes from |
-| 14.4 | `cron/model.ts` + `cron/schedule.ts` — field-advance algorithm, 5-year bound |
-| 14.5 | Browser-local and UTC computation (**no named zones**) |
-| 14.6 | DST anomaly detection |
-| 14.7 | DOM/DOW OR-rule + always-on warning |
-| 14.8 | `cron/explain.ts` |
-| 14.9 | Golden corpus: 100+ expressions |
+The milestone was re-scoped at its start: **M14 is the domain representation, not the executor.** Next-run computation and per-schedule DST detection need a schedule engine, and building one alongside the parser would have put the project's highest-uncertainty work in the same milestone as its foundation. They move to M16, where the parser they depend on is already proven.
 
-**Tests:** field boundaries; leap years across 4/100/400; DOM/DOW truth table; unsatisfiable schedules terminate; DST skip and repeat in the local zone; **refusal tests for 6-field, 7-field, and Quartz syntax**; property tests.
+| # | Deliverable | Status |
+|---|---|---|
+| 14.1 | `cron/tokenizer.ts` + `cron/parser.ts` + `cron/ast.ts` — **standard 5-field only**, per-field range tables, names, macros | ✅ |
+| 14.2 | **Field-count refusal path** — 6/7 fields produce the educational message, never a guess | ✅ 3 six-field expressions pinned as never reinterpreted |
+| 14.3 | Foreign-syntax recognition (`L W # ? H`) mapped to the scheduler it comes from | ✅ including `LW`, `15W`, `6#3`; `SMARCH` correctly *not* matched |
+| 14.4 | `cron/model.ts` + `cron/schedule.ts` — field-advance algorithm, 5-year bound | ➡️ **M16** |
+| 14.5 | Browser-local and UTC — *representation* | ✅ two-member union, enforced on the wire. Computation is M16. |
+| 14.6 | DST anomaly detection | ➡️ **M16.** The mode-level caveat ships at M14. |
+| 14.7 | DOM/DOW OR-rule + always-on warning | ✅ |
+| 14.8 | `cron/explain.ts` | ✅ plus `warnings.ts`, `analyze.ts`, `validate.ts` |
+| 14.9 | Golden corpus: 100+ expressions | ⚠️ **78 hand-read cases, not 100+.** Padding a corpus whose value is that every case was read by a person would have made the number true and the corpus worse. |
+| 14.10 | `analysis.cron` on the long-lived worker + exhaustive result validation | ✅ *(added — it was implied by the architecture but not listed)* |
 
-**Acceptance:** every DST case correctly labelled; no 6/7-field expression is ever parsed; C-I1 holds (every time carries a zone label).
+**Tests:** 146 cases. Field boundaries; DOM/DOW; refusal tests for 6-field, 7-field, Quartz and Jenkins; 13 properties at 1 200 runs each with a fixed seed; the worker boundary. Leap years, DST skip/repeat and unsatisfiable-schedule termination move to M16 with the code they test.
 
-**Risks:** **R-03 — the highest-uncertainty work in the project.** Contained by the reduced timezone scope.
+**Acceptance:** no 6/7-field expression is ever parsed ✅; C-I1 holds at the level a UI-less milestone can hold it — every analysis carries a timezone section ✅; every DST case correctly labelled ➡️ M16.
+
+**Defects found and fixed during M14:** `5/10` expanded to a value set no scheduler produces; four explanation-quality defects found by reading the output as a user; a missing `analysis.cron` payload validator that the typecheck gate should have caught and did not (see below).
+
+**Found while doing M14, unrelated to cron:** `npm run typecheck` had never checked anything — it ran `tsc --noEmit` against a solution tsconfig with `"files": []`. Fixed, and the 25 latent type errors it was hiding were cleared.
+
+**Risks:** **R-03 dropped from 12 to 8** at this checkpoint — see `23_RISK_REGISTER.md`.
 
 ---
 
@@ -513,7 +520,7 @@ Amber nodes are **risk checkpoints** (§6). M5 can run in parallel with M4 if a 
 | M6 | Bundle still within target with both modes | Escalation ladder |
 | **M9** | Offline works end to end, including workers | **Stop and escalate.** The core PWA claim fails otherwise. |
 | M10 | A screen-reader user can complete an analysis | Ship the textarea fallback (Q-12) |
-| M14 | DST cases correct in the local zone | Restrict V1.1 to UTC only and document it |
+| M14 ✅ | DST cases correct in the local zone | *Moved to M16 with the executor.* Contingency unchanged: restrict V1.1 to UTC only and document it. |
 
 ---
 

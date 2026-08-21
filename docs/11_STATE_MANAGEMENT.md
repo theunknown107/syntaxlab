@@ -6,7 +6,7 @@
 
 ---
 
-> **Scope note (Phase 1.5).** V1.0 state covers regex and JSON. Cron fields in `workspaceStore` arrive in V1.1. No share state exists in V1.0.
+> **Scope note.** V1.0 state covers regex and JSON. **M14 added no state.** The cron domain is pure and stateless; `workspaceStore` has no cron fields, `AnalysisMode` is still `'regex' | 'json'`, and nothing cron-shaped is persisted. Cron state arrives with the UI at M15. No share state exists in V1.0.
 
 ## 1. A note on the brief's framing
 
@@ -102,13 +102,16 @@ About forty lines including types. It gives us: selector subscriptions, concurre
 
 ```ts
 interface WorkspaceState {
-  mode: 'regex' | 'json';          // 'cron' added in V1.1
+  mode: 'regex' | 'json';          // 'cron' added at M15, not M14
   detectedType: DetectionResult | null;
   suggestionDismissed: boolean;
   input: string;
   regexFlags: RegexFlags;
   testSubject: string;
-  // V1.1: cronTimezone: TimezoneContext;   (dialect is fixed at standard5)
+  // M15: cronTimezone: CronTimezoneMode;   (dialect is fixed at standard5)
+  // Note it is the *mode* that would be stored, not a resolved context: the
+  // context is derived per analysis, and persisting an offset would persist a
+  // fact that expires.
   status: 'idle' | 'analyzing' | 'ready' | 'error' | 'timeout';
   result: AnalysisResult | null;
   error: DomainError | null;

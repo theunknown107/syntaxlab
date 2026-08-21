@@ -6,7 +6,7 @@
 
 ---
 
-> **Scope note (Phase 1.5).** **§§1–9 and §§11–13 are V1.0** (regex + JSON). **§10 is V1.1** (cron). Share-URL tests are removed from V1.0 with the feature. Each test group names the milestone that introduces it, so the plan cannot drift from the implementation.
+> **Scope note.** **§§1–9 and §§11–13 are V1.0** (regex + JSON). **§10 is V1.1** (cron); §3.3 records what M14 actually built and what it deliberately did not. Share-URL tests are removed from V1.0 with the feature. Each test group names the milestone that introduces it, so the plan cannot drift from the implementation.
 
 ## 1. Strategy
 
@@ -40,7 +40,8 @@ A test plan that is not tied to milestones becomes a wish-list written at the en
 | M10 | Full security suite; full axe sweep; screen-reader pass; E17, E18 |
 | M11 | Bundle budgets; Lighthouse gates; long-task audit; memory snapshots |
 | M12 | Full E2E suite; cross-browser; manual checklist |
-| **M14–M16 (V1.1)** | Cron units, golden corpus, refusal tests, DST matrix, property; I8, I9; E4 |
+| **M14** | Cron units, golden corpus, refusal tests, property, the `analysis.cron` boundary — **146 cases, all green** |
+| **M15–M16 (V1.1)** | Cron UI; DST matrix; I8, I9; E4 |
 
 ### Implemented at M1
 
@@ -334,9 +335,19 @@ Coverage is a floor, not a goal. A 95%-covered parser with no fuzz testing is le
 
 **Formatting:** prettify at 2/4/tab; minify; round-trip idempotence; raw number text preserved (`1e5` stays `1e5`); formatting a partially-invalid document does not throw.
 
-### 3.3 Cron domain — **V1.1, ~120 cases**
+### 3.3 Cron domain — **V1.1; 146 cases built at M14**
 
-> Introduced at M14. Not part of the V1.0 suite.
+> **Built at M14: 146 unit cases.** Not part of the V1.0 suite. The three groups below marked *M16* need the schedule executor and have no tests yet, because there is nothing to test.
+
+| Suite | Cases | Status |
+|---|---|---|
+| `tests/unit/cron/parser.test.ts` — grammar, the 5-field lock, limits | 33 | ✅ |
+| `tests/unit/cron/semantics.test.ts` — OR rule, Sunday convention, timezone, spans | 22 | ✅ |
+| `tests/unit/cron/corpus.test.ts` — the golden corpus | 78 | ✅ |
+| `tests/unit/cron/property.test.ts` — 13 properties, 1 200 runs each, fixed seed | 13 | ✅ |
+| `tests/unit/protocol.test.ts` — the `analysis.cron` boundary | 21 | ✅ |
+
+Coverage is not the interesting number here; the corpus is. Every corpus case was read by a person and its expectation written by hand, which is what makes it a golden corpus rather than a snapshot: a change that quietly alters behaviour has to be argued with rather than absorbed.
 
 **Field parsing:** every field's range boundaries; names (`JAN`, `mon`, mixed case); lists, ranges, steps, and combinations; `0` and `7` for Sunday; invalid values; inverted ranges; zero/negative steps.
 
@@ -355,11 +366,45 @@ Coverage is a floor, not a goal. A 95%-covered parser with no fuzz testing is le
 
 Assertion for every row: the message is specific, no schedule is produced, and **no next-run time is displayed**.
 
-**Schedule computation:** next run for every preset; month and year rollover; leap years across 4/100/400 boundaries; the DOM/DOW OR-rule with an explicit truth table; unsatisfiable schedules terminating with the correct message; the 5-year search bound.
+**Schedule computation — *M16*.** Next run for every preset; month and year rollover; leap years across 4/100/400 boundaries; unsatisfiable schedules terminating with the correct message; the 5-year search bound. None of this is tested at M14 because none of it is built (`04_PARSER_ARCHITECTURE.md` §4.4).
 
-**Timezone — reduced scope (browser-local and UTC only):** UTC has no transitions and is the control case; browser-local is tested with the test runner's TZ pinned to a set of zones, exercising spring-forward skip, fall-back repeat, a southern-hemisphere zone, a half-hour-offset zone (`Asia/Kolkata`), and a no-DST zone. **Named-zone selection is not implemented, so it is not tested** — instead there is a test that no named-zone UI exists.
+**The DOM/DOW OR-rule *is* tested at M14**, as a warning and an explanation rather than as matching: both fields restricted warns and says "either, not both" in words; one field restricted does not; neither does not; and a full-range list such as `1-31` counts as unrestricted, which is its own regression test.
+
+**Timezone — reduced scope (browser-local and UTC only).** At M14 the tests are about *representation*, not about times, because no times are computed. UTC resolves to a zero offset and `userSelection`; browser-local reports `browserResolvedOptions` and a non-empty zone name; the DST caveat appears in local mode and not in UTC mode; and every analysis carries a `cron-timezone` section, which is invariant C-I1 at the only level M14 can hold it.
+
+**Named-zone selection is not implemented, so it is not tested for correctness — it is tested for absence.** Two separate tests assert that no analysis, in either mode, can produce a third timezone mode. If someone widens the union, those fail. The transition matrix across zone types (spring-forward skip, fall-back repeat, southern hemisphere, `Asia/Kolkata`'s half-hour offset, a no-DST zone) belongs to M16 with the executor.
 
 **Golden corpus** — 100+ expressions with reviewed English output.
+
+
+### 3.3.1 Differential and reference testing for cron — *why there is no oracle*
+
+Regex is tested differentially against `new RegExp`, and JSON against `JSON.parse`. Both are legitimate oracles because both are **the same specification we implement**: if we disagree with the platform about whether a document is valid JSON, we are wrong.
+
+**Cron has no such oracle, and using one anyway would be a mistake.** There is no cron standard in the sense that ECMA-262 and RFC 8259 are standards. Vixie cron, cronie, croniter, Quartz, Jenkins and AWS EventBridge legitimately differ — in field count, in symbols, in step semantics, and in DST policy. A reference implementation would not be measuring our correctness; it would be measuring our agreement with one project's choices, and disagreement would be evidence of nothing.
+
+**What that means in practice:**
+
+| | Decision |
+|---|---|
+| Reference implementation as an oracle | **Not used.** No cron dependency is installed (`16_DEPENDENCIES.md` §6, and the M14 brief's dependency discipline). |
+| Where a reference *is* consulted | As documentation, for the two places we had to choose a reading — the `n/m` step base and the DOM/DOW rule. Both are documented Vixie/cronie behaviour, and both are named in the output rather than applied silently. |
+| What plays the oracle's role instead | The **golden corpus**: 78 hand-read cases whose expected answers are judgements, not derivations. |
+
+**Where a comparison would be invalid, stated exactly.** If a reference implementation were ever wired in, these are the axes on which a disagreement would prove nothing about our correctness:
+
+| Axis | Why comparison is invalid |
+|---|---|
+| Field count | Quartz and Spring accept 6 and 7 fields. We refuse them **by design**. A reference that parses `0 0 12 * * ?` is not showing us a bug. |
+| `L`, `W`, `#`, `?`, `H` | Quartz and Jenkins extensions. We recognise them only in order to name the scheduler and refuse. |
+| `n/m` step base | Vixie and cronie read it as `n-max/m`; others reject it. We match Vixie/cronie **and say so in the warning**. A stricter reference would disagree, correctly, from its own position. |
+| DST resolution | Schedulers differ on skipped and repeated wall-clock times. We do not claim parity with any of them (`05_SECURITY.md` §16, RR-09). |
+| Diagnostics | We report per-field errors with spans and hints. Most implementations report the first error or none. More diagnostics is not a disagreement about semantics. |
+| Timezone | We support two modes. Any reference supporting named zones is answering a different question. |
+
+**The comparable properties, if a reference is ever added**, are narrow and worth stating so the temptation to compare more is resisted: for a 5-field expression using only `*`, values, lists, ranges and `*/n` or `a-b/n` steps, the **resolved value set of each field** should be identical. That is the intersection of every dialect listed above, and it is exactly the part of the model that has no room for interpretation.
+
+**The group that keeps this honest today** is the third block of the golden corpus: eight expressions that are valid in *another* scheduler, each asserted to be refused *and* to name the scheduler it came from. If those ever start parsing, SyntaxLab has become dialect-agnostic by accident — which is the specific failure a naive differential suite would have encouraged.
 
 ### 3.4 Shared and infrastructure
 
@@ -483,7 +528,7 @@ E7, E12, and E17 are the three tests that verify the product's headline claims. 
 
 ## 7. Security tests
 
-Every payload in `tests/security/payloads/` is driven through **every V1.0 input surface**: regex pattern, test subject, JSON body, JSON key, history title, and imported file. Cron fields are added at M14. **Share URLs are not a surface in V1.0.**
+Every payload in `tests/security/payloads/` is driven through **every V1.0 input surface**: regex pattern, test subject, JSON body, JSON key, history title, and imported file. Cron fields are added at M15, with the input surface that makes them pasteable. **Share URLs are not a surface in V1.0.**
 
 ### 7.1 XSS
 
@@ -526,7 +571,7 @@ nested {1,1000} repetitions
 Assert: timeout state within ~2.5 s; the main thread stayed responsive (a click during execution is handled); the worker was terminated and respawned; the next execution succeeds.
 
 ### 7.4 Oversized and pathological input
-Regex at 10 001 chars; test subject at 1 MB + 1; JSON at 5 MB + 1; JSON nested 501 deep; JSON with 500 001 nodes; a 1 MB single JSON string; a 20 MB + 1 import file. *(A 1 001-char cron expression is added at M14.)* Assert: clean rejection with a specific message; no crash; no hang.
+Regex at 10 001 chars; test subject at 1 MB + 1; JSON at 5 MB + 1; JSON nested 501 deep; JSON with 500 001 nodes; a 1 MB single JSON string; a 20 MB + 1 import file. *(A 1 001-char cron expression is covered at M14, in `tests/unit/cron/parser.test.ts`: `LIMIT_EXCEEDED`, refused before tokenising.)* Assert: clean rejection with a specific message; no crash; no hang.
 
 ### 7.5 Storage tampering
 Pre-seed IndexedDB with: a record missing required fields; wrong types; `schemaVersion: 99`; a 10 MB input string; a prototype-polluting record; an XSS payload in `title`. Assert: quarantine or safe render; list still works; no crash; no execution.
@@ -654,7 +699,7 @@ Stated so nobody mistakes a green pipeline for correctness:
 
 - **Explanation quality.** Tests assert the explanation *matches the golden file*. Whether it is *good* is a human judgement, reviewed on every golden-file change.
 - **Design and feel.** No test knows the UI looks cheap.
-- **Cron semantics vs a specific scheduler** *(V1.1)*. We test our documented dialect, not parity with any particular implementation — and we say so in the UI.
+- **Cron semantics vs a specific scheduler.** We test our documented dialect, not parity with any particular implementation — and we say so in the UI. See §3.3.1 for why no cron oracle is used at all.
 - **Novel browser bugs.** Especially in service workers and IndexedDB.
 - **Supply-chain compromise.** `npm audit` finds known issues, not new ones.
 - **Whether the product is useful.** That needs users.

@@ -6,7 +6,7 @@
 
 ---
 
-> **Scope note (Phase 1.5).** This document describes the full architecture. **V1.0 implements Regex + JSON**; the cron domain is **V1.1** and is marked as such wherever it appears. Share URLs are **deferred to V1.1+** and their design is retained as a specification, not a V1 deliverable. See `01_PRD.md` §3.
+> **Scope note.** This document describes the full architecture. **V1.0 implements Regex + JSON.** The cron **domain** was built at M14 (V1.1) and runs in the analysis worker; the cron **UI** does not exist and is M15. Anything marked V1.1 below is either built-domain or not-yet-UI, and says which. Share URLs are **deferred to V1.1+** and their design is retained as a specification, not a V1 deliverable. See `01_PRD.md` §3.
 
 ## 1. Architectural summary
 
@@ -111,7 +111,7 @@ graph TB
         subgraph D["③ Domain — pure TypeScript, zero React"]
             RX["regex/<br/>tokenizer · parser · AST"]
             JS["json/<br/>scanner · parser · CST"]
-            CR["cron/ — V1.1<br/>field parser · schedule engine"]
+            CR["cron/ — V1.1 domain, built M14<br/>tokenizer · parser · explain<br/><i>no schedule engine yet</i>"]
             EX["explain/<br/>AST → ExplanationNode[]"]
             SH["shared/<br/>Result · limits · errors"]
         end
@@ -213,7 +213,7 @@ graph TB
         AWD["Dispatcher<br/><i>re-validates every payload</i>"]
         RXP["Regex tokenizer + parser"]
         JSP["JSON scanner + parser"]
-        CRP["Cron parser — V1.1"]
+        CRP["Cron parser — built M14"]
         EXP["Explanation engine"]
         AWD --> RXP & JSP & CRP
         RXP & JSP & CRP --> EXP
@@ -236,6 +236,37 @@ graph TB
     class AWD,RXP,JSP,CRP,EXP safe
     class XWD danger
 ```
+
+#### The cron round trip, as built at M14
+
+`analysis.cron` is the third operation on the long-lived worker. It never touches the execution worker, because it runs no foreign code — a cron expression is data our own parser reads, not a program handed to an engine.
+
+```mermaid
+sequenceDiagram
+    participant M as Main thread
+    participant C as WorkerClient
+    participant W as Analysis worker
+    participant D as domain/cron
+
+    M->>C: analyzeCron(source, timezoneMode)
+    C->>C: build request, assign id
+    C->>W: postMessage (structured clone)
+    W->>W: parseWorkerRequest<br/>validate + rebuild payload
+    Note over W: timezone mode re-checked here,<br/>not merely typed
+    W->>D: analyzeCron
+    D->>D: tokenize, parse, warn, explain
+    D-->>W: CronAnalysis
+    W-->>C: postMessage result
+    C->>C: parseWorkerResponse
+    C->>C: isValidCronAnalysis<br/>exhaustive, by value
+    alt valid
+        C-->>M: Ok(CronAnalysis)
+    else malformed
+        C-->>M: Err(PROTOCOL)
+    end
+```
+
+Two checks, on two sides, for different reasons. The worker checks the **request** because the payload is caller-supplied and the timezone mode reaches a `Date`. The client checks the **result** because a TypeScript cast describes what we hoped arrived, not what did.
 
 **Invariant (security and performance).** A regex execution timeout must never destroy unrelated parser state. This is why the two workers are separate rather than one, and it is a hard architectural rule, not a convenience: terminating a combined worker would discard warm module state and any in-flight unrelated parse, turning a contained ReDoS event into a broader failure.
 
@@ -337,7 +368,7 @@ flowchart TD
 
 | Worker | Lifetime | Purpose | Rationale |
 |---|---|---|---|
-| **Analysis worker** | Long-lived, one instance | Tokenise/parse regex, parse JSON→CST, parse cron, compute schedules, generate explanations | All of this is *our* code, provably terminating, bounded by input limits. Killing and respawning it on every call would waste startup cost. |
+| **Analysis worker** | Long-lived, one instance | Tokenise/parse regex, parse JSON→CST, parse cron, generate explanations. Schedule computation joins this list at M16. | All of this is *our* code, provably terminating, bounded by input limits. Killing and respawning it on every call would waste startup cost. |
 | **Execution worker** | Disposable, replaced on timeout | Runs `RegExp.exec` against user test strings — the only place foreign, uninterruptible code runs | Must be destroyable without losing parser state or a warm module cache. Mixing it with the analysis worker would mean a ReDoS timeout also destroys unrelated parse state and forces a cold re-import. |
 
 > **ponytail note:** the obvious lazy version is one worker. It does not survive the first ReDoS test, because terminating it also kills the parse cache and any in-flight unrelated request. Two is the minimum that is actually correct. We do not add a third or a pool — concurrency is one user typing, and a pool solves a problem we do not have.
@@ -502,7 +533,7 @@ syntaxlab/
 │   │   ├── json/
 │   │   ├── history/
 │   │   ├── theme/
-│   │   └── cron/                  # V1.1 — not created in V1.0
+│   │   └── cron/                  # M15 — still not created. M14 was domain only.
 │   │
 │   ├── components/                # Shared, feature-agnostic primitives
 │   │   ├── Button.tsx  Drawer.tsx  Tabs.tsx  Toast.tsx
@@ -516,7 +547,8 @@ syntaxlab/
 │   ├── domain/                    # Pure TypeScript. Runs in workers and in Node.
 │   │   ├── regex/    { tokenizer.ts, parser.ts, ast.ts, explain.ts }
 │   │   ├── json/     { scanner.ts, parser.ts, cst.ts, explain.ts, format.ts }
-│   │   ├── cron/     { parser.ts, model.ts, schedule.ts, explain.ts }   # V1.1
+│   │   ├── cron/     { tokenizer.ts, parser.ts, ast.ts, warnings.ts,      # built M14
+│   │   │                explain.ts, analyze.ts, validate.ts }        # schedule.ts is M16
 │   │   ├── detect/   { detectType.ts }
 │   │   └── shared/   { result.ts, limits.ts, errors.ts, explanation.ts }
 │   │

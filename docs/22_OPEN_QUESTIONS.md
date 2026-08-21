@@ -82,7 +82,7 @@ The quality bar is what distinguishes SyntaxLab from the tools it competes with.
 
 **Timezone scope reduced:** V1.1 supports **browser-local and UTC only**. Named IANA zones are deferred until the correctness and test strategy are defensible (Q-09). The active zone is always displayed, every generated time carries a zone label, no silent conversion occurs, and DST anomalies are detected and labelled. Reduced scope, not reduced rigour.
 
-**No longer blocks V1.0** because cron itself is V1.1.
+**No longer blocks V1.0** because cron itself is V1.1. **Implemented at M14 exactly as decided**, including the refusal message quoted above, which ships close to verbatim.
 
 ---
 

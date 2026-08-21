@@ -84,7 +84,7 @@
 | M-5 | Auto-selection occurs only on first paste into an empty editor at ≥ 0.85 confidence | Unit |
 | M-6 | The suggestion chip is dismissible and the dismissal persists for the session | E1 |
 | M-7 | **The mode selector shows exactly two modes, with no disabled third** | Manual + visual review |
-| M-8 | **No "coming soon" cron affordance appears anywhere in the workspace** | Manual review |
+| M-8 | **No "coming soon" cron affordance appears anywhere in the workspace** | Manual review. Still true after M14: the domain shipped, the UI did not, and nothing in the workspace hints at it. |
 | M-9 | Detection never suggests a mode that does not exist in this release | Unit |
 
 ---
@@ -264,33 +264,41 @@
 
 > None of these criteria gates the V1.0 release. They gate V1.1.
 
-| # | Criterion | Verification |
-|---|---|---|
-| C-1 | A valid 5-field expression produces a correct plain-English summary | Golden corpus, 100+ |
-| C-2 | The field table shows raw value, resolved values, and meaning per field | Unit |
-| C-3 | The next 10 execution times are correct in the selected mode | Unit |
-| C-4 | **Every displayed time carries a timezone label** (invariant C-I1) | E4 + code review |
-| C-5 | Switching between browser-local and UTC recomputes all times | I9 |
-| C-6 | **The active timezone is always visible, and browser-local shows the resolved zone name** | Manual |
-| C-7 | **A 6-field expression is refused with the educational message and is never parsed** | Unit + E4 |
-| C-8 | **A 7-field expression is refused with the educational message** | Unit |
-| C-9 | **Quartz syntax (`L`, `W`, `#`, `?`) is refused with a message naming Quartz** | Unit |
-| C-10 | **Jenkins `H` is refused with a message naming Jenkins** | Unit |
-| C-11 | Field counts other than 5 produce "expected 5 fields, got N" | Unit |
-| C-12 | **The DOM/DOW OR-rule warning appears whenever both fields are restricted** | Unit + E4 |
-| C-13 | Spring-forward skipped times are detected and labelled | Unit |
-| C-14 | Fall-back repeated times are detected and both instants shown | Unit |
-| C-15 | Unsatisfiable schedules report "will never run" with the reason | Unit |
-| C-16 | Next-run search terminates within the 5-year bound for every input | Property |
-| C-17 | Both `0` and `7` mean Sunday, and the explanation says which was applied | Unit |
-| C-18 | Macros are expanded and explained; `@reboot` is explained as non-schedulable | Unit |
-| C-19 | Presets load valid expressions | E4 |
-| C-20 | The builder and the expression stay synchronised in both directions | E4 |
-| C-21 | Leap years are handled correctly across 4/100/400 boundaries | Unit |
-| C-22 | Invalid field values give a specific message with the valid range | Unit |
-| C-23 | **A standing note states that times will not match a scheduler in a different timezone** | Copy review |
-| C-24 | Fuzz corpus completes with zero crashes and zero non-termination | Property |
-| C-25 | The mode selector shows three modes and the product name has broadened | Manual |
+> **M14 status.** The criteria below are marked with what M14 verified. **Twelve are met, six are M15 (UI), five are M16 (the schedule executor), and one is added.** A criterion about a displayed time cannot be met by a milestone that displays nothing, and is marked M15/M16 rather than quietly reinterpreted as met.
+
+| # | Criterion | Verification | M14 |
+|---|---|---|---|
+| C-1 | A valid 5-field expression produces a correct plain-English summary | Golden corpus | ✅ 78 cases, hand-read |
+| C-2 | The field table shows raw value, resolved values, and meaning per field | Unit | ✅ the data; **M15** for the table |
+| C-3 | The next 10 execution times are correct in the selected mode | Unit | **M16** |
+| C-4 | **Every displayed time carries a timezone label** (invariant C-I1) | E4 + code review | ✅ at the level M14 can hold it: every analysis carries a `cron-timezone` section. **M15** for display. |
+| C-5 | Switching between browser-local and UTC recomputes all times | I9 | **M16** |
+| C-6 | **The active timezone is always visible, and browser-local shows the resolved zone name** | Manual | ✅ the zone name is resolved and carried; **M15** for visibility |
+| C-7 | **A 6-field expression is refused with the educational message and is never parsed** | Unit + E4 | ✅ |
+| C-8 | **A 7-field expression is refused with the educational message** | Unit | ✅ |
+| C-9 | **Quartz syntax (`L`, `W`, `#`, `?`) is refused with a message naming Quartz** | Unit | ✅ including `LW` and `6#3` |
+| C-10 | **Jenkins `H` is refused with a message naming Jenkins** | Unit | ✅ and `SMARCH` is not |
+| C-11 | Field counts other than 5 produce "expected 5 fields, got N" | Unit | ✅ |
+| C-12 | **The DOM/DOW OR-rule warning appears whenever both fields are restricted** | Unit + E4 | ✅ |
+| C-13 | Spring-forward skipped times are detected and labelled | Unit | **M16** |
+| C-14 | Fall-back repeated times are detected and both instants shown | Unit | **M16** |
+| C-15 | Unsatisfiable schedules report "will never run" with the reason | Unit | **M16** |
+| C-16 | Next-run search terminates within the 5-year bound for every input | Property | **M16.** The *parser* terminating is tested at M14: 1 200 fuzz runs, no hang, no throw. |
+| C-17 | Both `0` and `7` mean Sunday, and the explanation says which was applied | Unit | ✅ |
+| C-18 | Macros are expanded and explained; `@reboot` is explained as non-schedulable | Unit | ✅ |
+| C-19 | Presets load valid expressions | E4 | **M15** |
+| C-20 | The builder and the expression stay synchronised in both directions | E4 | **M15** |
+| C-21 | Leap years are handled correctly across 4/100/400 boundaries | Unit | **M16** |
+| C-22 | Invalid field values give a specific message with the valid range | Unit | ✅ |
+| C-23 | **A standing note states that times will not match a scheduler in a different timezone** | Copy review | ✅ in the explanation; **M15** for the standing UI note |
+| C-24 | Fuzz corpus completes with zero crashes and zero non-termination | Property | ✅ 1 200 runs per property, fixed seed |
+| C-25 | The mode selector shows three modes and the product name has broadened | Manual | **M15.** Deliberately still two — there is no cron UI to select. |
+
+**One criterion is added by M14 as C-26**, because M14 found a way to fail that the list did not name:
+
+| # | Criterion | Verification | M14 |
+|---|---|---|---|
+| C-26 | **Where a dialect divergence forced a choice, the output names the reading applied** — not merely that readings differ | Unit | ✅ `NON_STANDARD_STEP_BASE` states the Vixie/cronie reading |
 
 ---
 
@@ -324,8 +332,8 @@ Cron (V1.1) · share URLs · JSON→TypeScript · JSON→JSON Schema · light th
 ```
 [ ] Every criterion in §11 passes
 [ ] All V1.0 criteria still pass (no regression)
-[ ] Cron included in offline, security, and a11y test suites
-[ ] Bundle re-measured with the cron chunk, still within budget
+[ ] Cron included in offline, security, and a11y test suites *(needs the M15 UI; the M14 domain has no surface to test through)*
+[ ] Bundle re-measured with the cron chunk, still within budget *(M14 measured the domain's cost: +2.04 KB initial JS, 167.38 KB against a 170 KB target)*
 [ ] Product name and README updated to include cron
 ```
 

@@ -22,7 +22,7 @@
 | Clipboard API | Nice | Copy | `execCommand` fallback, then manual selection |
 | File API | Nice | Import/export | Feature hidden |
 | `CompressionStream` | *(V1.1+)* | Would compress share URLs | **Unused in V1.0** |
-| `Intl.DateTimeFormat` | *(V1.1)* **Critical** for cron | Browser-local and UTC display | Cron falls back to UTC only |
+| `Intl.DateTimeFormat` | **Load-bearing from M14** | Resolving the browser's zone name and current offset | Cron falls back to UTC only |
 | ~~`Intl.supportedValuesOf`~~ | Not used | Was for a named-zone picker | **Not needed** — V1.1 offers browser-local and UTC only |
 | `crypto.randomUUID` | Important | Entry ids | `getRandomValues` fallback |
 | `BroadcastChannel` | Nice | Cross-tab sync | `storage` events, then no sync |
@@ -31,7 +31,7 @@
 | `matchMedia` | Important | Reduced motion, contrast | Assume no preference |
 | `ResizeObserver` | Nice | Panel resize | Window resize events |
 
-For V1.0, only **Web Workers** are genuinely load-bearing. `Intl.DateTimeFormat` becomes load-bearing for cron in V1.1. Everything else degrades.
+For V1.0, only **Web Workers** are genuinely load-bearing. `Intl.DateTimeFormat` became load-bearing at M14: `resolveTimezone('browserLocal')` reads `resolvedOptions().timeZone`. Note what it is *not* used for — no zone list is enumerated, `Intl.supportedValuesOf` is never called, and no named zone is resolved, because V1.1 supports two modes. Everything else degrades.
 
 ---
 
@@ -47,7 +47,10 @@ new Worker(new URL('./analysis.worker.ts', import.meta.url), { type: 'module' })
 type WorkerRequest =
   | { id: number; op: 'parse.regex'; payload: { source: string; flags: RegexFlags } }
   | { id: number; op: 'parse.json';  payload: { source: string } }
-  | { id: number; op: 'parse.cron';  payload: { source: string; dialect: CronDialect; tz: TimezoneContext } }
+  // As built at M14. The op is `analysis.cron`, not `parse.cron`; the dialect
+  // is not on the wire because there is only one and it is not the caller's to
+  // choose; and the timezone travels as a two-member mode, not a context.
+  | { id: number; op: 'analysis.cron'; payload: { source: string; timezoneMode: 'browserLocal' | 'utc' } }
   | { id: number; op: 'format.json'; payload: { source: string; indent: 2|4|'tab'; minify: boolean } }
   | { id: number; op: 'regex.exec';  payload: { pattern: string; flags: string; subject: string; maxMatches: number } };
 
@@ -205,7 +208,7 @@ Wall-clock → instant is done by offset probing, since the platform has no dire
 
 **Notes:** IANA data ships with the browser, so it works offline and stays current with browser updates — but it also means two users on different browser versions can theoretically see different results for a zone whose rules recently changed. Documented, not fixable client-side.
 
-**Fallback:** no `Intl.DateTimeFormat` with `timeZone` support → cron mode restricts to UTC with an explicit notice. `Intl.supportedValuesOf` missing → a curated list of ~60 common zones.
+**Fallback:** no `Intl.DateTimeFormat` with `timeZone` support → cron restricts to UTC with an explicit notice. `Intl.supportedValuesOf` is **not used at all** — it would enumerate named zones, which V1.1 does not support, so the curated-list fallback the Phase 1 draft described has no purpose and is not implemented.
 
 ---
 

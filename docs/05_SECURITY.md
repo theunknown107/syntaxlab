@@ -8,7 +8,7 @@
 > It does not contain the sentence "the app is secure", because that sentence carries no information.
 > `14_THREAT_MODEL.md` holds the structured attacker/asset/boundary analysis. This document holds the controls.
 
-> **Scope note (Phase 1.5).** V1.0 covers Regex + JSON. Cron is V1.1. **Share URLs are deferred to V1.1+** — §11 is retained as a specification for the deferred feature, not a V1.0 deliverable, which removes one untrusted input path from the V1.0 attack surface.
+> **Scope note.** V1.0 covers Regex + JSON. The cron **domain** was built at M14 (V1.1) and is covered by §14 below; the cron **UI** is M15 and does not exist, so cron has no *pasted-input* surface in the shipped app yet. **Share URLs are deferred to V1.1+** — §11 is retained as a specification for the deferred feature, not a V1.0 deliverable, which removes one untrusted input path from the V1.0 attack surface.
 
 > **Language policy (Phase 1.5).** This document was revised to remove absolute security claims. Controls are described by what they *do*, not by what they make impossible. Defence-in-depth reduces risk; it does not constitute proof. Where a property genuinely is structural (e.g. "the codebase contains no HTML-string rendering path"), it is stated as a property of the implementation and paired with the enforcement that keeps it true.
 
@@ -84,7 +84,7 @@ The architecture closes the main sink. These routes remain open in principle and
 
 ### 2.4 Testing
 
-`13_TEST_PLAN.md` §7.1 includes a permanent payload corpus (`<script>`, `<img onerror>`, `javascript:`, `<svg/onload>`, unicode-escaped variants, mXSS-style broken-markup payloads) driven through *every* V1.0 input: regex pattern, test subject, JSON body and keys, history title, and imported file. (Cron fields join the corpus in V1.1; share URLs only if that feature ships.) Assertion: the payload appears as visible text and `window.__xssCanary` is never set.
+`13_TEST_PLAN.md` §7.1 includes a permanent payload corpus (`<script>`, `<img onerror>`, `javascript:`, `<svg/onload>`, unicode-escaped variants, mXSS-style broken-markup payloads) driven through *every* V1.0 input: regex pattern, test subject, JSON body and keys, history title, and imported file. (Cron fields join the corpus at M15, when there is an input to paste into; the M14 domain already routes all user text through `code`/`ref` nodes, which is the property the corpus tests.) Assertion: the payload appears as visible text and `window.__xssCanary` is never set.
 
 ---
 
@@ -270,7 +270,9 @@ Layer ③ is the one that matters: **the worker never trusts its caller.** If a 
 | JSON input | 5 000 000 chars | Covers realistic API payloads; parse+tree stays within a few hundred ms in a worker |
 | JSON depth | 500 | Real JSON is < 20 deep; 500 is generous and prevents pathological nesting |
 | JSON nodes | 500 000 | Memory ceiling for the tree |
-| Cron input | 1 000 chars | A cron expression is < 100 chars; anything larger is not cron |
+| Cron input | 1 000 chars | A cron expression is < 100 chars; anything larger is not cron. Checked before tokenising, so an oversized input is rejected on its length rather than parsed and then discarded. |
+| Cron tokens | 2 000 | Bounds the token list independently of the character check |
+| Cron terms per field | 200 | The slowest valid input measured, at 1.07 ms p99 |
 | Share payload | 8 192 chars encoded | Below every browser/proxy URL limit, and caps the bomb surface |
 | Import file | 20 MB / 10 000 entries | Above any legitimate export, below anything that hangs a parse |
 | History entry input | 100 000 chars | Keeps IndexedDB usage sane; truncation is disclosed on restore |
@@ -707,3 +709,45 @@ changed as a result; what follows is the evidence that it is still true.
 **One product change came out of this audit**, and it is an accessibility one
 rather than a security one: three buttons shared the bare accessible name
 "Dismiss". Each now says what it dismisses.
+
+---
+
+## 18. The cron security boundary — *built at M14*
+
+Cron adds an input surface but **not** an execution surface. This is the distinction that matters, and it is why cron lives on the long-lived analysis worker rather than the disposable one:
+
+| | Regex execution | Cron analysis |
+|---|---|---|
+| Whose code runs | The **engine's**, on a pattern the user wrote | **Ours**, on text the user wrote |
+| Can it be interrupted | No — only `terminate()` stops it | Yes — it is a bounded loop over ≤1 000 characters |
+| Worker | Disposable, sacrificial | Long-lived, shared |
+| Failure mode | ReDoS: the thread never yields | None found; the parser cannot fail to advance |
+
+```mermaid
+flowchart TD
+    A["User text"] --> B{"Over 1 000 chars?"}
+    B -->|yes| C["LIMIT_EXCEEDED<br/>before tokenising"]
+    B -->|no| D["tokenize - every branch<br/>consumes a character"]
+    D --> E["parse - bounded by<br/>maxTokens and maxTermsPerField"]
+    E --> F["CronAnalysis<br/>ExplanationNode[] only"]
+    F --> G{"Crossing the worker boundary"}
+    G --> H["isValidCronAnalysis<br/>exhaustive, by value"]
+    H -->|"malformed"| I["PROTOCOL error.<br/>Nothing reaches the UI."]
+    H -->|"valid"| J["Rendered as text.<br/>User input only in code/ref nodes."]
+
+    classDef refuse fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class C,I refuse
+    class J safe
+```
+
+Four properties hold on that path:
+
+1. **No HTML, ever.** `explainCron` returns `ExplanationNode[]`. There is no code path from a cron expression to markup, so the XSS corpus of §7.1 has nothing to bypass — the escaping is structural, not a sanitiser that can be outsmarted.
+2. **Termination by construction.** The tokenizer advances at least one character per branch; the parser's loops are bounded by the term limit. Neither relies on a timeout.
+3. **No network, no storage, no `eval`.** `connect-src 'none'` still holds; the cron domain reads no globals other than `Intl` and `Date` for timezone resolution.
+4. **Nothing is trusted across the worker boundary in either direction.** The request payload is validated and rebuilt field by field before the worker acts on it — including the timezone mode, which is the only caller-supplied value that reaches a `Date`. The result is validated exhaustively before the main thread indexes into it.
+
+**What a hostile cron expression can achieve:** an error message. That is the whole of it. The parser recovers per field, the limits refuse oversized input before reading it, and 1 200 fuzz cases over the full hostile character set produce no throw.
+
+---

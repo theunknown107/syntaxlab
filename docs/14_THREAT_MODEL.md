@@ -5,7 +5,7 @@
 **Last updated:** 2026-08-17
 **Method:** Asset-centric, with STRIDE applied per trust boundary.
 
-> **Scope note (Phase 1.5).** This models **V1.0 (regex + JSON)**. Two attack paths from the Phase 1 model are **removed from V1.0** because their features were deferred: hostile share URLs (T2, B7, AC4, AC5) and cron-dialect misinterpretation. They are retained below, marked *(V1.1+)*, so they are not forgotten when the features return.
+> **Scope note.** This models **V1.0 (regex + JSON)**, plus the cron **domain** built at M14. Two attack paths from the Phase 1 model were removed from V1.0 because their features were deferred: hostile share URLs (T2, B7, AC4, AC5) and cron-dialect misinterpretation. **Cron-dialect misinterpretation is now live** — see AC12 — even though the cron UI is M15, because the domain is reachable through the worker protocol. They are retained below, marked *(V1.1+)*, so they are not forgotten when the features return.
 
 > `05_SECURITY.md` describes the controls. This document describes what we are defending against, what we are explicitly *not* defending against, and what is left over after the controls are applied.
 
@@ -192,7 +192,7 @@ graph TB
 | AC9 | A dependency is backdoored | Total compromise of the origin | Pinning, audit, `connect-src 'none'` | **RR-01** |
 | AC10 | Attacker with local access reads IndexedDB | Bulk disclosure of A2 | None (encryption without a key is theatre) | **RR-04 — accepted and disclosed** |
 | AC11 | A user's extension exfiltrates everything | Total disclosure | None available | **RR-03 — disclosed** |
-| AC12 | *(V1.1)* A wrong cron explanation causes a production misconfiguration | Real-world operational damage | Golden tests; **refusal to parse unsupported dialects**; reduced timezone scope; mandatory zone labels; OR-rule warning | **RR-09** |
+| AC12 | A wrong cron explanation causes a production misconfiguration | Real-world operational damage | **Live from M14.** 74-case golden corpus including 8 expressions from other schedulers; refusal to parse 6/7 fields; timezone union of two members, enforced on the wire; every explanation carries a timezone section; OR-rule warning always emitted. One real instance was found and fixed during M14: `5/10` expanded to a set no scheduler produces. | **RR-09** |
 | AC16 | **A user applies an ECMAScript result to a PCRE/Python engine** | Ships a subtly broken pattern with false confidence | Permanent non-dismissible flavour label; help-dialog divergence table; targeted errors on foreign syntax | **RR-11 — the most likely real harm in V1.0** |
 | AC13 | Hosting account compromised; malicious build served | Total, and **persistent via the SW** | 2FA, restricted access, deploy-log review, SRI | Very low probability, catastrophic |
 | AC14 | A malicious SW is cached and survives | Persistent compromise | Same-origin SW only; `worker-src 'self'`; documented reset path | Depends on AC13 |
@@ -287,7 +287,7 @@ Written down so they can be challenged, and so that a change in any of them trig
 | RR-06 | ReDoS heuristic false negatives | Certain | Low | Accepted; termination is the real control |
 | RR-07 | Parser correctness bugs | Medium | Medium | Mitigated by differential + fuzz testing |
 | RR-08 | Users forget secrets are in history | Medium | Medium | Accepted; pause toggle + clear-all |
-| RR-09 | *(V1.1)* Cron/DST results differ from a specific scheduler | Medium | Medium | Accepted; documented, labelled, and scope-reduced to browser-local + UTC |
+| RR-09 | Cron/DST results differ from a specific scheduler | Medium | Medium | Accepted; documented, labelled, and scope-reduced to browser-local + UTC. At M14 the divergence is named in the warning text wherever we had to pick a reading, rather than only acknowledged in the abstract. |
 | RR-11 | Users apply an ECMAScript result to another regex engine | Medium | Medium | Accepted; permanent flavour label, help-table, targeted foreign-syntax errors |
 | RR-10 | Hosting/build compromise | Very low | Critical | 2FA, access control, deploy review |
 
@@ -302,7 +302,8 @@ This model is re-reviewed when any of the following happens:
 - The CSP is modified in any way
 - A backend or network call is proposed — **this invalidates the entire model**
 - **Share URLs are reinstated** — restores T2, B7, AC4, AC5, RR-05 and requires re-running this model
-- **Cron ships (V1.1)** — adds a new input surface and AC12/RR-09 become live
+- **Cron domain shipped (M14)** — AC12/RR-09 are live. The surface is the worker protocol, not yet a pasted input.
+- **Cron UI ships (M15)** — adds the pasted-input surface; cron fields join the XSS corpus of `05_SECURITY.md` §7.1 then
 - Telemetry or analytics is proposed
 - A new storage mechanism is added
 - A security issue is reported

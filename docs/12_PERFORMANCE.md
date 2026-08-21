@@ -27,7 +27,7 @@ Second reason: this tool's inputs are user-supplied and can be adversarial. Perf
 
 ## 2. Budgets
 
-> **Scope note (Phase 1.5).** V1.0 is Regex + JSON; the cron chunk arrives in V1.1. Share/compression code is deferred, so it is not in the V1.0 budget.
+> **Scope note.** V1.0 is Regex + JSON. The cron **domain** shipped at M14 and is measured in §11; there is no separate cron chunk, because there is no cron UI to lazy-load yet. Share/compression code is deferred, so it is not in the V1.0 budget.
 
 ### 2.1 How budgets are treated — read this before the numbers
 
@@ -76,7 +76,7 @@ build  ->  measure  ->  analyse  ->  optimise  ->  measure again
 | `theme` chunk | 10 KB | — | |
 | `analysis.worker` | 40 KB | — | Regex + JSON parsers and explainers (V1.0) |
 | `exec.worker` | 3 KB | — | Deliberately tiny — it gets killed regularly |
-| `cron` chunk *(V1.1)* | 30 KB | — | Not in the V1.0 build |
+| `cron` chunk *(M15)* | 30 KB | — | Still no chunk. The M14 domain rides in the worker bundle; its result validator adds ~2 KB to initial JS, because the main thread must validate what the worker sends. |
 | **Total precache** | **2 MB** | ≤ 1.5 MB | Enforced by the PWA build step |
 
 CI fails the build when a hard budget is exceeded, and reports a warning when a target is exceeded. A budget that is not enforced is a wish; a target that is not reported is ignored.
@@ -178,7 +178,8 @@ Everything expensive is off the main thread:
 |---|---|
 | Tokenising, parsing, explanation generation | Analysis worker |
 | Regex execution | Execution worker |
-| Cron next-run computation | Analysis worker |
+| Cron analysis (parse, warn, explain) | Analysis worker |
+| Cron next-run computation *(M16)* | Analysis worker |
 | Detection heuristics | Main (bounded to a 1 KB sample — cheaper than the postMessage round trip) |
 | JSON formatting | Analysis worker above 100 KB, main below |
 | Tree rendering | Main (it is DOM work) |
@@ -1176,3 +1177,51 @@ of CSS between them, which the 9.71 KB saving paid for twelve times over.
 
 **Not measured, and named rather than absorbed:** interaction latency on a real
 low-powered device. Lighthouse's 4x CPU throttle is a simulation, not a phone.
+
+---
+
+## 13. M14 — cron analysis, measured
+
+`npm run measure:cron`. Nine expressions, 2 000 runs each after 200 warmup runs, timed in process — there is no cron UI to drive, so a browser harness would measure the harness. Measured 2026-08-21 on the development machine; the numbers are a shape, not a device-independent claim.
+
+### 13.1 The table
+
+| Case | p50 | p99 | max | What it is |
+|---|---|---|---|---|
+| wildcard `* * * * *` | 0.010 ms | 0.051 ms | 0.401 ms | The largest expansion of the shortest input — 60+24+31+12+7 values |
+| typical `*/15 9-17 * * 1-5` | 0.013 ms | 0.133 ms | 0.559 ms | The shape most schedules take |
+| names `0 9-17 1,15 JAN-JUN MON-FRI` | 0.012 ms | 0.050 ms | 0.668 ms | Names in two fields |
+| macro `@weekly` | 0.008 ms | 0.031 ms | 0.370 ms | Expanded to five fields, then the ordinary path |
+| **wide list** (200 terms) | 0.661 ms | **1.066 ms** | 1.484 ms | The per-field limit — the slowest valid input the grammar allows |
+| nested steps | 0.022 ms | 0.075 ms | 0.295 ms | A step on a range in every field |
+| at the input limit (1 000 chars) | 0.000 ms | 0.000 ms | 0.188 ms | Refused on length, before tokenising |
+| foreign dialect (6 fields) | 0.002 ms | 0.005 ms | 0.113 ms | Refused on field count, before any field is read |
+| all errors `99 99 99 99 99` | 0.008 ms | 0.035 ms | 0.388 ms | Five failing fields, all recovered |
+
+### 13.2 What the numbers say
+
+**The worst valid input is 15x inside a frame.** A 200-term list at 1.07 ms p99 is the slowest thing the grammar permits, and the limit is what makes that true — without `maxTermsPerField` the cost is linear in a number the user chooses.
+
+**The two refusals are the fastest paths in the table**, which is the right shape and not an accident. An oversized expression is rejected on `source.length` before the tokenizer runs; a 6-field expression is rejected on the field count before `parseField` is called. A parser that did the work and then threw the result away would have the opposite profile, and would be a denial-of-service shape rather than a refusal.
+
+**Stage breakdown** on the typical expression:
+
+| Stage | p50 | p99 |
+|---|---|---|
+| tokenize | 0.001 ms | 0.001 ms |
+| parse (includes tokenize) | 0.007 ms | 0.024 ms |
+| analyze (parse + warnings + explain) | 0.011 ms | 0.032 ms |
+
+Explanation is roughly a third of the cost and tokenising is nearly free. If a regression ever appears, that split says where to look first.
+
+### 13.3 What was not optimised, and why
+
+**Nothing.** Cron is two orders of magnitude smaller than the regex and JSON inputs the same pipeline already handles, and the slowest case is 15x inside a frame. Optimising it would be work with no measurable outcome, which is the definition of the thing this document exists to prevent.
+
+The point of recording the numbers is not that they are impressive. It is that a later change which makes them untrue becomes visible rather than being assumed away.
+
+### 13.4 Bundle impact
+
+Initial JS moved from **165.34 KB** (after M11) to **167.38 KB** — 2.04 KB, against a 170 KB target and a 200 KB hard limit.
+
+That 2 KB is the *validator*, not the parser. `isValidCronAnalysis` and the AST's field specs are imported by `protocol.ts`, which the main thread needs in order to check what the worker sends back; the tokenizer, parser and explainer stay in the worker bundle where they are used. Paying 2 KB on the main thread to avoid trusting a worker result by cast is the trade this project has already made twice, for regex and for JSON.

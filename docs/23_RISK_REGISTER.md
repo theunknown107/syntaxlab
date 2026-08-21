@@ -14,7 +14,7 @@
 | ID | Risk | Release | L | I | Score | |
 |---|---|---|---|---|---|---|
 | R-01 | Custom parser correctness | V1.0 | ~~4~~ 3 | 4 | ~~16~~ **12** | 🟠 **regex half passed M3; JSON half open until M5** |
-| R-03 | Cron timezone/DST correctness | **V1.1** | 3 | 4 | 12 | 🟠 |
+| R-03 | Cron timezone/DST correctness | **V1.1** | 2 | 4 | 8 | 🟡 |
 | R-05 | Bundle budget exceeded | V1.0 | ~~4~~ 1 | 3 | ~~12~~ **3** | 🟢 **passed at M4 (162.54 KB); over target M8–M10; back inside at M11 — 166.16 KB** |
 | R-04 | Explanation quality is mediocre | V1.0 | 3 | 4 | 12 | 🟠 |
 | R-02 | Scope/timeline overrun | V1.0 | 3 | 3 | 9 | 🟠 |
@@ -90,7 +90,7 @@ caught by review rather than by a test.
 
 ## 3. High
 
-### R-03 — Cron timezone/DST correctness 🟠 12 · V1.1
+### R-03 — Cron timezone/DST correctness 🟡 8 · V1.1 *(reduced at M14)*
 
 **Risk.** Timezone arithmetic is genuinely hard, and different schedulers legitimately resolve DST differently, so even a correct answer may not match the user's system. A skipped or doubled run at a DST boundary is a real production incident.
 
@@ -99,15 +99,26 @@ caught by review rather than by a test.
 **Mitigations**
 - Two timezone modes only, both fully testable
 - Every displayed time carries a zone label (invariant C-I1)
-- DST anomalies explicitly detected and labelled (`SKIPPED` / `REPEATED`)
+- DST anomalies explicitly detected and labelled (`SKIPPED` / `REPEATED`) — *M16; at M14 the mode-level caveat is emitted instead*
 - We document that schedulers differ and do not claim parity with any
 - **Refusal to parse unsupported dialects** removes an entire class of wrong answers
 - Bounded 5-year search guarantees termination
 - UTC mode is offered as the verification path, since it has no transitions
 
-**Detection:** golden-file mismatches at M14; user reports.
+**M14 checkpoint — passed, and the score drops from 12 to 8.** Likelihood falls from 3 to 2; impact stays at 4, because a wrong schedule is still a production incident.
+
+What actually reduced it:
+
+- The **timezone representation shipped and is provably two-valued.** The mode is a two-member union, re-validated on the wire rather than merely typed, and two tests assert no analysis in either mode can produce a third. Named-zone leakage — the largest part of this risk — is now structurally blocked rather than planned against.
+- The **refusal paths are built and tested**, so the class of wrong answers that comes from parsing another dialect's expression is closed, not pending.
+- The **hardest remaining part is unbuilt and therefore unshipped.** Next-run computation and per-schedule DST anomalies are M16. This does not reduce the risk of *that* work; it does mean no wrong time can be displayed today, because no time is displayed.
+- One real correctness defect was found and fixed during M14 — `5/10` expanding to a set no scheduler produces — which is evidence the corpus is doing its job.
+
+What has **not** changed: schedulers still differ on DST, and we still do not claim parity. The contingency below stands.
+
+**Detection:** golden-file mismatches; user reports.
 **Contingency:** restrict V1.1 to UTC only and document it.
-**Checkpoint:** M14. **Owner:** developer.
+**Checkpoint:** M14 ✅ passed; next at M16 with the executor. **Owner:** developer.
 
 ---
 

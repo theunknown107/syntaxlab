@@ -6,7 +6,7 @@
 
 ---
 
-> **Scope note (Phase 1.5).** V1.0 builds the regex and JSON feature trees. Cron components (§4.3) are **V1.1**. The share dialog is removed from V1.0 with the deferred feature.
+> **Scope note.** V1.0 builds the regex and JSON feature trees. **Cron components (§4.3) do not exist.** M14 built the cron *domain* only; `src/features/cron/` has not been created, and no component, route, mode-selector entry or lazy chunk references cron. That is a checked property, not an intention — see §4.3. The share dialog is removed from V1.0 with the deferred feature.
 
 ## 1. Principles
 
@@ -301,7 +301,11 @@ The hover-link between `<TokenTable>` and the editor is coordinated by a single 
   └── <JsonFindings/>            duplicate keys · unsafe numbers
 ```
 
-### 4.3 Cron — **V1.1, not built in V1.0**
+### 4.3 Cron — **still not built. M15.**
+
+> **M14 changed nothing in this file's subject matter.** The cron domain runs in the analysis worker and is reachable only through `analysis.cron`. There is no `features/cron/` directory, no `<CronInput>`, no cron entry in the mode selector, and no cron detection result the UI can act on — `ModeSuggestion` filters detection down to the two modes that exist before it can reach `setMode`.
+>
+> The sketch below remains the M15 target.
 
 ```
 <CronInput>
@@ -377,7 +381,7 @@ Selector-based subscriptions mean a component re-renders only when the slice it 
 | `index` | Shell, header, stores, tokens, one editor | Initial |
 | `regex` | Regex feature UI | Regex mode selected (default) |
 | `json` | JSON feature UI + CM JSON language | JSON mode selected |
-| `cron` *(V1.1)* | Cron feature UI | Cron mode selected |
+| `cron` *(M15)* | Cron feature UI | Cron mode selected. **No such chunk exists at M14** — there is no cron UI to split out. |
 | `history` | History drawer | Drawer opened |
 | `theme` | Theme drawer | Drawer opened |
 

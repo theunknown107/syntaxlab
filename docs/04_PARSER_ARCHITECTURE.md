@@ -603,7 +603,7 @@ If the verdicts disagree, we are wrong. That is the rule (J-I1).
 
 ## 4. Cron parser — **V1.1**, standard 5-field only
 
-> **This entire section is a V1.1 specification.** No cron code is written during V1.0. It is documented now so the V1.1 scope is locked and cannot creep.
+> **Built at M14, in part.** The dialect lock, the refusal path, field parsing, the timezone representation and the explanation engine are code (`src/domain/cron/`). Next-run computation (§4.4) and per-schedule DST anomaly detection (§4.6) are **not built** — M14 was scoped to the domain representation those need, and they belong to M16. Every subsection below is marked with which it is.
 
 ### 4.1 Dialect lock *(decided in Phase 1.5)*
 
@@ -630,68 +630,138 @@ Supported syntax within a field: `*`, a value, a range `a-b`, a list `a,b,c`, an
 | `rate(...)` / `cron(...)` wrappers | AWS EventBridge |
 | Non-standard step bases like `5/10` | Various; behaviour differs per implementation |
 
-### 4.2 Refusing to guess
+### 4.2 Refusing to guess — *built at M14*
 
 **When the field count is not 5, SyntaxLab does not attempt a parse.** This is the most important behavioural rule in the cron feature.
 
 The reasoning: a 6-field expression is ambiguous — `0 0 12 * * ?` is seconds-first Quartz, while a different 6-field convention appends a year. Guessing produces a *plausible, confidently wrong* schedule, and a wrong cron explanation causes real operational damage (`23_RISK_REGISTER.md` R-03). Refusing is strictly better than guessing.
 
+The refusal happens on the field count alone, before any field is read — which is also why it is the fastest path in the parser (`12_PERFORMANCE.md` §13).
+
 ```mermaid
 flowchart TD
-    A["Cron expression"] --> B{"Starts with @?"}
-    B -->|yes| B1{"Known macro?"}
-    B1 -->|yes| B2["Expand to the 5-field equivalent"]
-    B1 -->|no| B3["Error: unknown macro,<br/>list the supported ones"]
-    B -->|no| C["Split on whitespace"]
-    C --> D{"Field count?"}
+    A["Cron expression"] --> B{"Field count<br/>after splitting on whitespace"}
+    B -->|"5"| C["Parse each field"]
+    B -->|"6"| D["REFUSE"]
+    B -->|"7"| D
+    B -->|"0"| E["Empty - ask for an expression"]
+    B -->|"1-4"| F["SYNTAX: expected 5 fields, found N"]
 
-    D -->|"5"| E["Parse each field<br/>against its own range table"]
-    D -->|"6 or 7"| F["REFUSE - do not guess<br/>'does not match the supported<br/>5-field cron format'<br/>+ educational note on other dialects"]
-    D -->|"other"| G["Error: expected 5 fields, got N"]
-
-    B2 --> E
-    E --> H{"All fields valid?"}
-    H -->|no| I["Per-field error with the valid range<br/>and the offending span"]
-    H -->|yes| J["Expand terms into sorted value sets"]
-    J --> K{"DOM and DOW both restricted?"}
-    K -->|yes| L["Always warn: OR-rule applies"]
-    K -->|no| M["No OR-rule warning needed"]
-    L --> N
-    M --> N["Schedule model"]
-    N --> O["Next-run computation<br/>field-advance, 5-year bound<br/>in browser-local or UTC"]
-    O --> P{"Any runs found?"}
-    P -->|no| Q["'This schedule will never run'<br/>+ why, e.g. 30 February"]
-    P -->|yes| R["Next 10 runs, each labelled<br/>with its timezone"]
-    Q --> S["Explanation"]
-    R --> S
-    I --> S
-    F --> S
-    G --> S
-    B3 --> S
+    D --> G["UNSUPPORTED + which dialects use 6 or 7 fields<br/>+ 'if your first field is seconds,<br/>removing it may give the 5-field equivalent'"]
 
     classDef refuse fill:#2a1414,stroke:#a04040,color:#ffd9d9
-    classDef warn fill:#2a2414,stroke:#a08040,color:#fff0d9
     classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
-    class F,B3,G,I,Q refuse
-    class L warn
-    class R,S safe
+    class D,G refuse
+    class C safe
 ```
+
+Note what is **not** on that diagram: there is no path from 6 or 7 fields to a parse. `refuseFieldCount` in `parser.ts` returns before `parseField` is ever called, and `tests/unit/cron/parser.test.ts` asserts that three different 6-field expressions all fail rather than being reinterpreted by dropping a field.
 
 The refusal message is educational, not a dead end:
 
-> **This expression does not match SyntaxLab's supported 5-field cron format.**
-> It has 6 fields. Some schedulers (Quartz, Spring) put **seconds** first; others append a **year**. SyntaxLab supports the standard 5-field format — minute, hour, day-of-month, month, day-of-week — and does not guess between the alternatives, because they produce different schedules.
-> If your first field is seconds, removing it may give you the equivalent 5-field expression.
+> **This expression has 6 fields. SyntaxLab supports the standard 5-field cron format — minute, hour, day-of-month, month, day-of-week.**
+> Some schedulers (Quartz, Spring) put seconds first; others append a year. SyntaxLab does not guess between them, because they describe different schedules. If your first field is seconds, removing it may give the equivalent 5-field expression.
 
 That last line converts a refusal into a next step without pretending to understand the input.
 
-### 4.3 Field parsing
+#### Macros, which are the one thing that *is* rewritten
+
+A macro is expanded to its documented 5-field equivalent before the field count is taken, so `@weekly` and `0 0 * * 0` follow the identical path afterwards. That is a substitution from a fixed table, not an interpretation.
+
+```mermaid
+flowchart LR
+    A["@weekly"] --> B{"In CRON_MACROS?"}
+    B -->|no| C["UNSUPPORTED:<br/>unknown macro,<br/>hint lists the seven"]
+    B -->|yes| D{"Schedulable?"}
+    D -->|"@reboot"| E["Explain as non-schedulable.<br/>No fields, no schedule."]
+    D -->|yes| F["'0 0 * * 0'<br/>then the 5-field path"]
+
+    classDef refuse fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef warn fill:#2a2414,stroke:#a08040,color:#fff0d9
+    class C refuse
+    class E warn
+```
+
+`@reboot` is the case that would be easy to get wrong. It is recognised, explained, and given a `NON_SCHEDULABLE_MACRO` warning — and it produces **zero fields**, because inventing five for it would imply a clock schedule it does not have.
+
+#### Foreign-syntax detection — *built at M14*
+
+Refusing on field count catches whole-expression dialect mismatches. Foreign *symbols* inside an otherwise 5-field expression are caught per field, and named rather than merely rejected.
+
+```mermaid
+flowchart TD
+    A["Field text, uppercased"] --> B{"All letters?"}
+    B -->|no| C["Scan for L W # ? H<br/>anywhere in the token"]
+    B -->|yes| D{"Every letter<br/>is a foreign symbol?"}
+    D -->|no| E["Treat as a name:<br/>JAN-DEC / SUN-SAT,<br/>or 'not a recognised month'"]
+    D -->|yes| C
+    C --> F{"Found one?"}
+    F -->|yes| G["UNSUPPORTED, naming the scheduler:<br/>L W # ? = Quartz, H = Jenkins"]
+    F -->|no| H["Ordinary field grammar"]
+
+    classDef refuse fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class G refuse
+    class H,E safe
+```
+
+The two-branch shape at the top is not decoration; it is a bug fix with a regression test. Scanning every token for the letter `H` reported the misspelt month `SMARCH` as Jenkins syntax. Matching whole tokens instead then missed `LW` and `6#3`. The rule that holds both: a token made **entirely** of letters is foreign only when **every** letter is a foreign symbol; a token that mixes letters and digits is scanned character by character. Both cases are pinned in `tests/unit/cron/corpus.test.ts`.
+
+### 4.3 Field parsing — *built at M14*
 
 Each field is parsed independently against its own range table. Grammar per field: `field := term ("," term)*` where `term := "*" | value | range | term "/" step`.
 
-Validation catches: out-of-range values, inverted ranges (`5-2` — rejected with a hint, since some implementations wrap and some error, so we refuse to guess), zero or negative steps, and dialect-foreign characters (`L`, `W`, `#`, `?`, `H`), each mapped to the specific scheduler it comes from.
+```mermaid
+flowchart TD
+    A["Field text"] --> B["Split on ,"]
+    B --> C["parseTerm, once per element"]
+    C --> D{"Base"}
+    D -->|"*"| E["all"]
+    D -->|"7 or JAN"| F["value"]
+    D -->|"a-b"| G["range"]
+    E --> H{"Followed by /n?"}
+    F --> H
+    G --> H
+    H -->|no| I["term"]
+    H -->|yes| J["step wrapping the base"]
+    I --> K["expand to a value set"]
+    J --> K
+    K --> L["Union, sort, deduplicate"]
+    L --> M{"dayOfWeek?"}
+    M -->|yes| N["Normalise 7 to 0"]
+    M -->|no| O["resolved"]
+    N --> O
 
-### 4.4 Next-run computation
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class O safe
+```
+
+Two things that diagram is deliberate about. `terms` and `resolved` are **both** kept: `1,2,2,3` resolves to `[1,2,3]` while `terms` still records that four were written, because losing the duplicate would lose what the user typed. And day-of-week normalisation happens *after* expansion, so `0,7` collapses to a single Sunday rather than two.
+
+Validation catches: out-of-range values, inverted ranges (`5-2` — rejected with a hint, since some implementations wrap and some error, so we refuse to guess), zero steps (which would never advance), more than one step in a term, empty list elements, and dialect-foreign characters, each mapped to the specific scheduler it comes from.
+
+**Recovery is per field.** One bad field costs the user that field, not the whole analysis — the same posture as the regex parser (§2.5). `99 12 * * *` reports the minute error and still explains the hour.
+
+#### Step bases, and the one place we picked a dialect
+
+`*/n` and `a-b/n` mean the same thing everywhere. `n/m` — a step on a bare value — does not: some schedulers read it as "from n to the end of the field, every mth" and others reject it outright. SyntaxLab accepts it, applies the Vixie/cronie reading, **and says so in the warning text**:
+
+> A step on a single value behaves differently between schedulers. This reading is "from that value to the end of the field, every nth", which is what Vixie cron and cronie do.
+
+Expanding it to the base value alone — which is what the parser did until the M14 explanation review caught it — would have been a third reading that no scheduler implements. Between refusing and picking the dominant reading with the divergence named, picking is more useful; between picking silently and picking out loud, out loud is the only defensible one.
+
+#### Limits
+
+| Limit | Value | Why |
+|---|---|---|
+| `cron.input` | 1 000 characters | Checked before tokenising. A cron expression is not a document. |
+| `cron.fields` | 5 | The dialect lock, as a number. |
+| `cron.maxTokens` | 2 000 | Bounds the token list independently of the input check. |
+| `cron.maxTermsPerField` | 200 | The slowest valid input in the performance table is a list at this limit, at 1.07 ms p99 (`12_PERFORMANCE.md` §13). |
+
+### 4.4 Next-run computation — **NOT BUILT.** M16
+
+> M14 built the domain representation this needs and stopped there, by instruction: no future-occurrence generator, no recurrence engine. `CronAnalysis` carries no `nextRuns` field, and adding one is M16's work. The algorithm below is the design it will implement.
 
 **Algorithm: field-by-field advance, not brute-force minute iteration.** Iterating minute-by-minute over five years is ~2.6 M iterations per requested run and is exactly what makes a worker look hung.
 
@@ -707,7 +777,9 @@ loop (bounded by 5 years of candidates):
 
 Each step jumps to the next plausible boundary, so a match is found in tens of iterations. The 5-year bound guarantees termination and yields the correct answer for genuinely unsatisfiable schedules: `0 0 30 2 *` reports **"This schedule will never run — February never has a 30th."**
 
-### 4.5 Timezone scope — reduced, deliberately
+Note that the resolved value sets M14 produces are exactly the inputs this needs: sorted, deduplicated, and validated in range on both sides of the worker boundary.
+
+### 4.5 Timezone scope — reduced, deliberately — *represented at M14*
 
 **V1.1 supports two timezone modes only: the browser's local timezone, and UTC.** Named IANA zones are deferred.
 
@@ -717,36 +789,128 @@ Each step jumps to the next plausible boundary, so a match is found in tens of i
 
 | Requirement | Implementation |
 |---|---|
-| Show the active timezone | Always visible, never inferred silently. The next-runs panel header names it. |
+| Show the active timezone | Always visible, never inferred silently. At M14 every analysis carries a `CronTimezoneContext` and the explanation has a `cron-timezone` section naming the mode; M15's panel header renders it. |
 | Distinguish browser-local from an explicit choice | Two labelled modes: `Browser local (Europe/London)` and `UTC`. The resolved zone name is shown for browser-local so the user can see what the browser reported. |
-| Never silently convert between zones | Times are computed in the selected mode and displayed in it. There is no hidden conversion step. |
+| Never silently convert between zones | The mode travels with the request and is re-validated inside the worker. There is no hidden conversion step. |
 | Label every generated time | **Invariant C-I1: no execution time is displayed without a timezone label.** A cron time without a zone is a confidently wrong answer. |
 | Handle DST deliberately | See §4.6 |
 | Document the semantics | The panel states which mode is active and what it means; the help dialog explains the limitation and why. |
 
 **How the limitation is presented:** not as a missing feature, but as a stated scope. *"SyntaxLab shows schedules in your browser's timezone or in UTC. If your scheduler runs in a different timezone, the times below will not match it."* That sentence is more useful than a zone picker the user cannot fully trust.
 
+**What M14 represents, exactly.** `resolveTimezone(mode)` produces a `CronTimezoneContext`:
+
+| Field | `browserLocal` | `utc` |
+|---|---|---|
+| `mode` | `browserLocal` | `utc` |
+| `ianaZone` | whatever `Intl.DateTimeFormat().resolvedOptions().timeZone` reports | `UTC` |
+| `resolvedFrom` | `browserResolvedOptions` | `userSelection` |
+| `currentOffsetMinutes` | the offset *now* | `0` |
+
+`resolvedFrom` exists so the UI can say "your browser reported this" rather than "you chose this", which are different claims. `currentOffsetMinutes` is the offset at the moment of analysis and nothing more — it is not a rule set, and M14 does not pretend it is.
+
+**The union is the lock.** `CronTimezoneMode` has two members. A named zone cannot leak in through the worker either: the payload validator checks the mode against those two strings rather than merely typing it as them, and `tests/unit/cron/semantics.test.ts` asserts that no analysis can produce a third mode.
+
 **Upgrade path.** Named-zone support becomes a follow-up milestone **only when** the platform support and test strategy make it defensible — either via `Temporal` reaching baseline availability, or via an offset-probing implementation with the full zone-type test matrix in `13_TEST_PLAN.md`. Tracked as Q-09.
 
-### 4.6 DST handling
+### 4.6 DST handling — *partly built at M14*
 
 Even with only browser-local and UTC, DST is real: the browser's local zone has transitions.
 
-| Case | Behaviour | UI |
+**Built at M14:** a `DST_LOCAL_MODE` warning on any analysis in browser-local mode, and the corresponding note in UTC mode that UTC has no transitions and is therefore the easier mode to check a scheduler against. This is a *mode-level* caveat and does not depend on a schedule's times.
+
+**Not built — M16:** per-schedule anomaly detection, which needs the next-run computation of §4.4 before it has anything to detect.
+
+| Case | Behaviour | Status |
 |---|---|---|
-| Spring forward — 02:30 does not exist | Report the run as `SKIPPED`, explain that schedulers differ (most skip; some run at 03:00) | warning badge + explanation |
-| Fall back — 01:30 occurs twice | Report `REPEATED`, list both instants with their offsets | warning badge |
-| UTC mode | No transitions; stated explicitly as a reason to prefer UTC for verification | info note |
+| Browser-local mode selected | Warn that this zone observes DST changes | **built** |
+| UTC mode selected | Note that UTC has no transitions | **built** |
+| Spring forward — 02:30 does not exist | Report the run as `SKIPPED`, explain that schedulers differ (most skip; some run at 03:00) | M16 |
+| Fall back — 01:30 occurs twice | Report `REPEATED`, list both instants with their offsets | M16 |
 
 We document plainly that **different schedulers resolve DST differently**. We show what happens in wall-clock terms and warn; we do not claim to replicate any particular scheduler's DST policy. This warning is not removed by the reduced timezone scope — it is precisely why the scope was reduced.
 
-### 4.7 The DOM/DOW rule
+### 4.7 The DOM/DOW rule — *built at M14*
 
 Standard Vixie semantics: if **both** day-of-month and day-of-week are restricted, a day matches when **either** matches (OR), not both.
 
 `0 0 1 * MON` = "midnight on the 1st of the month **and also** every Monday" — not "the 1st, if it's a Monday".
 
 Approximately every developer reads this wrong. Therefore **whenever both fields are restricted, a warning is always emitted**, and the explanation spells out the OR reading in words. This is arguably the most valuable single output of the cron feature.
+
+```mermaid
+flowchart TD
+    A["day-of-month field"] --> C{"Both restricted?"}
+    B["day-of-week field"] --> C
+    C -->|"neither"| D["Every day. No warning."]
+    C -->|"only one"| E["That one restricts. No warning."]
+    C -->|"both"| F["OR: a day matches if EITHER matches"]
+    F --> G["DOM_DOW_OR_RULE warning, always"]
+    F --> H["Summary says it in words:<br/>on Monday OR on day 1 of the month<br/>- either, not both"]
+
+    classDef warn fill:#2a2414,stroke:#a08040,color:#fff0d9
+    class F,G,H warn
+```
+
+"Restricted" means *selects less than the whole field*, not *is not a literal asterisk*. `1-31` in day-of-month restricts nothing, so it does not trigger the rule — a distinction with its own regression test, because getting it wrong would fire the warning on schedules the rule does not apply to and train users to ignore it.
+
+### 4.8 The pipeline, as built at M14
+
+Four modules, each doing one thing, in `src/domain/cron/`:
+
+```mermaid
+flowchart LR
+    A["source string"] --> B["tokenizer.ts"]
+    B --> C["parser.ts"]
+    C --> D["warnings.ts"]
+    C --> E["explain.ts"]
+    D --> F["analyze.ts"]
+    E --> F
+    F --> G["CronAnalysis"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class G safe
+```
+
+The tokenizer's contract is worth stating, because it is what makes source linking possible: it emits whitespace as tokens too, so **the token list covers the source with no gaps**. `tests/unit/cron/semantics.test.ts` asserts exactly that — each token starts where the previous one ended, and the last ends at `source.length`. Editor decorations that highlight a field need that property; a tokenizer that silently drops whitespace makes every span after the first one a guess.
+
+The tokenizer is also structurally unable to fail to advance: every branch consumes at least one character, which discharges the termination obligation of §1.2 by construction rather than by a bound.
+
+### 4.9 Explanation flow — *built at M14*
+
+```mermaid
+flowchart TD
+    A["CronAnalysis fields"] --> B["summarise: the one-line reading"]
+    A --> C["explainField, once per field"]
+    D["timezone context"] --> E["cron-timezone section"]
+    F["macro, if any"] --> G["cron-macro section"]
+
+    B --> H["Explanation.summary"]
+    G --> I["Explanation.details"]
+    C --> I
+    E --> I
+
+    C --> C1["explainTerm per term:<br/>only the first names the field"]
+    C1 --> C2["explainStep: singular for 1 and 2,<br/>plural for a count"]
+    C --> C3["describeResolved:<br/>list up to 12, then only the count"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class H,I safe
+```
+
+Every output is `ExplanationNode[]`. No HTML, no Markdown, and no sentence built by concatenating user text: anything the user typed goes in a `code` or `ref` node, which the renderer escapes (`05_SECURITY.md` §6).
+
+The summary is the part that earns the feature. It resolves in this order, first match wins:
+
+| Shape | Reads as |
+|---|---|
+| minute and hour both unrestricted | "every minute" |
+| a single step over the whole minute field | "every 15 minutes", plus the hour window when hours are restricted |
+| exactly one minute and one hour | "at 04:30" |
+| one minute, many hours | "at `:30` past …" |
+| many minutes | "N times an hour" |
+
+followed by the day clause — where the OR rule is spelled out — and the month clause. A contiguous hour range reads as a window, "between 09:00 and 17:59", because that is checkable against a real scheduler and because it says out loud that `9-17` includes the whole of the 17:00 hour.
 
 ---
 

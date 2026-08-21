@@ -2039,3 +2039,168 @@ cross-engine check called `fetch()` from inside the page and failed on every
 engine — correctly, because the app ships `connect-src 'none'`. Icons are
 `img-src`, a different directive; asking the document to fetch them was testing
 the CSP rather than the icons. The check now uses the test's own HTTP client.
+
+
+---
+
+## M14 — objective and outcome
+
+**Objective.** Build the cron **domain** — tokenizer, AST, parser, field
+semantics, dialect detection, explanation, worker operation, runtime result
+validation — and nothing that renders. The brief's scope locks were exactly
+five fields, browser-local and UTC only, no cron UI, and no cron dependency.
+
+**Outcome.** All of that, plus a re-scope and one finding that was not about
+cron at all.
+
+### The re-scope, stated up front
+
+`20_IMPLEMENTATION_PLAN.md` listed `cron/schedule.ts` — the field-advance
+next-run algorithm — and DST anomaly detection under M14. **Both moved to
+M16**, on instruction: M14 is not the schedule executor. `CronAnalysis`
+carries no `nextRuns` field, and it carries no empty array or null standing in
+for one, because a consumer would then have to tell "no runs" from "not
+computed" and only one of those is a fact about the schedule.
+
+Everything that follows is scoped by that. Five acceptance criteria in
+`21_ACCEPTANCE_CRITERIA.md` §11 are marked M16 rather than reinterpreted as
+met.
+
+### What was built
+
+| Module | What it does |
+|---|---|
+| `ast.ts` | `CronDialect`, field specs with ranges and names, `CronTerm`, `CronField`, the two-member timezone union, warning codes |
+| `tokenizer.ts` | Single pass, gapless — whitespace is a token, so the token list covers the source with no holes |
+| `parser.ts` | Macros, the field-count lock, foreign-syntax detection, per-field grammar, expansion, day-of-week normalisation |
+| `warnings.ts` | The five warning codes, including the always-on OR-rule warning |
+| `explain.ts` | `ExplanationNode[]` only — summary plus one section per field plus a timezone section |
+| `analyze.ts` | The entry point, and `resolveTimezone` |
+| `validate.ts` | Exhaustive runtime validation of a `CronAnalysis` arriving from the worker |
+
+Plus `analysis.cron` on the long-lived analysis worker, and its payload
+validator, payload reconstructor, result validator and result reconstructor in
+`protocol.ts`.
+
+### The 5-field lock, concretely
+
+| Input | Result |
+|---|---|
+| `0 0 12 * * ?` | `UNSUPPORTED`. Message names the 6-field count; hint names Quartz/Spring seconds-first and the year convention, and suggests removing the first field |
+| `0 0 12 * * ? 2026` | `UNSUPPORTED`, 7 fields |
+| `* * * * * *` | `UNSUPPORTED` — no reinterpretation by dropping a field |
+| `* * *` | `SYNTAX`, "found 3" — a plain miscount, not a dialect refusal |
+| `0 0 L * *` / `0 0 LW * *` / `0 0 15W * *` / `0 0 * * 6#3` / `0 0 ? * MON` | `UNSUPPORTED`, naming **Quartz** |
+| `H 0 * * *` / `H/15 * * * *` | `UNSUPPORTED`, naming **Jenkins** |
+| `0 0 1 SMARCH *` | "not a recognised month" — **not** Jenkins, despite containing an `H` |
+
+The last two rows are the same rule seen from both sides, and it took three
+attempts to get right. A token made entirely of letters is foreign only when
+*every* letter is a foreign symbol; a token mixing letters and digits is
+scanned character by character. Both directions are regression-tested.
+
+### Defects found, and how
+
+**By reading the output as a user** (brief §44 — twelve expressions, printed
+and read):
+
+| Defect | Fix |
+|---|---|
+| `5/10` resolved to `[5]` — the base value alone, which is a reading **no scheduler implements** | Expand as `5-59/10`, the Vixie/cronie reading, and name that reading in the warning |
+| "every 15 minute" | Field specs carry a plural, stored rather than derived |
+| "day of the month `1`, and day of the month `15`" | Only the first term in a list names the field |
+| "during 9 hours of the day" for `9-17` | "between 09:00 and 17:59" — checkable against a real scheduler, and it says out loud that `9-17` includes all of 17 |
+
+The first of those is the one that mattered. It is exactly the failure mode
+R-03 describes: a confidently wrong answer, produced silently.
+
+**By writing the worker boundary tests:** `analysis.cron` had a result
+validator but **no payload validator and no reconstructor**. A cron request
+could not have survived `parseWorkerRequest`. The mapped-type annotations on
+both tables should have made that a compile error.
+
+### The typecheck gate — not a cron finding
+
+They did not, because **`npm run typecheck` had never checked anything.** Both
+it and the typecheck half of `npm run build` ran `tsc --noEmit` against the
+root `tsconfig.json`, which is a solution file: `{"files": [], "references":
+[...]}`. tsc checked zero files and exited 0. Vite strips types without
+checking them, so nothing in this repository had ever been type-checked.
+
+Proven by planting `export const boom: number = "not a number"` in `src/` and
+watching the gate pass.
+
+Both scripts now run the two real projects. That exposed **25 errors, all
+pre-existing, none in the cron domain**, in four groups: eight
+`exactOptionalPropertyTypes` violations, five places where narrowing was lost
+across a callback or a union boundary, two React 18-vs-19 `RefObject`
+spellings, and ten instances of type drift in fixtures and configs. All fixed.
+One behavioural bug fell out: `ModeSuggestion` could call `setMode` with the
+detection result `unknown`, which is not a mode.
+
+### Tests
+
+| Suite | Cases |
+|---|---|
+| `parser.test.ts` — grammar, the 5-field lock, limits | 33 |
+| `semantics.test.ts` — OR rule, Sunday convention, timezone, spans | 22 |
+| `corpus.test.ts` — the golden corpus | 78 |
+| `property.test.ts` — 13 properties, 1 200 runs each, fixed seed 20260821 | 13 |
+| `protocol.test.ts` — the `analysis.cron` boundary | 21 |
+| **Cron total** | **167** |
+
+The corpus is 78 cases, not the 100+ the plan named. Every case was read by a
+person and its expected answer written by hand; padding it to reach a round
+number would have made the count true and the corpus worse. The third block is
+the one that keeps the dialect honest: eight expressions that are valid in
+*another* scheduler, each asserted to be refused **and** to name the scheduler
+it came from.
+
+**No reference implementation is used as an oracle**, and
+`13_TEST_PLAN.md` §3.3.1 explains why at length: cron has no standard in the
+sense that ECMA-262 and RFC 8259 are standards, so a disagreement with any
+particular implementation would be evidence of nothing. The section also
+states, axis by axis, where a comparison would be invalid — and what the one
+genuinely comparable property would be.
+
+### Performance
+
+`npm run measure:cron`, 2 000 runs per case. Full table in
+`12_PERFORMANCE.md` §13.
+
+| | p99 |
+|---|---|
+| Typical `*/15 9-17 * * 1-5` | 0.133 ms |
+| **Worst valid input** — a 200-term list, the per-field limit | **1.066 ms** |
+| Over the input limit | 0.000 ms — refused on length before tokenising |
+| 6-field | 0.005 ms — refused on count before any field is read |
+
+15x inside a frame at worst. Nothing was optimised, because nothing needed to
+be; the point of the numbers is that a later change making them untrue becomes
+visible.
+
+Initial JS moved 165.34 KB → **167.38 KB**, against a 170 KB target. The 2 KB
+is the *validator*, which the main thread needs; the parser stays in the
+worker bundle.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck | ✅ clean — **and now actually runs** |
+| ESLint / Stylelint / Prettier | ✅ clean, zero warnings |
+| Unit tests | ✅ 2 330 passed, 40 files |
+| Full E2E matrix | ✅ **676 passed**, 11 skipped, 0 failed |
+| Build + budgets | ✅ all six budgets within target |
+| No cron UI | ✅ `src/features/cron/` does not exist; `AnalysisMode` is still `'regex' \| 'json'` |
+| No new dependency | ✅ none added |
+
+### Known limitations at M14
+
+- **No next-run times.** M16. This is the largest one and it is deliberate.
+- **No per-schedule DST detection.** M16. The mode-level caveat ships.
+- **No named timezones**, and that is the locked scope, not a gap to fill.
+- **`0 0 30 2 *` parses without error**, which is correct — it is valid syntax
+  that never fires, and saying so needs the executor.
+- **Cron has no UI**, so it is absent from the a11y, offline and XSS-corpus
+  suites. Those need an input surface, which arrives at M15.

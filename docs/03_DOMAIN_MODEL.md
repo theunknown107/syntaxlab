@@ -6,7 +6,7 @@
 
 ---
 
-> **Scope note (Phase 1.5).** V1.0 implements `RegexAnalysis`, `JsonAnalysis`, `HistoryEntry`, `ThemePreferences`, and `AppSettings`. **`CronAnalysis` (§5) is V1.1.** The `SHARE_URL_VERSION` in §8 applies only if share URLs ship in V1.1+.
+> **Scope note.** V1.0 implements `RegexAnalysis`, `JsonAnalysis`, `HistoryEntry`, `ThemePreferences`, and `AppSettings`. **`CronAnalysis` (§5) is V1.1, and M14 built the parts of it that do not require a schedule executor** — the fields, the terms, the timezone context, the warnings and the explanation. `schedule` and `nextRuns` are M16. The `SHARE_URL_VERSION` in §8 applies only if share URLs ship in V1.1+.
 
 ## 1. Purpose and rules
 
@@ -105,7 +105,9 @@ Defined once, in `domain/shared/limits.ts`, imported by editor, application, and
 const LIMITS = {
   regex:      { pattern: 10_000,    testSubject: 1_000_000, execMs: 2_000, maxMatches: 10_000 },
   json:       { input: 5_000_000,   maxDepth: 500,          maxNodes: 500_000 },
-  cron:       { input: 1_000,       fields: 5,              previewCount: 25, searchYears: 5 },  // V1.1
+  // As built at M14. `previewCount` and `searchYears` arrive with the executor
+  // in M16; there is nothing to preview or search until then.
+  cron:       { input: 1_000,       fields: 5,              maxTokens: 2_000, maxTermsPerField: 200 },
   share:      { encoded: 8_192 },                                                                  // V1.1+ only
   importFile: { bytes: 20_000_000,  entries: 10_000 },
   history:    { maxEntries: 500,    maxInputChars: 100_000, softQuotaBytes: 50_000_000 },
@@ -317,7 +319,7 @@ V1 accepts **strict RFC 8259 JSON only**. Comments, trailing commas, single quot
 
 ## 5. `CronAnalysis` — **V1.1**
 
-> Not implemented in V1.0. Specified here so the V1.1 scope is fixed. Dialect and timezone scope are locked in `04_PARSER_ARCHITECTURE.md` §4.1 and §4.5.
+> **Built at M14, minus the schedule executor.** The interface below is the V1.1 target; the block after it is what `src/domain/cron/ast.ts` actually declares today. Dialect and timezone scope are locked in `04_PARSER_ARCHITECTURE.md` §4.1 and §4.5.
 
 ```ts
 interface CronAnalysis {
@@ -362,16 +364,75 @@ type CronTerm =
 
 ```
 
+### 5.0 As built at M14
+
+`CronAnalysis` in `src/domain/cron/ast.ts` differs from the target above in three ways, all of them deliberate:
+
+```ts
+interface CronAnalysis {
+  readonly kind: 'cron';
+  readonly source: string;
+  readonly dialect: CronDialect;            // 'standard5', a one-member union
+  readonly tokens: readonly CronToken[];    // added: gapless, for source linking
+  readonly fields: readonly CronField[];    // five, or none for @reboot
+  readonly explanation: Explanation;
+  readonly warnings: readonly CronWarning[];
+  readonly timezone: CronTimezoneContext;
+  readonly errors: readonly DomainError[];  // per-field errors, collected
+  readonly macro?: string;                  // the macro written, if any
+  // no `schedule`, and no `nextRuns` — M16
+}
+```
+
+**No `schedule`, no `nextRuns`.** M14 was scoped to the representation those need. Adding an empty array or a null would have been worse than omitting the field: a consumer would have to distinguish "no runs" from "not computed", and only one of those is a fact about the schedule.
+
+**`tokens` was added.** The target interface had no token list. Source linking needs one, and it needs to be gapless — see `04_PARSER_ARCHITECTURE.md` §4.8.
+
+**`fields` is empty for `@reboot`.** Not five placeholder fields. `@reboot` has no clock schedule, and five fields would imply one.
+
+```mermaid
+flowchart TD
+    A["CronAnalysis"] --> B["tokens: CronToken[]"]
+    A --> C["fields: CronField[]"]
+    A --> D["explanation: Explanation"]
+    A --> E["warnings: CronWarning[]"]
+    A --> F["timezone: CronTimezoneContext"]
+    A --> G["errors: DomainError[]"]
+
+    C --> C1["name, raw, span"]
+    C --> C2["terms: CronTerm[]<br/>what was written"]
+    C --> C3["resolved: number[]<br/>what it means"]
+    C --> C4["isWildcard"]
+    C --> C5["error?"]
+
+    C2 --> T1["all"]
+    C2 --> T2["value"]
+    C2 --> T3["range"]
+    C2 --> T4["step - wraps a base"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class C2,C3 safe
+```
+
+**`terms` and `resolved` are both kept, and they are not redundant.** `terms` is what the user wrote, duplicates and all; `resolved` is what it means, sorted and deduplicated. `1,2,2,3` has four terms and three resolved values. Collapsing them into one field would lose either the source fidelity the editor needs or the semantics the explanation needs.
+
+**`CronTerm` has no `list` member**, unlike the target sketch above. A list is the field's `terms` array, not a term. Nesting one inside another would allow `1,(2,3)`, which the grammar does not have.
+
+**Step nesting is the only recursion**, and it is one level deep in practice — `a-b/n` — with the runtime validator bounding it at eight anyway.
+
 ### 5.1 Timezone model — explicit, never implicit
 
 ```ts
-interface TimezoneContext {
-  readonly mode: 'browserLocal' | 'utc';   // V1.1 supports these two only
+// Named `CronTimezoneContext` in the code, to keep it out of the way of any
+// later non-cron use of a timezone.
+interface CronTimezoneContext {
+  readonly mode: CronTimezoneMode;         // 'browserLocal' | 'utc', and no third
   readonly ianaZone: string;               // resolved for display, e.g. "Europe/London"
   readonly resolvedFrom: 'browserResolvedOptions' | 'userSelection';
   readonly currentOffsetMinutes: number;
 }
 
+// M16. Not declared at M14 — see 5.0.
 interface NextRun {
   readonly instant: string;              // ISO 8601 with offset — never a bare Date
   readonly localDisplay: string;
@@ -386,14 +447,14 @@ interface NextRun {
 
 ### 5.2 Cron invariants
 
-| # | Invariant |
-|---|---|
-| C-I2 | Every field value is within its dialect's legal range; `60` in minutes is an error. |
-| C-I3 | `dayOfWeek` accepts both `0` and `7` for Sunday, and the explanation states which convention was applied. |
-| C-I4 | **The DOM/DOW OR-rule is implemented per Vixie cron:** when both `dayOfMonth` and `dayOfWeek` are restricted (neither is `*`), a day matches if *either* matches. A warning is always emitted, because approximately everyone reads it as AND. |
-| C-I5 | Next-run search is bounded by `LIMITS.cron.searchYears`; an impossible schedule (`0 0 30 2 *` — 30 February) terminates and reports "this schedule will never run" instead of spinning. |
-| C-I6 | DST transitions are detected and labelled, never silently skipped or duplicated. |
-| C-I7 | Field count determines dialect; ambiguous counts prompt the user rather than guessing. |
+| # | Invariant | Status at M14 |
+|---|---|---|
+| C-I2 | Every field value is within its dialect's legal range; `60` in minutes is an error. | **Held.** Enforced in the parser and again in the worker-result validator, which checks each resolved value against that field's own spec. |
+| C-I3 | `dayOfWeek` accepts both `0` and `7` for Sunday, and the explanation states which convention was applied. | **Held.** `0,7` collapses to one Sunday; the explanation says so whenever `7` appears. |
+| C-I4 | **The DOM/DOW OR-rule is implemented per Vixie cron:** when both `dayOfMonth` and `dayOfWeek` are restricted (neither is `*`), a day matches if *either* matches. A warning is always emitted, because approximately everyone reads it as AND. | **Held** for the warning and the explanation. The matching itself has no executor to run in until M16. |
+| C-I5 | Next-run search is bounded by `LIMITS.cron.searchYears`; an impossible schedule (`0 0 30 2 *` — 30 February) terminates and reports "this schedule will never run" instead of spinning. | **M16.** There is no search yet. `0 0 30 2 *` parses without error at M14, which is correct: it is valid syntax that never fires, and saying so needs the executor. |
+| C-I6 | DST transitions are detected and labelled, never silently skipped or duplicated. | **Partly.** The mode-level caveat is emitted; per-schedule anomalies are M16. |
+| C-I7 | Field count determines dialect; ambiguous counts prompt the user rather than guessing. | **Held.** 6 and 7 fields are refused with the scheduler names; three separate 6-field expressions are pinned as never reinterpreted. |
 
 ### 5.3 Documented dialect support
 
@@ -496,7 +557,10 @@ interface AppSettings {
   readonly autoAnalyze: boolean;
   readonly autoDetectType: boolean;
   readonly defaultMode: 'regex' | 'json' | 'cron' | 'auto';
-  readonly cron: { dialect: CronDialect; timezoneMode: 'browserLocal'|'named'|'utc'; namedZone?: string };
+  // Two modes, and no `namedZone`. The union IS the scope lock: V1.1 does not
+  // implement named zones, and a settings field for one would let it leak in
+  // through persistence (04_PARSER_ARCHITECTURE.md 4.5).
+  readonly cron: { dialect: CronDialect; timezoneMode: CronTimezoneMode };
   readonly json: { indent: 2 | 4 | 'tab'; sortKeysOnFormat: boolean };
   readonly regex: { defaultFlags: string; execTimeoutMs: number };  // clamped to LIMITS
   readonly showWarnings: boolean;

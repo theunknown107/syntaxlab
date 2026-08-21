@@ -290,7 +290,7 @@ This section is the most important one in the document. Each row is a decision t
 | An icon library (lucide/heroicons) | ~20 inline SVGs | 5–50 KB |
 | An animation library (framer-motion) | CSS transitions | ~35 KB |
 | A date library (date-fns/dayjs/luxon) | `Intl.DateTimeFormat`; V1.1 needs only browser-local and UTC | 7–70 KB |
-| A cron library (cron-parser/cronstrue) *(V1.1)* | Custom parser — needed anyway for field-by-field explanation with positions, and we support one dialect where libraries support many | ~15 KB |
+| A cron library (cron-parser/cronstrue) | **Not installed, and M14 shipped without it.** A custom parser was needed anyway for field-by-field explanation with source positions, and we support one dialect where libraries support many — a library that accepts 6-field Quartz input would undo the scope lock rather than help with it. `13_TEST_PLAN.md` §3.3.1 explains why one is not used as a test oracle either. | ~15 KB avoided |
 | A regex parser (regexpp/regjsparser) | Custom parser — needed for positions + explanation-shaped AST | ~30 KB |
 | A JSON parser (jsonc-parser) | Custom CST parser — needed for positions, duplicates, and raw number text | ~12 KB |
 | A sanitiser (DOMPurify) | **No HTML is rendered at all** | ~20 KB |
@@ -335,7 +335,7 @@ Documented in advance so a failure is a decision, not a crisis.
 |---|---|
 | The custom regex parser proves unreliable in fuzz testing | Adopt `regexpp` (~30 KB) for parsing; keep our own explanation layer on top. Budget absorbs it by dropping the search chunk. |
 | The custom JSON parser proves unreliable | Adopt `jsonc-parser` (~12 KB); keep our own error messages and tree. |
-| The custom cron engine proves unreliable | Adopt `cron-parser` (~15 KB) for schedule computation; keep our own field parser for the explanation and positions. |
+| The custom cron engine proves unreliable | Adopt `cron-parser` (~15 KB) for schedule computation; keep our own field parser for the explanation and positions. **Not triggered at M14:** 146 tests including 1 200-run property tests and a 78-case golden corpus, with no correctness problem that a library would have prevented. The one semantic defect found — `5/10` — was ours to fix and is now pinned. |
 | CodeMirror is **measured** over budget and the §8.2 ladder does not recover it | In order: drop `@codemirror/search`; then evaluate Preact with a measurement; only then consider a `<textarea>` + lightweight highlighter, which is a significant capability loss and a genuine last resort. |
 | *(V1.1+)* `CompressionStream` proves too patchy | Share URLs, if they ship, go uncompressed with a smaller payload limit, stated in the dialog. |
 | *(V1.1)* `Intl` proves insufficient even for browser-local and UTC | Unlikely at this reduced scope. If named zones are later approved (Q-09), adopt `@js-temporal/polyfill` (~50 KB) in the lazy cron chunk only — never in the initial bundle. |

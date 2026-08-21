@@ -4,7 +4,7 @@ import { tokenize } from '@/domain/cron/tokenizer';
 import { LIMITS } from '@/domain/shared/limits';
 
 /**
- * Measures cron analysis — 12_PERFORMANCE.md §11
+ * Measures cron analysis — 12_PERFORMANCE.md §13
  *
  * Run with:
  *
