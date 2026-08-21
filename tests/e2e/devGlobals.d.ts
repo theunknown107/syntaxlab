@@ -32,4 +32,13 @@ interface SyntaxLabDevHarness {
 
 interface Window {
   __syntaxlabDev?: SyntaxLabDevHarness;
+  /**
+   * CSP violations recorded in the page by the M12 release-QA watcher.
+   *
+   * Declared here rather than in a `declare global` block with an `export`:
+   * this file has no imports or exports on purpose, which is what keeps its
+   * declarations ambient. Making it a module would take `__syntaxlabDev` out
+   * of scope for every worker spec.
+   */
+  __csp?: string[];
 }

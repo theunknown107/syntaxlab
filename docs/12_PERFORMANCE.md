@@ -1,10 +1,19 @@
 # 12 — Performance
 
 **Project:** SyntaxLab
-**Status:** Draft for human review
-**Last updated:** 2026-08-17
+**Status:** Measured — §§10 and 12 carry real results
+**Last updated:** 2026-08-21 (M11)
 
-> **No invented benchmark numbers.** Every figure below is either a **budget** (a CI-enforced threshold), a **target** (where we intend to sit), or a **limit** (an enforced constraint). Nothing here is a measured result. Measurements are recorded in §10 and are the only authority — first entry due at **Milestone 1**.
+> **Two kinds of number live in this document, and they are never mixed.**
+>
+> §§1–9 are **budgets** (CI-enforced thresholds), **targets** (where we intend
+> to sit) and **limits** (enforced constraints). They were written before the
+> product existed and none of them is a measured result.
+>
+> **§10 and §12 are measurements**, and they are the only authority. §10 is the
+> M1–M10 ledger; §12 is the M11 baseline and the changes made against it. The
+> original note here said the first entry was "due at Milestone 1" — it
+> arrived, and eleven milestones of results have followed.
 
 ---
 

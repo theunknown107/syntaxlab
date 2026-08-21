@@ -34,6 +34,31 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
     },
     {
+      /*
+       * M12 release QA — the complete user journeys, against the production
+       * build under the *production* `_headers` on :4183. A release gate that
+       * validates a policy the app does not ship with is not a release gate.
+       */
+      name: 'release-chromium',
+      testMatch: /release-qa\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4183' },
+    },
+    {
+      name: 'release-firefox',
+      testMatch: /release-qa\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4183' },
+    },
+    {
+      name: 'release-webkit',
+      testMatch: /release-qa\.spec\.ts/,
+      use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4183' },
+    },
+    {
+      name: 'release-mobile',
+      testMatch: /release-qa\.spec\.ts/,
+      use: { ...devices['Pixel 5'], baseURL: 'http://localhost:4183' },
+    },
+    {
       // The editor keymap is rebuilt locally rather than imported; these pin
       // the bindings that change would be most likely to break silently.
       name: 'editor-chromium',

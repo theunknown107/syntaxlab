@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M11 complete → M12 next (awaiting approval)
+**Current milestone:** M12 — integration, end-to-end and release QA
 **Last updated:** 2026-08-20
 
 > Living document, updated at the end of every milestone. The architecture
@@ -36,8 +36,8 @@
 | M8 | Theme customisation | ✅ **Complete** |
 | M9 | PWA and offline | ✅ **Complete** |
 | M10 | Accessibility and security hardening | ✅ **Complete** |
-| M11 | Performance measurement | ⬜ Next |
-| M12 | Integration, E2E, release QA | ⬜ |
+| M11 | Performance and UX refinement | ✅ **Complete** |
+| M12 | Integration, E2E, release QA | 🔨 **Current** |
 | M13 | V1.0 release | ⬜ |
 
 ---

@@ -15,7 +15,7 @@
 |---|---|---|---|---|---|---|
 | R-01 | Custom parser correctness | V1.0 | ~~4~~ 3 | 4 | ~~16~~ **12** | 🟠 **regex half passed M3; JSON half open until M5** |
 | R-03 | Cron timezone/DST correctness | **V1.1** | 3 | 4 | 12 | 🟠 |
-| R-05 | Bundle budget exceeded | V1.0 | ~~4~~ 1 | 3 | ~~12~~ **3** | 🟢 **passed at M4 — 162.54 KB against a 170 KB target** |
+| R-05 | Bundle budget exceeded | V1.0 | ~~4~~ 1 | 3 | ~~12~~ **3** | 🟢 **passed at M4 (162.54 KB); over target M8–M10; back inside at M11 — 166.16 KB** |
 | R-04 | Explanation quality is mediocre | V1.0 | 3 | 4 | 12 | 🟠 |
 | R-02 | Scope/timeline overrun | V1.0 | 3 | 3 | 9 | 🟠 |
 | R-06 | Service-worker bug bricks cached copies | V1.0 | 2 | 5 | 10 | 🟠 |
@@ -123,9 +123,35 @@ on the strength of an estimate is what §2.3 of the performance doc forbids.
 The §8.2 recovery ladder — drop `@codemirror/search`, then evaluate Preact —
 was not entered.
 
-**Residual: 🟢 low.** The remaining growth in V1.0 is the JSON feature plus
-`@codemirror/lang-json` (M5–M6), the drawers (M7–M8), and the service worker
-(M9), all of which are lazy chunks by design. Re-check at M11.
+**Residual at M4: 🟢 low.** The remaining growth in V1.0 was expected to be the
+JSON feature, the drawers (M7–M8) and the service worker (M9). Re-check at M11.
+
+### R-05 — current checkpoint, M11
+
+The M4 figures above are kept as the historical checkpoint. **They are no
+longer the current state**, and the M4 prediction was partly wrong: the growth
+did not stay in lazy chunks, because the build ships a single entry chunk. The
+budget was breached against the *target* from M8 to M10.
+
+| Checkpoint | Initial JS | Against the 170 KB target | Against the 200 KB limit |
+|---|---|---|---|
+| M4 (historical) | 162.54 KB | 7.46 KB under | 37 KB under |
+| M8 | 173.04 KB | **3.04 KB over** | 27 KB under |
+| M9 | 174.52 KB | **4.52 KB over** | 25 KB under |
+| M10 | 175.05 KB | **5.05 KB over** | 25 KB under |
+| **M11 (current)** | **166.16 KB** | **3.84 KB under** | **33.8 KB under** |
+
+The §8.2 recovery ladder was never entered as written — `@codemirror/search` is
+not a dependency, and Preact was ruled out without evidence to justify it.
+What M11 found instead was cheaper than either: `standardKeymap`'s single Enter
+binding was the only path to `@codemirror/language` and the Lezer stack, in an
+application that configures no language at all. Rebuilding the keymap returned
+9.71 KB (`12_PERFORMANCE.md` §12.2).
+
+**Residual: 🟢 low, and lower than at M4.** The budget is inside its target for
+the first time since CodeMirror arrived, the trend has reversed, and the
+remaining composition is understood — CodeMirror 60%, React 16%, application
+code 24%. There is no un-analysed weight left to be surprised by.
 
 ---
 
