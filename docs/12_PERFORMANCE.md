@@ -1197,10 +1197,13 @@ low-powered device. Lighthouse's 4x CPU throttle is a simulation, not a phone.
 | at the input limit (1 000 chars) | 0.000 ms | 0.000 ms | 0.188 ms | Refused on length, before tokenising |
 | foreign dialect (6 fields) | 0.002 ms | 0.005 ms | 0.113 ms | Refused on field count, before any field is read |
 | all errors `99 99 99 99 99` | 0.008 ms | 0.035 ms | 0.388 ms | Five failing fields, all recovered |
+| typical, **browser-local** | 0.052 ms | 0.173 ms | 3.726 ms | The same expression through the local-timezone path |
 
 ### 13.2 What the numbers say
 
 **The worst valid input is 15x inside a frame.** A 200-term list at 1.07 ms p99 is the slowest thing the grammar permits, and the limit is what makes that true — without `maxTermsPerField` the cost is linear in a number the user chooses.
+
+**Browser-local costs about 4x UTC, and it is worth knowing why.** UTC resolves to a constant; browser-local asks `Intl` for the zone name and then probes twelve monthly offsets to decide whether that zone observes daylight saving (`04_PARSER_ARCHITECTURE.md` §4.6). 0.05 ms p50 against 0.013 ms is a real multiple of a number too small to matter — but the multiple is where a future regression would appear, so it is on the record rather than averaged away. The 3.7 ms max is a first-call `Intl` cost that the warmup does not fully absorb; the p99 is the honest figure for steady state.
 
 **The two refusals are the fastest paths in the table**, which is the right shape and not an accident. An oversized expression is rejected on `source.length` before the tokenizer runs; a 6-field expression is rejected on the field count before `parseField` is called. A parser that did the work and then threw the result away would have the opposite profile, and would be a denial-of-service shape rather than a refusal.
 
@@ -1222,6 +1225,6 @@ The point of recording the numbers is not that they are impressive. It is that a
 
 ### 13.4 Bundle impact
 
-Initial JS moved from **165.34 KB** (after M11) to **167.41 KB** — 2.07 KB, against a 170 KB target and a 200 KB hard limit.
+Initial JS moved from **165.34 KB** (after M11) to **167.44 KB** — 2.10 KB, against a 170 KB target and a 200 KB hard limit.
 
 That 2 KB is the *validator*, not the parser. `isValidCronAnalysis` and the AST's field specs are imported by `protocol.ts`, which the main thread needs in order to check what the worker sends back; the tokenizer, parser and explainer stay in the worker bundle where they are used. Paying 2 KB on the main thread to avoid trusting a worker result by cast is the trade this project has already made twice, for regex and for JSON.

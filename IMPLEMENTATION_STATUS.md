@@ -2181,7 +2181,7 @@ genuinely comparable property would be.
 be; the point of the numbers is that a later change making them untrue becomes
 visible.
 
-Initial JS moved 165.34 KB → **167.41 KB**, against a 170 KB target. The 2 KB
+Initial JS moved 165.34 KB → **167.44 KB**, against a 170 KB target. The 2 KB
 is the *validator*, which the main thread needs; the parser stays in the
 worker bundle.
 

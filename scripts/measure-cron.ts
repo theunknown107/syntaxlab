@@ -61,6 +61,14 @@ const CASES: readonly Case[] = [
   { label: 'all errors', source: '99 99 99 99 99', note: 'five failing fields, all recovered' },
 ];
 
+/**
+ * Browser-local mode is measured separately because it does strictly more
+ * work: resolving the zone through `Intl`, and twelve monthly offset probes to
+ * decide whether the zone observes daylight saving. If that ever becomes
+ * expensive, it should show up here rather than in a user's editor.
+ */
+const LOCAL_CASE = { label: 'typical, browser-local', source: '*/15 9-17 * * 1-5' };
+
 const RUNS = 2000;
 const WARMUP = 200;
 
@@ -104,12 +112,24 @@ for (const testCase of CASES) {
 }
 
 console.log(`\nCron analysis — ${String(RUNS)} runs each, after ${String(WARMUP)} warmup runs\n`);
-console.log(`  ${pad('case', 22)}${pad('p50', 12)}${pad('p99', 12)}${pad('max', 12)}note`);
+console.log(`  ${pad('case', 26)}${pad('p50', 12)}${pad('p99', 12)}${pad('max', 12)}note`);
 for (const row of rows) {
   console.log(
-    `  ${pad(row.label, 22)}${pad(ms(row.p50), 12)}${pad(ms(row.p99), 12)}${pad(ms(row.max), 12)}${row.note}`,
+    `  ${pad(row.label, 26)}${pad(ms(row.p50), 12)}${pad(ms(row.p99), 12)}${pad(ms(row.max), 12)}${row.note}`,
   );
 }
+
+const localStats = time(() => {
+  analyzeCron(LOCAL_CASE.source, { timezoneMode: 'browserLocal' });
+});
+rows.push({
+  label: LOCAL_CASE.label,
+  note: 'resolves the zone and probes 12 monthly offsets',
+  ...localStats,
+});
+console.log(
+  `  ${pad(LOCAL_CASE.label, 26)}${pad(ms(localStats.p50), 12)}${pad(ms(localStats.p99), 12)}${pad(ms(localStats.max), 12)}resolves the zone and probes 12 monthly offsets`,
+);
 
 /* The stages, on the typical expression, so a regression can be located. */
 const TYPICAL = '*/15 9-17 * * 1-5';
