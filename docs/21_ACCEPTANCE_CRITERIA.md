@@ -333,7 +333,7 @@ Cron (V1.1) · share URLs · JSON→TypeScript · JSON→JSON Schema · light th
 [ ] Every criterion in §11 passes
 [ ] All V1.0 criteria still pass (no regression)
 [ ] Cron included in offline, security, and a11y test suites *(needs the M15 UI; the M14 domain has no surface to test through)*
-[ ] Bundle re-measured with the cron chunk, still within budget *(M14 measured the domain's cost: +2.04 KB initial JS, 167.38 KB against a 170 KB target)*
+[ ] Bundle re-measured with the cron chunk, still within budget *(M14 measured the domain's cost: +2.07 KB initial JS, 167.41 KB against a 170 KB target)*
 [ ] Product name and README updated to include cron
 ```
 

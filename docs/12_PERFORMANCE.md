@@ -1222,6 +1222,6 @@ The point of recording the numbers is not that they are impressive. It is that a
 
 ### 13.4 Bundle impact
 
-Initial JS moved from **165.34 KB** (after M11) to **167.38 KB** — 2.04 KB, against a 170 KB target and a 200 KB hard limit.
+Initial JS moved from **165.34 KB** (after M11) to **167.41 KB** — 2.07 KB, against a 170 KB target and a 200 KB hard limit.
 
 That 2 KB is the *validator*, not the parser. `isValidCronAnalysis` and the AST's field specs are imported by `protocol.ts`, which the main thread needs in order to check what the worker sends back; the tokenizer, parser and explainer stay in the worker bundle where they are used. Paying 2 KB on the main thread to avoid trusting a worker result by cast is the trade this project has already made twice, for regex and for JSON.

@@ -2179,7 +2179,7 @@ genuinely comparable property would be.
 be; the point of the numbers is that a later change making them untrue becomes
 visible.
 
-Initial JS moved 165.34 KB → **167.38 KB**, against a 170 KB target. The 2 KB
+Initial JS moved 165.34 KB → **167.41 KB**, against a 170 KB target. The 2 KB
 is the *validator*, which the main thread needs; the parser stays in the
 worker bundle.
 
@@ -2189,11 +2189,12 @@ worker bundle.
 |---|---|
 | Typecheck | ✅ clean — **and now actually runs** |
 | ESLint / Stylelint / Prettier | ✅ clean, zero warnings |
-| Unit tests | ✅ 2 330 passed, 40 files |
+| Unit tests | ✅ 2 334 passed, 40 files |
 | Full E2E matrix | ✅ **676 passed**, 11 skipped, 0 failed |
 | Build + budgets | ✅ all six budgets within target |
 | No cron UI | ✅ `src/features/cron/` does not exist; `AnalysisMode` is still `'regex' \| 'json'` |
-| No new dependency | ✅ none added |
+| No new dependency | ✅ none added; `npm audit` reports 0 vulnerabilities |
+| Live deployment still serves the restored mark | ✅ `favicon.svg` fetched from the production origin: 568 B, byte-identical to the build output |
 
 ### Known limitations at M14
 
