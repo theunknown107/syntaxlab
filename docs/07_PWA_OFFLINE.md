@@ -78,7 +78,7 @@ If a later requirement needs custom fetch logic (none is foreseen), switching to
 
 Included: `index.html`, all hashed JS chunks (including worker bundles), CSS, self-hosted font subsets, PWA icons, `manifest.webmanifest`.
 
-Excluded: source maps (do not ship them to production — see `17_DEPLOYMENT.md`), `_headers`, and anything in `docs/`.
+Excluded: source maps (do not ship them to production — see `17_DEPLOYMENT.md`) and anything in `docs/`.
 
 Total precache budget: **≤ 2 MB**. Exceeding it fails the build, because a PWA that takes 30 seconds to become offline-ready on a slow connection has not solved the problem it set out to solve.
 
@@ -171,11 +171,11 @@ There is no in-app rollback (a page cannot install an older SW). Recovery paths,
 
 | Situation | Recovery |
 |---|---|
-| Bad release detected quickly | Redeploy the previous build via Cloudflare Pages rollback. Clients pick up the "new" (reverted) SW on their next update check. |
+| Bad release detected quickly | Promote the previous deployment in the Vercel dashboard (the Cloudflare Pages rollback this originally described). Clients pick up the "new" (reverted) SW on their next update check. |
 | A user is stuck on a broken version | In-app **Reset app** (settings → advanced): unregister the SW, delete all caches, reload. Preserves IndexedDB history. |
 | Total failure | Devtools → Application → Unregister. Documented in the README troubleshooting section. |
 
-**Mitigation that actually matters:** every release is verified on a Cloudflare preview deployment *including the offline path* before promotion. A broken SW reaching production is far more expensive than any other bug class in this app, because it self-persists.
+**Mitigation that actually matters:** every release is verified *including the offline path* — locally against the real `vercel.json` headers before the push, and against the live origin after it. A broken SW reaching production is far more expensive than any other bug class in this app, because it self-persists.
 
 ---
 
@@ -447,8 +447,8 @@ recording exactly.**
 
 ```mermaid
 flowchart TB
-    H["public/_headers"] --> P["/*<br/>connect-src 'none'<br/>— correct for the page:<br/>it makes no requests"]
-    H --> S["/sw.js and /workbox-*.js<br/>default-src 'none'<br/>script-src 'self'<br/>connect-src 'self'"]
+    H["vercel.json"] --> P["page rule<br/>everything except sw.js<br/>and the workbox chunk<br/>connect-src none"]
+    H --> S["worker rule<br/>sw.js and workbox-*.js<br/>default-src none<br/>script-src self<br/>connect-src self"]
     P --> PAGE["Page context"]
     S --> WORKER["Service worker context"]
     WORKER -->|"fetch() during install"| CACHE[("precache")]
@@ -467,7 +467,7 @@ byte-for-byte unchanged.
 
 **This class of bug was invisible to the test suite before M9**, because every
 E2E project runs against `vite preview`, which serves no headers at all.
-`scripts/serve-production.mjs` serves `dist/` with the real `_headers`, and the
+`scripts/serve-production.mjs` serves `dist/` with the real `vercel.json`, and the
 offline projects run against it.
 
 ### 10.7 Offline UX
@@ -521,8 +521,10 @@ Verified against the build rather than assumed (§2.4):
 | `favicon.ico` | The one asset a browser requests entirely on its own. `ico` had to be added to `globPatterns` explicitly, or this was the single icon that 404'd offline |
 | `apple-touch-icon.png` | The iOS home-screen icon, which is never read from the manifest |
 
-Excluded: `_headers` (Cloudflare configuration, not a runtime asset),
-`robots.txt` (meaningless offline), source maps (not deployed at all).
+Excluded: `robots.txt` (meaningless offline), `stats.html` (a build artefact),
+and source maps (not deployed at all). `vercel.json` lives at the repository
+root, not in `public/`, so it never reaches `dist/` in the first place — unlike
+the `public/_headers` file it replaced, which had to be excluded explicitly.
 
 `sw.js` and `workbox-*.js` are deliberately **not** precache entries — the
 browser manages the worker's own lifecycle, and a worker that cached itself
@@ -567,7 +569,7 @@ build so it cannot disturb any other suite.
 
 ## M12 — offline and update, verified for release
 
-Run against the production build under the real `public/_headers`, with the
+Run against the production build under the real `vercel.json` header rules, with the
 browser context genuinely offline — not `navigator.onLine`.
 
 | Check | Result |

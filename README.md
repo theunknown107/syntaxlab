@@ -103,7 +103,7 @@ npm run serve:prod   # serve the build with the real production headers
 Node 22+ and npm 10+.
 
 `npm run preview` serves no security headers. `npm run serve:prod` serves
-`dist/` with the actual `public/_headers`, which is the only configuration in
+`dist/` with the actual `vercel.json` header rules, which is the only configuration in
 which the service worker behaves the way it will in production — a worker takes
 its CSP from the headers on its own script, not from the page's.
 

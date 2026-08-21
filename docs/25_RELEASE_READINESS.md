@@ -116,7 +116,7 @@ Firefox, WebKit and an emulated Pixel 5.
 | Dynamic imports / script injection | **PASS** | none — the one thing an optimisation milestone is most likely to introduce |
 | Network APIs in `src/` | **PASS** | no `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon` anywhere |
 | Third-party origins | **PASS** | no external fonts, scripts, images or analytics; system font stack |
-| Page CSP served correctly | **PASS** | compared directive by directive against `public/_headers` by a test that reads the file |
+| Page CSP served correctly | **PASS** | compared directive by directive against `vercel.json` by a test that reads the deployed configuration |
 | Service-worker CSP | **PASS** | its own narrower policy; no style/img/font directive, no `unsafe-*` |
 | `unsafe-eval` | **PASS** | absent, asserted |
 | Eight non-CSP security headers | **PASS** | asserted individually |
@@ -270,11 +270,11 @@ six themes, both modes, both drawers, and the error, warning and empty states.
 
 | Check | State |
 |---|---|
-| Production headers served from the real `_headers` | **PASS *as authored*, FAIL *as served*.** `npm run serve:prod` parses `_headers` and every header test asserts against it — but the live deployment is **Vercel**, which does not read that file. Measured against `syntaxlab-jet.vercel.app`: the meta-tag CSP is enforced, HSTS is present, and `frame-ancestors`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and the Cross-Origin trio are **not sent**. See `17_DEPLOYMENT.md` §1. |
+| Production headers served from the real configuration | **PASS — resolved before M15.** Previously PASS *as authored*, FAIL *as served*: the gate compared `serve:prod` against `public/_headers`, a Cloudflare file Vercel never read, so `frame-ancestors`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and the Cross-Origin trio were **not sent** by the live deployment. The policy now lives in `vercel.json`; the edge, the local production server and the gate all read that one file. Verified against `syntaxlab-jet.vercel.app` with `curl`. See `17_DEPLOYMENT.md` §4 and `05_SECURITY.md` §19. |
 | One directive localised | **PASS, documented** — `upgrade-insecure-requests` is dropped on the HTTP localhost origin because WebKit would rewrite every subresource to `https://localhost`. A no-op on the HTTPS production origin. Nothing else is altered. |
 | Hashed assets immutable, entry points revalidated | **PASS** |
 | **Real Cloudflare Pages preview deployment** | **SUPERSEDED — hosting moved to Vercel.** The project deploys from `main` to `syntaxlab-jet.vercel.app`, which is public and serving the application, verified by unauthenticated request. Cloudflare was never used. |
-| **Production security headers on the live deployment** | **FAIL — open.** `public/_headers` is Cloudflare's format and Vercel ignores it. The header set has not been ported to `vercel.json`. This replaces the Cloudflare row as the outstanding deployment gate. |
+| **Production security headers on the live deployment** | **PASS — closed before M15.** Ported to `vercel.json`, with the service-worker CSP preserved as a separate, mutually exclusive rule. Verified as served, not as authored. |
 
 ---
 
@@ -282,7 +282,7 @@ six themes, both modes, both drawers, and the error, warning and empty states.
 
 | | State | What closes it |
 |---|---|---|
-| **Live security headers** | FAIL — `public/_headers` is Cloudflare's format and the site is on Vercel, so the header set is not served | Port the headers to `vercel.json`, or move hosting to a provider that reads `_headers`. The meta CSP still enforces the script/style/connect policy; what is lost is clickjacking protection and the defence-in-depth headers |
+| **Live security headers** | PASS — ported to `vercel.json` before M15. The material loss had been clickjacking protection: `frame-ancestors` and `X-Frame-Options` are both header-only, so neither was in force | Closed. The gate and the local production server now read the deployed configuration, so a policy that is not served can no longer pass a test |
 | **Screen-reader pass** | NOT RUN — environment limitation | One pass through Journeys A–D with NVDA or VoiceOver, by someone who uses one |
 | **CVD separation** | ACCEPTED RISK — measured, mitigated by text redundancy | A V1.1 palette redesign against luminance |
 

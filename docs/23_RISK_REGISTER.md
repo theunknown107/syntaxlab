@@ -493,7 +493,7 @@ rather than assumed.
 
 | Not a risk, because | |
 |---|---|
-| The security boundaries were re-verified, not assumed | Zero execution sinks, zero network APIs in `src/`, zero dynamic imports, zero third-party origins, CSP compared against `_headers` directive by directive, and zero CSP violations across every journey. |
+| The security boundaries were re-verified, not assumed | Zero execution sinks, zero network APIs in `src/`, zero dynamic imports, zero third-party origins, CSP compared directive by directive, and zero CSP violations across every journey. *(The comparison was against `public/_headers`, which the live host ignored — see R-22.)* |
 | Storage failure does not break the product | Malformed, future-schema, unavailable and over-capacity all exercised. The app reports and keeps working; nothing is deleted. |
 | A full history stays usable | 1 000 entries — twice the documented cap — listed and searched. |
 
@@ -504,3 +504,61 @@ rather than assumed.
 | Real Cloudflare preview deployment | **NOT RUN** — no credentials in this environment. M13's by definition. |
 | Screen-reader pass | **NOT RUN** — environment limitation, unchanged since M10. |
 | CVD separation | **ACCEPTED RISK**, above. |
+
+
+---
+
+## Pre-M15 — the deployment reconciliation
+
+Two risks materialised between M14 and M15, both about the difference between
+what a repository *says* and what a deployment *does*. Neither was found by a
+test, because in both cases a test was passing.
+
+### R-22 — A gate that verified the wrong artefact 🟠 → ✅ **closed**
+
+**What happened.** The release gate asserted served security headers against
+`public/_headers`. The site is hosted on Vercel, which does not read that
+format. Both halves of the assertion were correct; the assertion was
+meaningless. The live deployment served **no CSP header, no
+`X-Frame-Options`, no `frame-ancestors`, no `Referrer-Policy`, no
+`Permissions-Policy` and no Cross-Origin headers** for the whole life of the
+public deployment.
+
+**Materially, what was lost.** Clickjacking protection. Both mechanisms that
+prevent framing are header-only, so neither was in force: the page could be
+embedded by any origin. The privacy-carrying part of the policy —
+`connect-src 'none'` — was enforced throughout by the `<meta http-equiv>` tag
+in `index.html`, so that claim never became false. It was resting on one
+mechanism where the documentation said two.
+
+**Closed by** moving the policy to `vercel.json` and pointing the edge, the
+local production server and the gate at that one file. A configuration nobody
+deploys can no longer pass a test.
+
+**The general lesson**, which is the part worth keeping: *a test that reads a
+file proves only that the file and the server agree.* It says nothing about
+whether anyone reads the file. The question a deployment gate has to answer is
+"what does the origin send", and the only way to answer it is to ask the
+origin.
+
+| | |
+|---|---|
+| **Detection** | `curl` against the live origin, prompted by a review of the host change. Not by the suite. |
+| **Contingency if it recurs** | Verify as served, against the production origin, as a post-deploy step rather than a pre-deploy one. |
+| **Checkpoint** | Pre-M15 ✅ |
+
+### R-23 — Authorship metadata published by default 🟡 → ✅ **closed**
+
+**What happened.** 102 published commits carried a `Co-Authored-By` trailer for
+an AI assistant, and two of them carried a personal Gmail address as author and
+committer, against the project's stated public-identity policy. GitHub never
+listed a second contributor — the trailer address maps to no account — but the
+trailers and the address were readable in the public history.
+
+**Closed by** a single history rewrite before the M14 push, converting every
+reachable commit to the account's GitHub noreply identity and removing the
+trailers, with commit order, contents and ancestry preserved.
+
+**Standing mitigation:** the repository's own `user.email` now matches the
+public identity, so the next commit cannot reintroduce the address by default.
+No further rewrite is planned; the public history is now stable by policy.

@@ -10,7 +10,7 @@
 
 ## 1. Target
 
-> **What is actually deployed, as of the first public release.**
+> **What is actually deployed.**
 >
 > SyntaxLab is hosted on **Vercel**, not Cloudflare Pages, at
 > **https://syntaxlab-jet.vercel.app** — public, serving the application, and
@@ -20,38 +20,43 @@
 > **requirements** it sets out are provider-independent and still govern the
 > build: a static bundle, a real CSP delivered as headers, immutable hashed
 > assets, revalidated entry points, noindexed previews, and no HTML-rewriting
-> features. What is Cloudflare-specific is the *mechanism*:
+> features. What was Cloudflare-specific was the *mechanism*, and that has now
+> been ported:
 >
 > | Cloudflare mechanism | On Vercel |
 > |---|---|
-> | `public/_headers` | Not read by Vercel. Header configuration is provider-specific and **is not yet ported** — see the gap below. |
+> | `public/_headers` | **Deleted.** Vercel never read it. The policy now lives in `vercel.json`, §4. |
 > | Pages build settings | Vercel project settings, wired to the GitHub repository |
 > | Rocket Loader / Auto Minify / Email Obfuscation must be off | Not applicable; Vercel does not rewrite HTML by default |
 >
-> **The open gap, measured against the live deployment rather than assumed.**
-> `public/_headers` is Cloudflare's format and Vercel does not read it, so the
-> response headers it defines are not being sent. What that does and does not
-> cost, checked with `curl` against `syntaxlab-jet.vercel.app`:
+> ### The header gap, and how it was closed
 >
-> | | Live status |
-> |---|---|
-> | **CSP** — `default-src`, `script-src`, `style-src`, `img-src`, `font-src`, `connect-src`, `worker-src`, `manifest-src`, `base-uri`, `form-action`, `object-src` | ✅ **Enforced**, via the `<meta http-equiv>` tag in `index.html`, which ships in the build and is present in the deployed HTML |
-> | `frame-ancestors` | ❌ **Missing.** It is ignored in a meta tag by specification, so it only ever worked as a header |
-> | `X-Frame-Options` | ❌ Missing — the same clickjacking protection, also header-only |
-> | `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` | ❌ Missing |
-> | `Cross-Origin-Opener-Policy` / `-Resource-Policy` / `-Embedder-Policy` | ❌ Missing |
-> | `Strict-Transport-Security` | ✅ Present — Vercel's own default, and *stronger* than the project's (`max-age=63072000; includeSubDomains; preload`) |
-> | Service-worker CSP on `/sw.js` | ❌ Missing. Harmless in practice: the narrower policy existed to *permit* Workbox's precache fetches under the site-wide `connect-src 'none'`, and with no header at all the worker is simply unrestricted. Offline works. |
+> `public/_headers` is Cloudflare's format. Vercel does not read it, so for the
+> whole life of the public deployment the headers it declared were **not being
+> sent**. Measured with `curl` against the live origin before the fix:
 >
-> So the substantive loss is **clickjacking protection** — `frame-ancestors`
-> and `X-Frame-Options` — plus the defence-in-depth headers. The
-> script/style/connect policy that carries the privacy claim is intact.
+> | | Before | After |
+> |---|---|---|
+> | **CSP** — `default-src`, `script-src`, `style-src`, `img-src`, `font-src`, `connect-src`, `worker-src`, `manifest-src`, `base-uri`, `form-action`, `object-src` | ✅ enforced by the `<meta http-equiv>` tag in `index.html` | ✅ enforced as a **header**, meta tag retained as the development-time equivalent |
+> | `frame-ancestors` | ❌ **missing** — ignored in a meta tag by specification, so it only ever worked as a header | ✅ `'none'` |
+> | `X-Frame-Options` | ❌ missing | ✅ `DENY` |
+> | `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` | ❌ missing | ✅ |
+> | `Cross-Origin-Opener-Policy` / `-Resource-Policy` / `-Embedder-Policy` | ❌ missing | ✅ |
+> | `Strict-Transport-Security` | ✅ Vercel's own default, *stronger* than the project's | ✅ both; Vercel's default still applies at the edge |
+> | Service-worker CSP on `/sw.js` | ❌ missing — harmless only because *no* policy applied, leaving the worker unrestricted | ✅ its own narrower policy, §4.2 |
+> | Immutable caching of hashed assets | ❌ everything was `max-age=0, must-revalidate` | ✅ `/assets/*`, `/icons/*` and the Workbox chunk are immutable |
 >
-> **This is unresolved and is not claimed to be working.** The local production
-> server (`npm run serve:prod`) parses `_headers`, and every header test
-> asserts against it, so the policy is verified *as authored* — which is not
-> the same as verified *as served*. Porting it to `vercel.json` or moving
-> hosting back to Cloudflare is a human decision and has not been made here.
+> **The substantive loss was clickjacking protection.** `frame-ancestors` and
+> `X-Frame-Options` are both header-only, so neither was in force: the page
+> could be framed by any origin. The script/style/connect policy that carries
+> the privacy claim was intact throughout, via the meta tag.
+>
+> **Why the test suite did not catch it.** The gate existed and passed. It
+> asserted the served headers against `public/_headers` — the file production
+> ignored. A gate that compares a server to a configuration nobody deploys
+> verifies the policy *as authored*, never *as served*. Both the gate and the
+> local production server now read `vercel.json`, so the thing under test is
+> the thing that ships.
 
 **Cloudflare Pages**, static hosting, per the brief and the playbook — the
 original plan, retained for its requirements rather than as a description of
@@ -62,7 +67,7 @@ current hosting.
 | Static assets | ✅ Its purpose |
 | Global CDN | ✅ ~300 PoPs |
 | Free HTTPS | ✅ Automatic |
-| Custom headers (CSP) | ✅ `_headers` file |
+| Custom headers (CSP) | ✅ `_headers` file *(the Vercel equivalent is `vercel.json`)* |
 | Preview deployments | ✅ Per branch/PR |
 | Instant rollback | ✅ One click in the dashboard |
 | Build from Git | ✅ |
@@ -73,6 +78,53 @@ current hosting.
 ---
 
 ## 2. Architecture
+
+### 2.1 As deployed — GitHub to Vercel
+
+```mermaid
+flowchart LR
+    Dev["Developer"] -->|"push main"| GH["GitHub<br/>theunknown107/syntaxlab"]
+    GH -->|webhook| VB["Vercel build<br/>npm ci and npm run build"]
+    VB --> Dist["dist/"]
+    Dist --> Prod["Production deployment<br/>syntaxlab-jet.vercel.app"]
+    VJ["vercel.json"] -->|"header rules"| Edge
+    Prod --> Edge["Vercel edge"]
+    Edge -->|"HTTPS + security headers"| User["Browser"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class VJ,Edge safe
+```
+
+There is no CI gate in front of this. Vercel builds whatever lands on `main`,
+which means **the gates run locally before the push**, not after it — §7.
+
+### 2.2 What the browser ends up trusting
+
+```mermaid
+flowchart TD
+    A["Browser requests a document"] --> B["Vercel edge applies<br/>the page rule from vercel.json"]
+    B --> C["CSP header: default-src none,<br/>connect-src none, frame-ancestors none"]
+    C --> D["index.html also carries a meta CSP<br/>- the development-time equivalent"]
+    D --> E{"Both present?"}
+    E -->|yes| F["Browser enforces BOTH.<br/>The effective policy is the intersection."]
+    F --> G["App runs: no network, no framing,<br/>no inline script, no eval"]
+
+    H["Browser requests /sw.js"] --> I["Worker rule applies instead"]
+    I --> J["CSP: script-src self, connect-src self"]
+    J --> K["Workbox installs and precaches"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class G,K safe
+```
+
+The meta tag is deliberately **not weaker** than the header for `script-src`,
+so the intersection costs nothing. It stays because it is what protects the
+development server and any future host that has not been configured yet — the
+exact failure this milestone had to fix.
+
+### 2.3 The original Cloudflare plan
+
+Kept because it is the requirement set the build still satisfies.
 
 ```mermaid
 graph LR
@@ -155,8 +207,7 @@ dist/
 ├── sw.js                     generated
 ├── workbox-<hash>.js
 ├── robots.txt
-├── theme-bootstrap.js        tiny, unhashed, referenced from index.html
-└── _headers
+└── theme-bootstrap.js        tiny, unhashed, referenced from index.html
 ```
 
 **Source maps are not deployed.** They are generated, uploaded to CI artefacts for debugging, and excluded from `dist`. Shipping them exposes the full source and, more practically, adds megabytes to the deploy.
@@ -165,43 +216,86 @@ dist/
 
 ## 4. Headers
 
-`public/_headers`, copied verbatim into `dist`:
+**Source of truth: `vercel.json`.** One file, read by three things — Vercel at
+the edge, the local production server (`npm run serve:prod`), and the release
+gate that asserts what a browser actually receives. There is no second copy to
+drift.
+
+### 4.1 The rules, and why they are shaped this way
+
+```mermaid
+flowchart TD
+    A["Request"] --> B{"Path"}
+    B -->|"sw.js or workbox-*.js"| C["Worker rule"]
+    B -->|"anything else"| D["Page rule"]
+
+    C --> C1["CSP: default-src none;<br/>script-src self; connect-src self"]
+    C --> C2["nosniff, no-referrer,<br/>CORP same-origin, HSTS"]
+
+    D --> D1["CSP: the full page policy,<br/>including frame-ancestors none"]
+    D --> D2["XFO DENY, nosniff, no-referrer,<br/>Permissions-Policy,<br/>COOP + CORP + COEP, HSTS"]
+
+    E["/assets/*, /icons/*,<br/>workbox chunk"] --> E1["Cache-Control immutable"]
+    F["/, index.html, sw.js,<br/>theme-bootstrap.js, manifest"] --> F1["Cache-Control must-revalidate"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    classDef warn fill:#2a2414,stroke:#a08040,color:#fff0d9
+    class C1,D1 safe
+    class C2,D2 warn
+```
+
+The two CSP rules are **mutually exclusive by construction.** The page rule's
+source is a negative lookahead:
 
 ```
-/*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests
-  X-Content-Type-Options: nosniff
-  X-Frame-Options: DENY
-  Referrer-Policy: no-referrer
-  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Resource-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp
-  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/index.html
-  Cache-Control: public, max-age=0, must-revalidate
-
-/sw.js
-  Cache-Control: public, max-age=0, must-revalidate
-
-/manifest.webmanifest
-  Cache-Control: public, max-age=0, must-revalidate
+/((?!sw\.js$)(?!workbox-[^/]*\.js$).*)
 ```
 
-### Caching rationale
+so no request ever matches both. That is deliberate and it is the load-bearing
+detail: Vercel does not document what happens when two matching rules carry the
+same header key, and the failure mode if it merged rather than overrode would
+be a service worker that silently never activates. Rather than depend on an
+undocumented precedence, the rules are written so precedence cannot apply.
+
+The `Cache-Control` rules are kept in a separate key space from the CSP rules
+for the same reason — a request may match a CSP rule and a caching rule, but
+never two rules setting the same header.
+
+### 4.2 The service-worker exception
+
+**A worker's CSP comes from the headers on its own script, not from the page's.**
+The site-wide policy sets `connect-src 'none'`, which is exactly right for a
+page that makes no requests and fatal for the worker: Workbox precaches by
+calling `fetch()` during install, so under that policy the worker silently
+never activates and no asset is ever cached. Measured A/B on the real build at
+M9.
+
+The worker rule is **narrower, not looser**. It grants exactly two things —
+`script-src 'self'` to `importScripts` its own Workbox chunk, and
+`connect-src 'self'` to fetch the same-origin assets it is about to cache.
+There is no style, image, font or frame in a service worker, and none is
+allowed. The page policy is not weakened anywhere.
+
+`/workbox-*.js` is covered by the same rule because `sw.js` imports it, so it
+executes in that context and needs the same execution rules.
+
+### 4.3 Caching rationale
 
 | Path | Policy | Why |
 |---|---|---|
-| `/assets/*` | 1 year, immutable | Content-hashed filenames; a changed file gets a new URL |
-| `/index.html` | No cache, revalidate | The entry point must never be stale, or users are pinned to an old build forever |
+| `/assets/*`, `/icons/*`, `/workbox-*.js` | 1 year, immutable | Content-hashed filenames; a changed file gets a new URL |
+| `/`, `/index.html` | No cache, revalidate | The entry point must never be stale, or users are pinned to an old build forever |
 | `/sw.js` | No cache, revalidate | **Critical.** A cached service-worker script means updates never reach users. This is the single most common PWA deployment mistake. |
-| `/manifest.webmanifest` | No cache | Small, and must reflect the current build |
+| `/manifest.webmanifest`, `/theme-bootstrap.js` | No cache | Small, and must reflect the current build |
 
-`Strict-Transport-Security` includes `preload`, but submission to the preload list happens only after the domain has been stable in production for a while — HSTS preload is effectively irreversible.
+Before this was ported, Vercel served `public, max-age=0, must-revalidate` for
+*everything*, hashed assets included — correct but wasteful, and not what the
+policy said.
+
+`Strict-Transport-Security` is declared as `max-age=31536000; includeSubDomains`
+without `preload`. Vercel's edge additionally sends its own, longer HSTS. The
+`preload` token was dropped from the project's own header because submission to
+the preload list is effectively irreversible and has not been made.
 
 ---
 
@@ -424,7 +518,7 @@ actually receives against what the file declares, directive by directive.
 
 | | |
 |---|---|
-| Page CSP matches `_headers` | ✅ |
+| Page CSP matches the declared policy | ✅ |
 | Service worker served its own narrower CSP | ✅ |
 | Eight non-CSP security headers | ✅ each asserted |
 | `/assets/*` immutable, entry points `must-revalidate` | ✅ |
@@ -445,7 +539,7 @@ environment, and M12 does not claim otherwise.
 
 M13 must, on a real preview URL:
 
-1. Confirm the `_headers` file is applied by Cloudflare as written — the local
+1. ~~Confirm the `_headers` file is applied by Cloudflare as written~~ — **done differently.** The host is Vercel and the policy moved to `vercel.json` (§4); it is confirmed as served with `curl` against the live origin. The local
    server implements the format, which is not the same as Cloudflare doing so.
 2. Confirm `upgrade-insecure-requests` behaves on a real HTTPS origin.
 3. Install the app from the preview and use it offline.

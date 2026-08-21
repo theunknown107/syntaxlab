@@ -120,7 +120,7 @@ Workers are constructed from bundled, same-origin URLs produced at build time (`
 
 ### 4.1 Policy
 
-Delivered via Cloudflare Pages `_headers` (a real response header, not a `<meta>` tag — `frame-ancestors` and `report-to` are ignored in meta):
+Delivered as real response headers from `vercel.json` (not a `<meta>` tag — `frame-ancestors` and `report-to` are ignored in meta, which is precisely how the live deployment ended up without clickjacking protection; §19):
 
 ```
 Content-Security-Policy:
@@ -661,7 +661,7 @@ asserts the string does not appear.
 
 ```mermaid
 flowchart TB
-    H["public/_headers"]
+    H["vercel.json"]
     H --> P["/*  — the page<br/>default-src 'none'<br/>script-src 'self'<br/>connect-src 'none'<br/>worker-src 'self'"]
     H --> S["/sw.js · /workbox-*.js<br/>default-src 'none'<br/>script-src 'self'<br/>connect-src 'self'"]
     P --> PAGE["Page: makes no requests at all"]
@@ -690,7 +690,7 @@ changed as a result; what follows is the evidence that it is still true.
 | Dynamic `import()` / script injection | **None** — the sink an optimisation milestone is most likely to introduce, checked because M11 preceded this one |
 | Network APIs | **None in `src/`** — no `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon` |
 | Third-party origins | **None** — no external fonts, scripts or images; system font stack |
-| Page CSP | Compared **directive by directive** against `public/_headers`, by a test that reads the file rather than restating it |
+| Page CSP | Compared **directive by directive** against `vercel.json`, by a test that reads the deployed configuration rather than restating it |
 | Service-worker CSP | Its own narrower policy, asserted: `default-src 'none'; script-src 'self'; connect-src 'self'`, with no style, image or font directive |
 | `unsafe-eval` | Absent, asserted |
 | CSP violations during use | **Zero**, watched for the life of all four user journeys — regex, JSON, history, theme, and offline |
@@ -751,3 +751,89 @@ Four properties hold on that path:
 **What a hostile cron expression can achieve:** an error message. That is the whole of it. The parser recovers per field, the limits refuse oversized input before reading it, and 1 200 fuzz cases over the full hostile character set produce no throw.
 
 ---
+
+
+---
+
+## 19. The production security boundary — *as served, not as authored*
+
+Every control in this document is only worth what the edge actually sends. For
+the whole life of the first public deployment, the answer was **less than this
+document claimed**, and the gap is recorded here rather than quietly closed.
+
+### 19.1 What was wrong
+
+`public/_headers` is Cloudflare Pages configuration. The site is hosted on
+**Vercel**, which does not read that format. The file was a policy nobody
+served.
+
+| Control | Status before | Status now |
+|---|---|---|
+| `script-src`, `connect-src`, `style-src`, `img-src`, `object-src`, `base-uri`, `form-action` | ✅ enforced — the `<meta http-equiv>` CSP in `index.html` ships in the build | ✅ enforced as a header *and* the meta tag |
+| **`frame-ancestors`** | ❌ **not enforced** — ignored in a meta tag by specification | ✅ `'none'` |
+| **`X-Frame-Options`** | ❌ not sent | ✅ `DENY` |
+| `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` | ❌ not sent | ✅ |
+| COOP / CORP / COEP | ❌ not sent | ✅ |
+| Service-worker CSP | ❌ not sent | ✅ its own narrower policy |
+
+**The material loss was clickjacking protection.** Both mechanisms that prevent
+framing are header-only, so neither was in force and the page could be embedded
+by any origin. The privacy claim — that nothing leaves the browser — rested on
+`connect-src 'none'`, which *was* enforced by the meta tag throughout, so that
+claim was never false. It was, however, resting on one mechanism instead of two.
+
+### 19.2 Why the tests passed anyway
+
+The release gate existed, ran on every E2E run, and asserted the served headers
+against `public/_headers`. Both sides of that comparison were correct and the
+comparison was meaningless: it verified a local server against a file the host
+ignored.
+
+The fix is not a new test. It is that the gate and the local production server
+both read **`vercel.json`** — the configuration Vercel actually applies — so
+the artefact under test is the artefact that ships.
+
+```mermaid
+flowchart TD
+    A["vercel.json"] --> B["Vercel edge"]
+    A --> C["npm run serve:prod"]
+    C --> D["Release gate on :4183"]
+    B --> E["Live deployment"]
+    D -->|"asserts"| A
+    F["curl against the live origin"] -->|"verifies"| E
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    classDef refuse fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    class A safe
+    class G refuse
+
+    G["public/_headers - DELETED.<br/>Read by nothing. Asserted against<br/>by a gate that proved nothing."]
+```
+
+### 19.3 The service-worker exception, restated as a security property
+
+A service worker's CSP comes from the headers on **its own script**. It does
+not inherit the document's. This is why `/sw.js` and the Workbox chunk get a
+separate rule granting `script-src 'self'` and `connect-src 'self'` — the two
+capabilities Workbox needs to install and precache — and nothing else.
+
+This is **not a relaxation of the page policy.** The page keeps
+`connect-src 'none'`. The worker rule is narrower than the page rule in every
+other respect: no style, no image, no font, no frame, no manifest.
+
+The two rules are written as mutually exclusive path patterns, so no response
+can ever carry both, and the security outcome does not depend on an
+undocumented precedence rule at the edge (`17_DEPLOYMENT.md` §4.1).
+
+### 19.4 What is still true and what is accepted
+
+- **Verified as served.** The live origin is checked with `curl` after every
+  deployment, not inferred from build logs.
+- **Vercel adds its own headers.** `Strict-Transport-Security` (longer than
+  ours) and `Access-Control-Allow-Origin: *` on static assets. The latter is
+  a Vercel default; it is bounded by `Cross-Origin-Resource-Policy:
+  same-origin`, which we do send.
+- **Accepted:** `style-src 'unsafe-inline'` remains, as RR-02 (§16).
+- **Accepted:** unknown paths return Vercel's 404 rather than the SPA shell.
+  Offline navigation still works, because the service worker's
+  `navigateFallback` handles it.

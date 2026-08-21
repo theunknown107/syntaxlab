@@ -517,7 +517,10 @@ syntaxlab/
 ├── public/
 │   ├── icons/                     # PWA icons (generated, checked in)
 │   ├── manifest.webmanifest
-│   └── _headers                   # Cloudflare: CSP + security headers
+│   └── robots.txt
+│                                   # No _headers file: the host is Vercel, and
+│                                   # the header policy lives in vercel.json at
+│                                   # the repository root.
 ├── src/
 │   ├── main.tsx                   # Entry: theme bootstrap, render, SW register
 │   ├── App.tsx
@@ -748,12 +751,12 @@ graph LR
     GH -->|webhook| CF["Cloudflare Pages build"]
     CF -->|"npm ci → typecheck → lint → test → build"| Out["dist/"]
     Out --> Edge["Cloudflare global edge"]
-    Edge -->|"HTTPS + _headers CSP"| Browser["User browser"]
+    Edge -->|"HTTPS + vercel.json CSP"| Browser["User browser"]
 
     GH -.->|PR| Prev["Preview deployment<br/><i>noindex</i>"]
 ```
 
-Static output, no build secrets in V1, no environment variables required at runtime. `_headers` carries the CSP and security headers. Detail in `17_DEPLOYMENT.md`.
+Static output, no build secrets in V1, no environment variables required at runtime. `vercel.json` carries the CSP and security headers — it is read by the edge, by the local production server, and by the release gate, so there is one copy rather than three. Detail in `17_DEPLOYMENT.md`.
 
 ---
 
@@ -882,7 +885,7 @@ flowchart TB
     end
 
     SW["Service worker<br/>precache, offline"]
-    CDN["Cloudflare Pages<br/><i>static files + _headers</i>"]
+    CDN["Vercel<br/><i>static files + vercel.json headers</i>"]
 
     User --> UI
     UI <--> APP

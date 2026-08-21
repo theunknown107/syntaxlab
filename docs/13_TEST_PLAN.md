@@ -889,10 +889,10 @@ showed the platform already did it.
 Every other E2E project hits `vite preview`, which serves **no headers**. A
 service worker takes its CSP from the headers on its own script, so a policy
 that breaks the worker is invisible to a suite served without them — and
-measurably was: under the real `_headers`, the worker never activated and
+measurably was: under the real page policy, the worker never activated and
 cached nothing.
 
-`scripts/serve-production.mjs` serves `dist/` with the real `public/_headers`.
+`scripts/serve-production.mjs` serves `dist/` with the real `vercel.json` header rules.
 The four `offline-*` projects run against it on port 4183.
 
 One directive is dropped locally: `upgrade-insecure-requests`. On an HTTPS
@@ -1041,9 +1041,9 @@ Two new specs, six new projects, and the end of the flake era.
 | Project | Spec | What it proves |
 |---|---|---|
 | `release-chromium/firefox/webkit/mobile` | `release-qa.spec.ts` | The four complete user journeys — regex, JSON, history, theme — against the production build under production `_headers`, watching `securitypolicyviolation` events, console CSP messages and page errors for the life of each journey and asserting them clean at every step boundary |
-| `gates-chromium` | `release-gates.spec.ts` | Served headers compared against `public/_headers` directive by directive; installability, with each icon's real dimensions read from its PNG IHDR; 1 000 history entries listed and searched |
+| `gates-chromium` | `release-gates.spec.ts` | Served headers compared against `vercel.json` directive by directive; installability, with each icon's real dimensions read from its PNG IHDR; 1 000 history entries listed and searched |
 
-Both run against **:4183**, which parses the real `_headers`. A release gate
+Both run against **:4183**, which serves the real `vercel.json` rules. A release gate
 that validates a policy the app does not ship with is not a release gate.
 
 ### The flakes had causes
