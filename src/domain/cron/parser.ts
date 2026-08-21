@@ -138,6 +138,35 @@ interface TermOutcome {
   readonly error?: DomainError;
 }
 
+/**
+ * Recognises syntax from a scheduler SyntaxLab does not implement, and names
+ * it. Returns `null` when the token is simply not foreign.
+ *
+ * For an all-letters token, *every* character must be a foreign symbol —
+ * `L`, `W`, `LW`. Requiring the whole token to equal one symbol missed
+ * Quartz's `LW`; allowing any character to match reported Jenkins for
+ * `SMARCH`, which merely contains an H. "All of them" is the rule that
+ * separates a foreign operator from a misspelt name.
+ */
+function foreignSyntaxError(upper: string, span: SourceSpan): DomainError | null {
+  const alphabetic = /^[A-Z]+$/.test(upper);
+  const allForeignLetters =
+    alphabetic && upper.split('').every((character) => character in FOREIGN_SYNTAX);
+
+  for (const [symbol, foreign] of Object.entries(FOREIGN_SYNTAX)) {
+    const present = alphabetic
+      ? allForeignLetters && upper.includes(symbol)
+      : upper.includes(symbol);
+    if (!present) continue;
+    return domainError(
+      'UNSUPPORTED',
+      `"${symbol}" is ${foreign} syntax, which SyntaxLab does not support.`,
+      { span, hint: 'SyntaxLab supports the standard 5-field cron format only.' },
+    );
+  }
+  return null;
+}
+
 /** Resolves a number or a name to its numeric value for this field. */
 function readValue(
   raw: string,
@@ -178,21 +207,8 @@ function readValue(
    *   - anything mixing digits and symbols is scanned per character, which is
    *     what catches `6#3` and `15W`
    */
-  const alphabetic = /^[A-Z]+$/.test(upper);
-  for (const [symbol, foreign] of Object.entries(FOREIGN_SYNTAX)) {
-    const present = alphabetic ? upper === symbol : upper.includes(symbol);
-    if (!present) continue;
-    return {
-      error: domainError(
-        'UNSUPPORTED',
-        `"${symbol}" is ${foreign} syntax, which SyntaxLab does not support.`,
-        {
-          span,
-          hint: 'SyntaxLab supports the standard 5-field cron format only.',
-        },
-      ),
-    };
-  }
+  const foreign = foreignSyntaxError(upper, span);
+  if (foreign !== null) return { error: foreign };
 
   if (Object.keys(spec.names).length > 0) {
     return {

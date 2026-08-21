@@ -223,7 +223,10 @@ describe('foreign syntax', () => {
         ? parsed.value.fields.flatMap((f) => (f.error ? [f.error] : []))
         : [parsed.error];
       expect(errors.length, source).toBeGreaterThan(0);
-      expect(errors.some((e) => scheduler.test(e.message)), source).toBe(true);
+      expect(
+        errors.some((e) => scheduler.test(e.message)),
+        source,
+      ).toBe(true);
     }
   });
 });
