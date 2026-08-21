@@ -986,3 +986,48 @@ M11 also looked hard at three things and left them alone, which is recorded so
 a later milestone does not repeat the work: large-JSON interaction
 (`12_PERFORMANCE.md` §12.5), React commit counts (§12.6), and the visual effect
 inventory (§12.7).
+
+---
+
+## M12 — the release-QA suites
+
+Two new specs, six new projects, and the end of the flake era.
+
+| Project | Spec | What it proves |
+|---|---|---|
+| `release-chromium/firefox/webkit/mobile` | `release-qa.spec.ts` | The four complete user journeys — regex, JSON, history, theme — against the production build under production `_headers`, watching `securitypolicyviolation` events, console CSP messages and page errors for the life of each journey and asserting them clean at every step boundary |
+| `gates-chromium` | `release-gates.spec.ts` | Served headers compared against `public/_headers` directive by directive; installability, with each icon's real dimensions read from its PNG IHDR; 1 000 history entries listed and searched |
+
+Both run against **:4183**, which parses the real `_headers`. A release gate
+that validates a policy the app does not ship with is not a release gate.
+
+### The flakes had causes
+
+The suite carried a "scattered environment flake" from M7 to M11 — a different
+test failing each full-matrix run, always passing in isolation. M12 stopped
+classifying it and found it. There were four:
+
+| | Cause | Fix |
+|---|---|---|
+| `regex-mobile › survives two timeouts` | `locator.fill()` **appends** rather than replaces on a CodeMirror contenteditable under mobile emulation | The `type()` helpers in `regex.spec.ts` and `json.spec.ts` select all and insert |
+| `json-mobile › the suggestion can be dismissed` | Three buttons named exactly "Dismiss"; a second appeared when the service worker installed mid-test | Fixed **in the product** — each button says what it dismisses |
+| `history-webkit › a record from a newer version` | Opening IndexedDB while the app's own open was in flight settles no event at all on WebKit | The test lets the repository load first |
+| `theme-webkit › a valid field survives` | Read a custom property at one instant during the pre-paint → hydration handover | Polls for the settled value; the expectation is unchanged |
+
+**No test is retried, quarantined, or loosened.** The full matrix is
+674 passed / 0 failed / 11 skipped, twice consecutively.
+
+### The 11 skips
+
+All WebKit, all skipped in code with a reason: six offline tests and two
+journey tails because Playwright cannot navigate WebKit while the context is
+offline, and three timeout tests because JavaScriptCore optimises the
+catastrophic patterns and cannot be made to time out by one.
+
+### A lesson worth keeping
+
+Four assertions in the new journeys were wrong before the product was: the
+invalid-pattern wording, the two-second history capture delay, `:focus-visible`
+versus programmatic focus, and assuming `(a+)+$` times out on every engine. In
+each case the app was behaving correctly and better than the test expected. A
+failing assertion is a hypothesis about the product, not a verdict on it.

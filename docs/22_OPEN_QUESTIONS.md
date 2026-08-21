@@ -202,6 +202,18 @@ Code editors are hard to use with screen readers. CM6 is better than most, but "
 
 **Decision point: M10.** If a screen-reader user cannot complete an analysis, ship a plain-`<textarea>` toggle — roughly 50 lines, because the parser layer is editor-independent.
 
+**Still undecided at the end of M12, and it cannot be decided here.** The
+decision needs a screen reader, and none is available in this environment —
+NVDA and JAWS are not installed, and Narrator cannot be driven or heard from a
+non-interactive shell. What has been done instead is to assert the
+accessibility *tree*: every control named, landmarks present, state exposed,
+live regions announcing. That is the data a screen reader consumes, and it is
+not the same as the experience of using one.
+
+The question therefore travels with the screen-reader gate in
+[`25_RELEASE_READINESS.md`](25_RELEASE_READINESS.md) §7: one pass through
+Journeys A–D by someone who uses a screen reader answers both at once.
+
 ---
 
 ### Q-13 — Hand-written validators vs `zod`

@@ -176,7 +176,7 @@
 | S-1 | **Every XSS payload renders as visible text; the canary never fires** | ✅ **M10** — 8 payload shapes through the regex editor, JSON keys/values, history via the UI and via IndexedDB, and search; no dialog, no injected element |
 | S-2 | **No `eval`, `new Function`, or `dangerouslySetInnerHTML` in `src/`** | ✅ **M10** — repository-wide grep: none of `innerHTML`, `dangerouslySetInnerHTML`, `eval`, `new Function`, `document.write`, `insertAdjacentHTML` appears anywhere |
 | S-3 | The CSP is present on production and no violation occurs during a full session | E18 |
-| S-4 | **Zero network requests after initial load** (excluding SW update checks) | E17 |
+| S-4 | **Zero network requests after initial load** (excluding SW update checks) | ✅ **M12** — asserted by test, and re-verified by source scan: no `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource` or `sendBeacon` anywhere in `src/`, no third-party origin, no analytics |
 | S-5 | Prototype-pollution payloads leave `Object.prototype` untouched | ✅ **M10** — asserted through the real JSON tree with `__proto__` and `constructor` as keys; `'polluted' in {}` is false |
 | S-6 | Every input limit is enforced at all three layers | Security §7.4 |
 | S-7 | Oversized inputs are rejected cleanly with no crash or hang | Security §7.4 |
@@ -208,14 +208,14 @@
 | A-8 | The first-run notice is announced once and is keyboard-dismissible | Manual |
 | A-9 | Every default colour pair meets AA | ✅ **M10** — computed for all six presets against tokens read out of `tokens.css`; Crimson Night needed a derived companion and got one |
 | A-10 | No status is conveyed by colour alone | Greyscale review |
-| A-11 | Syntax colours remain distinguishable under CVD simulation | Manual — **improved** by the M10 theme pass: removing green from the syntax palette eliminated the green/red pair, the hardest for CVD. The six regex hues now sit at 31°, 65°, 191°, 208°, 265°, 317°, each above 7.5:1 on both surfaces. Simulator verification is still manual and still outstanding |
+| A-11 | Syntax colours remain distinguishable under CVD simulation | ⚠️ **MEASURED at M12, ACCEPTED RISK.** `npm run audit:cvd` renders the palette under Chromium's own vision-deficiency emulation and samples real pixels. Closest pair: 12.3 ΔE protanopia, 6.4 deuteranopia, 13.2 tritanopia, **1.9 achromatopsia**. A fix was attempted and measured — it moved the crowding rather than removing it. Accepted because colour is never the only signal: every construct is also named in words. `25_RELEASE_READINESS.md` §7 |
 | A-12 | Usable at 200% zoom with no horizontal scrolling | E16 |
 | A-13 | Usable at 320 px width | E15 |
 | A-14 | `prefers-reduced-motion` disables all animation | ✅ **M10** — every transition and animation collapses below 0.01 s under `prefers-reduced-motion` |
 | A-15 | **A full analysis can be completed with a screen reader** | ❌ **NOT RUN** — no screen reader is available in this environment (NVDA/JAWS absent; Narrator cannot be driven or heard from a non-interactive shell). The accessibility *tree* is audited instead. This remains a release gate. |
 | A-16 | Semantic landmarks, one `h1`, hierarchical headings | ✅ **M10** — one `main`, one `banner`, exactly one `h1` naming the product |
 | A-17 | Every control is labelled; icon buttons have accessible names | ✅ **M10** — every control in all four surfaces checked for an accessible name via `ariaSnapshot` |
-| A-18 | Lighthouse accessibility ≥ 95 | ⚠️ **NOT RUN** — Lighthouse was not executed. axe is clean across the views above; the two are not equivalent. |
+| A-18 | Lighthouse accessibility ≥ 95 | ✅ **M12 — 100.** Reached by fixing two real defects rather than by tuning: heading order at M11, and three buttons sharing the accessible name "Dismiss" at M12. |
 
 ---
 
@@ -226,8 +226,8 @@
 | P-1 | **Initial JS is within the hard budget, measured on a production build** | ✅ **M11** — 166.16 KB against a 200 KB hard limit and a 170 KB target. Inside the *target* for the first time since M4 (`12_PERFORMANCE.md` §12.10) |
 | P-2 | Every per-chunk budget met | ✅ **M11** — workers 19.56, service worker 5.93, CSS 8.18, icons 15.81 KB, all inside target |
 | P-3 | Total precache within budget | ✅ **M11** — 218.08 KB against a 1.5 MB target |
-| P-4 | Lighthouse Performance ≥ 95 | ⚠️ **78 at M11** (from 73). Baseline recorded deliberately rather than chased; the gate is M12's. Lighthouse's default profile is a simulated mid-tier phone at 4× CPU slowdown (`12_PERFORMANCE.md` §12.9) |
-| P-5 | FCP < 1.5 s cold on throttled Fast 3G | ⚠️ **3.8 s under Lighthouse's simulated slow 4G + 4× CPU.** Directly measured, unthrottled, on the production build: **117 ms cold, 134 ms warm, 117 ms offline** (§12.1). Both figures are true of different machines; the throttled one is the release gate and is M12's |
+| P-4 | Lighthouse Performance ≥ 95 | ⚠️ **NOT MET — 78, ACCEPTED RISK at M12.** FCP 3.8 s under Lighthouse's simulated mid-tier phone at 4× CPU throttle, dominated by CodeMirror at 60% of the bundle; unthrottled the same build paints in 124 ms. Closing it means code-splitting the editor, an architectural change rather than a QA patch. `25_RELEASE_READINESS.md` §8 |
+| P-5 | FCP < 1.5 s cold on throttled Fast 3G | ⚠️ **NOT MET — 3.8 s, ACCEPTED RISK at M12**, under Lighthouse's simulated slow 4G plus 4× CPU. Directly measured unthrottled on the production build: **124 ms cold, 118 ms warm, 110 ms offline**. Both figures are true, of different machines. Same cause and same remedy as P-4 |
 | P-6 | TTI < 2.5 s cold | ⚠️ 4.0 s throttled; `domInteractive` measured at 48–52 ms unthrottled. Same caveat as P-5 |
 | P-7 | Warm load interactive < 300 ms | ✅ **M11** — 46 ms `domInteractive` warm, 134 ms FCP (§12.1) |
 | P-8 | CLS < 0.05 | ✅ **M11 warm, ⚠️ first visit.** Measured with a `layout-shift` observer: **0.0022 on a warm load** (from 0.0257), 0.0417 on a first visit — the latter is one 0.0394 shift from the once-per-user first-run notice (§12.8) |

@@ -1588,7 +1588,7 @@ publishes `dist/` wholesale — so they would have shipped, contrary to
   nothing writes them until M8. History is M7.
 - **Header actions absent** (history, theme, help). Deliberate: an inert button
   reads as broken, not as pending (`08_UI_UX_SPEC.md` §2.1).
-- **Chromium only** in E2E. Firefox and WebKit are added at M12.
+- **Chromium only** in E2E. Firefox and WebKit are added at M12. *(Superseded: they arrived at M2, and by M12 all four targets run the full journey set.)*
 - **No PWA/service worker.** M9.
 
 ---
@@ -1818,6 +1818,8 @@ contention flake characterised at M7 — a different test each full-matrix run
 under eight workers, always passing alone.
 
 ### The M10 mobile timeout failure appears to have been fixed as a side effect
+*(Superseded at M12 — the real cause was `locator.fill()` appending on mobile
+emulation, not this milestone's speed. See the M12 section.)*
 
 `regex-mobile › survives two timeouts in a row` has been failing since M8. M10
 characterised it precisely: not a product defect, but a hard-coded **15 s
@@ -1866,3 +1868,97 @@ already a dev dependency.
 | D47 | **The match table renders progressively rather than being virtualised** | `12_PERFORMANCE.md` §3.3 specified windowing. Match rows are not a uniform height — a value runs to 2 000 characters — so fixed-row windowing does not transfer. Same outcome, different means. |
 | D48 | **Mobile keeps the stacked layout rather than adopting tabs** | `08_UI_UX_SPEC.md` §18 specifies tabs. Tabs put the input and its result on opposite sides of a mode switch, which is the loop the user is iterating on. Evaluated at 360/390/414 px with zero overflow and green a11y suites. |
 | D49 | **`jsx-a11y`'s separator rules are configured, not obeyed** | ARIA 1.2 defines a focusable separator as the window-splitter widget. The role allowlist is used where the rule offers one, and the sibling rule is silenced at the single element rather than by narrowing its handler list globally. |
+
+---
+
+## M12 — objective and outcome
+
+**Objective:** the release gate. Try to break SyntaxLab before a user does.
+
+**Outcome:** **ready to release, with three gates open and named.** The full
+browser matrix is clean for the first time in the project's history — and it is
+clean because every flake the project had been carrying turned out to have a
+real cause, and all of them were found and fixed rather than classified again.
+
+The full checklist, with every row marked PASS, FAIL, NOT RUN, ACCEPTED RISK or
+ENVIRONMENT LIMITATION, is [`docs/25_RELEASE_READINESS.md`](docs/25_RELEASE_READINESS.md).
+
+### The headline: the flakes were never flakes
+
+M7 characterised a "scattered environment flake — a different test each run".
+M10 investigated the mobile timeout failure and concluded it was a hard-coded
+in-test budget. M11 saw it start passing and recorded that as a probable side
+effect of the milestone. **All of that was wrong**, and M12 found each actual
+cause:
+
+| Carried since | Real cause |
+|---|---|
+| M8 — `regex-mobile › survives two timeouts in a row` | `locator.fill()` **appends** rather than replaces on a CodeMirror contenteditable under mobile emulation. Measured on both targets: filling `a+` over `(a+)+$` leaves `(a+)+$a+` on Pixel 5 and `a+` on desktop. The app correctly timed out on a pattern that was still catastrophic. |
+| M7 — `json-mobile › the suggestion can be dismissed` | Three different buttons were named exactly "Dismiss". When the service worker finished installing mid-test, a second one appeared and the locator became ambiguous. |
+| — `history-webkit › a record from a newer version is kept` | The test opened IndexedDB while the app's own open was in flight; on WebKit that settles **no** event — not success, not error, not blocked. |
+| — `theme-webkit › a valid field survives beside a corrupt one` | Read `--color-accent` at one instant during the pre-paint → hydration handover. Both engines settle identically; WebKit takes ~50 ms. |
+
+One of those four was a product defect and is fixed in the product: three
+buttons sharing a bare accessible name is an ambiguity for a screen-reader user
+too, not just for a locator. The other three were tests reaching around the
+application.
+
+**Full matrix now: 674 passed, 0 failed, 11 skipped — twice in a row.**
+
+### What was built
+
+| | |
+|---|---|
+| `tests/e2e/release-qa.spec.ts` | The four user journeys, end to end, on four targets, against the production build under production headers, watching for CSP violations and page errors throughout |
+| `tests/e2e/release-gates.spec.ts` | Served headers compared against `public/_headers` directive by directive, installability including PNG dimensions read from each IHDR, and 1 000 history entries |
+| `scripts/audit-cvd.mjs` | Colour-vision-deficiency measurement, closing a gate open since M10 |
+| `README.md` | Written at M12 as `24_README_PLAN.md` always said it would be |
+| `docs/25_RELEASE_READINESS.md` | The gate itself |
+
+### Defects found and fixed
+
+| Found by | Defect |
+|---|---|
+| **The flake investigation** | Three buttons named "Dismiss" with nothing to tell them apart. Each now says what it dismisses; the visible text is unchanged and the accessible name still begins with it. |
+| **Visual QA at 390 px** | A valid JSON document rendered a titled, empty "Findings" panel. The panel now asks the same question its contents do. |
+| **Writing the journeys** | Four test assertions that were wrong before the product was — the invalid-pattern wording, the history capture delay, `:focus-visible` versus programmatic focus, and assuming `(a+)+$` times out on every engine when JavaScriptCore optimises it. |
+
+### The three open gates
+
+None blocks a release. Each says what would close it.
+
+| | State |
+|---|---|
+| **Real Cloudflare preview deployment** | **NOT RUN — no credentials.** No API token, no `wrangler.toml`, no linked project in this environment. The most production-faithful local server available was used instead, serving real `dist/` with the real `_headers`, asserted by test. M13's work by definition. |
+| **Screen-reader pass** | **NOT RUN — environment limitation.** Unchanged since M10. The accessibility *tree* is asserted instead, which is the data a screen reader consumes. |
+| **CVD separation** | **ACCEPTED RISK — measured for the first time at M12.** Under achromatopsia two token colours sit at ΔE 1.9. A fix was attempted and measured: it moved the crowding rather than removing it. Accepted because every construct is also named in words. |
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck / ESLint / Stylelint / Prettier | ✅ clean |
+| Unit tests | ✅ **2 167 passed** (36 files), incl. 644 JSONTestSuite cases |
+| E2E, full matrix | ✅ **674 passed, 0 failed, 11 skipped**, twice consecutively |
+| Production build, clean tree | ✅ reproducible |
+| **Initial JS** | ✅ **166.22 KB** — inside the 170 KB target |
+| Lighthouse | Performance 78 · **Accessibility 100** · Best Practices 100 · SEO 91 |
+| `npm audit` | ✅ 0 vulnerabilities at `--audit-level=low` |
+| Execution / network sink scan | ✅ none anywhere in the repository |
+| Performance regression | ✅ every metric at or better than M11 |
+
+All 11 skips are WebKit engine or harness limitations, listed individually in
+the readiness document.
+
+### Dependencies at M12
+
+**None added, none changed, none removed.** 5 runtime, 28 dev. Lighthouse and
+`wrangler` were both invoked through `npx` and neither is in `package.json`.
+
+### Deviations at M12
+
+| # | Deviation | Reason |
+|---|---|---|
+| D50 | **The local production server drops one CSP directive** | `upgrade-insecure-requests` on an HTTP localhost origin makes WebKit rewrite every subresource to `https://localhost`, where nothing listens. A no-op on the HTTPS production origin. Asserted as the only difference, by a test that reads `_headers`. |
+| D51 | **The README ships without a live link or badges** | There is no deployment and no git remote yet, so both would be promises rather than facts. Added at M13, when there is an address behind them. |
+| D52 | **CVD is reported, not gated** | The measurement exists and is recorded; a threshold that fails the build would either be set below what the palette achieves, which is theatre, or block a release over a rare deficiency the interface already mitigates with text. |

@@ -457,6 +457,39 @@ of which changed.
 
 | | |
 |---|---|
-| `regex-mobile › survives two timeouts` | **Now passing, but marginal.** Failing since M8 on a hard-coded 15 s in-test assertion budget on an emulated Pixel 5. After M11 it passes 3/3 in isolation and in the full matrix, with no change to the test or the worker architecture — the milestone most likely removed enough work for the run to fit inside the budget. Recorded as a marginal test that now passes, not as a proven repair. |
-| Scattered E2E flake under parallel load | Unchanged since M7: a different test each full-matrix run, always passing in isolation. Two instances during this milestone (`workers-firefox`, then `json-mobile`), each verified alone and classified. Not concealed with a retry. |
+| `regex-mobile › survives two timeouts` | **Resolved at M12, root cause found.** Not a budget and not device speed: `locator.fill()` appends rather than replaces on a CodeMirror contenteditable under mobile emulation, so the app was handed a pattern that was still catastrophic and correctly timed out. The M10 diagnosis and the M11 explanation were both wrong. Fixed in the test helpers. |
+| Scattered E2E flake under parallel load | **Resolved at M12.** Carried since M7 as an environment artefact. Every instance had a real cause — an appending `fill()`, three buttons sharing an accessible name, an IndexedDB open that settles no event on WebKit, and an assertion reading a single instant mid-hydration. All four fixed; the full matrix is clean twice consecutively. |
 | Real-device testing | **Not run at M11** — no physical device. Emulated viewports are not the same thing and are not claimed to be. Carried to M12. |
+
+---
+
+## M12 — the release gate
+
+**No new risk category.** M12 added tests, two documents and one small
+accessibility fix; the product's boundaries are unchanged and were re-verified
+rather than assumed.
+
+| Reduced | |
+|---|---|
+| **Test-suite trust** | The "scattered environment flake" carried since M7 is gone, because it was never environmental. Four distinct causes, all found and fixed, and the full matrix is clean twice consecutively. A suite that fails at random teaches you to ignore it, which is the actual risk. |
+| **R-06, service-worker bug bricks cached copies** | The update lifecycle is exercised end to end against the real headers: a new version waits, is announced, never self-reloads, keeps the editor's contents when accepted, and replaces the old precache rather than accumulating. |
+
+| Accepted, with reasoning | |
+|---|---|
+| **Colour-vision separation** | Measured for the first time at M12. Under achromatopsia two token colours sit at ΔE 1.9; under deuteranopia the closest pair is 6.4. A fix was attempted and measured — it moved the crowding into another pair rather than removing it, because six colours all holding 7:1 against a dark surface leave too little luminance range. Accepted because colour is never the only signal: every construct is also named in words in the Explanation panel, the Structure tree and the Tokens table. **Closes with** a V1.1 palette redesign against luminance. |
+| **Lighthouse Performance 78** | FCP 3.8 s under Lighthouse's simulated mid-tier phone at 4× CPU throttle, dominated by CodeMirror at 60% of the bundle. Unthrottled the same build paints in 124 ms. **Closes with** code-splitting the editor, which is an architectural change and not a QA patch. |
+| **Lighthouse SEO 91** | One audit: `robots-txt` fails with `CSP violation`. The file is valid and served; Lighthouse's own fetch is blocked by the site's policy. The policy was not widened for a scanner. |
+
+| Not a risk, because | |
+|---|---|
+| The security boundaries were re-verified, not assumed | Zero execution sinks, zero network APIs in `src/`, zero dynamic imports, zero third-party origins, CSP compared against `_headers` directive by directive, and zero CSP violations across every journey. |
+| Storage failure does not break the product | Malformed, future-schema, unavailable and over-capacity all exercised. The app reports and keeps working; nothing is deleted. |
+| A full history stays usable | 1 000 entries — twice the documented cap — listed and searched. |
+
+### Open at the end of M12
+
+| | State |
+|---|---|
+| Real Cloudflare preview deployment | **NOT RUN** — no credentials in this environment. M13's by definition. |
+| Screen-reader pass | **NOT RUN** — environment limitation, unchanged since M10. |
+| CVD separation | **ACCEPTED RISK**, above. |

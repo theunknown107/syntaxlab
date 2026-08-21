@@ -674,3 +674,36 @@ M10 and remains recorded as residual risk RR-02, not a shortcut.
 project's history — the service-worker block added at M9 — is a *narrower*
 policy for a second execution context, and the page's policy is byte-for-byte
 what it was.
+
+---
+
+## M12 — the release audit
+
+Re-verified rather than assumed, on the shipped build. Nothing in this document
+changed as a result; what follows is the evidence that it is still true.
+
+| Check | Result |
+|---|---|
+| Execution sinks | **None.** `innerHTML`, `dangerouslySetInnerHTML`, `eval`, `new Function`, `document.write`, `insertAdjacentHTML` appear nowhere in `src/`, `public/`, `scripts/` or `tests/` |
+| Dynamic `import()` / script injection | **None** — the sink an optimisation milestone is most likely to introduce, checked because M11 preceded this one |
+| Network APIs | **None in `src/`** — no `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon` |
+| Third-party origins | **None** — no external fonts, scripts or images; system font stack |
+| Page CSP | Compared **directive by directive** against `public/_headers`, by a test that reads the file rather than restating it |
+| Service-worker CSP | Its own narrower policy, asserted: `default-src 'none'; script-src 'self'; connect-src 'self'`, with no style, image or font directive |
+| `unsafe-eval` | Absent, asserted |
+| CSP violations during use | **Zero**, watched for the life of all four user journeys — regex, JSON, history, theme, and offline |
+| `npm audit --audit-level=low` | 0 vulnerabilities |
+
+### Hostile input, through the real interface
+
+| Payload | Outcome |
+|---|---|
+| Prototype pollution — `__proto__`, `constructor.prototype` | Nothing reaches `Object.prototype`; checked against the real prototype chain after rendering, not by inspecting the parser |
+| XSS — `<img onerror>`, `<script>`, `javascript:` URLs | Rendered as text; zero injected elements, zero `javascript:` hrefs in `main` |
+| Catastrophic backtracking | Bounded on every engine — the worker is destroyed at the deadline, or the engine optimises it and returns; both are accepted and the page stays usable |
+| Malformed and future-schema history records | Set aside and reported, never deleted |
+| Hostile theme values in `localStorage` | Rejected per field; the hostile value is never applied, including in the pre-paint window |
+
+**One product change came out of this audit**, and it is an accessibility one
+rather than a security one: three buttons shared the bare accessible name
+"Dismiss". Each now says what it dismisses.

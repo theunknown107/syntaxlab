@@ -326,3 +326,29 @@ No emoji in headings. No hyperbole. No claims that are not tested.
 | Every release | Changelog and version badge |
 
 **Rule:** if the README describes behaviour that no longer exists, that is a bug with the same priority as a code bug. A README that lies is worse than no README, and it is the first thing a new reader tests the project's honesty against.
+
+---
+
+## M12 — the README, as written
+
+`README.md` now exists. It follows §2's structure and §3's content, and honours
+§7's prohibitions. Three deliberate departures, all because the alternative
+would have been a promise rather than a fact:
+
+| Planned | Shipped | Why |
+|---|---|---|
+| A hero screenshot above the fold | Not included | Committing a binary that goes stale on every visual change, for a repository with no remote to render it, buys less than it costs. Added at M13 alongside the deployment it would depict. |
+| `[**Try it →**](https://syntaxlab.app)` | A status note saying it is not deployed yet | §7 forbids showing what does not exist. There is no address behind that link. |
+| CI / licence / version badges | None | There is no git remote, so a CI badge would point at nothing. The licence is linked in text. |
+
+Everything §7 rules out is absent: no absolute security language, no cron in
+the feature list, no estimated bundle figure, no badge wall, no star plea. The
+numbers it quotes — 2 167 unit tests, 644 conformance cases, 674 end-to-end,
+five runtime dependencies — are measured, and each was re-checked against the
+build while writing it.
+
+The ECMAScript limitation is stated in the second paragraph of **What it does**,
+not in a footnote, and names the constructs that actually differ.
+
+**Maintenance trigger added:** the status note and the missing link are M13's
+first job, not something to be discovered later.

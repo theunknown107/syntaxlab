@@ -358,3 +358,43 @@ ship, because it self-persists across reloads — `07_PWA_OFFLINE.md` §4.4.
 Unchanged from §4.4 and still correct: redeploy the previous build; clients
 pick up the reverted worker on their next update check. There is no in-app
 rollback, because a page cannot install an older worker.
+
+---
+
+## M12 — what was verified, and what M13 must still do
+
+**Verified locally, against the real artefact.** `npm run serve:prod` parses
+`public/_headers` and serves `dist/`, and a test compares what a browser
+actually receives against what the file declares, directive by directive.
+
+| | |
+|---|---|
+| Page CSP matches `_headers` | ✅ |
+| Service worker served its own narrower CSP | ✅ |
+| Eight non-CSP security headers | ✅ each asserted |
+| `/assets/*` immutable, entry points `must-revalidate` | ✅ |
+| Service worker activates, precaches, serves offline | ✅ |
+| Update lifecycle | ✅ |
+
+**One documented difference from production**, and only one:
+`upgrade-insecure-requests` is dropped, because this origin is HTTP and WebKit
+would rewrite every subresource to `https://localhost` where nothing is
+listening. It is a no-op on the HTTPS production origin. The test asserts it is
+the *only* difference.
+
+### Still outstanding — M13
+
+**A real Cloudflare Pages preview deployment has NOT been performed.** There is
+no `CLOUDFLARE_API_TOKEN`, no `wrangler.toml` and no linked project in this
+environment, and M12 does not claim otherwise.
+
+M13 must, on a real preview URL:
+
+1. Confirm the `_headers` file is applied by Cloudflare as written — the local
+   server implements the format, which is not the same as Cloudflare doing so.
+2. Confirm `upgrade-insecure-requests` behaves on a real HTTPS origin.
+3. Install the app from the preview and use it offline.
+4. Deploy a second build and walk the update lifecycle against it.
+5. Confirm the HTML-modifying Cloudflare features listed in §12 are disabled —
+   Rocket Loader, Auto Minify and Email Obfuscation all rewrite or inject
+   script and will break the CSP. They are on by default on some plans.

@@ -559,3 +559,35 @@ The update flow is tested on Chromium only, because it has to rewrite the
 bytes the server is serving; that is an operation on one origin and cannot be
 run concurrently against itself. It uses its own port and its own copy of the
 build so it cannot disturb any other suite.
+
+---
+
+## M12 — offline and update, verified for release
+
+Run against the production build under the real `public/_headers`, with the
+browser context genuinely offline — not `navigator.onLine`.
+
+| Check | Result |
+|---|---|
+| Registration, scoped to the origin root | ✅ one registration |
+| Precache contains every runtime asset | ✅ including **both worker chunks**, `theme-bootstrap.js`, manifest and icons |
+| Caches only application assets | ✅ no history, no patterns, no documents |
+| Offline: regex analysis, execution, JSON, formatting, history, theme, mode switch | ✅ all six |
+| Offline startup | ✅ FCP 110 ms |
+| Update waits, is announced, never self-reloads | ✅ |
+| Accepting an update activates it and keeps the editor contents | ✅ |
+| Old precache replaced, not accumulated | ✅ |
+| Works where service workers are unavailable | ✅ the app says so rather than failing |
+
+**Installability** is asserted at the level that can be: manifest linked and
+valid, correct content type, the fields an install prompt requires, every icon
+fetched with its **real dimensions read from the PNG IHDR** rather than
+trusted, a maskable icon present, and the start URL and both shortcuts
+resolving inside scope. Triggering an actual install prompt is not possible
+headlessly, so browser-specific install behaviour is documented in the README
+rather than claimed as universal.
+
+**WebKit skips the offline navigation tests**, and has since M9: Playwright
+cannot reload a WebKit page while its context is offline, and it fails
+identically with no service worker registered at all. That is a harness
+limitation, not a statement about the product.
