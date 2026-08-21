@@ -44,6 +44,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4183' },
     },
     {
+      /* Deployment-shaped gates: served headers, installability, storage at
+         the documented limit. One engine — these are properties of the
+         artefact, not of a rendering engine. */
+      name: 'gates-chromium',
+      testMatch: /release-gates\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4183' },
+    },
+    {
       name: 'release-firefox',
       testMatch: /release-qa\.spec\.ts/,
       use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4183' },
