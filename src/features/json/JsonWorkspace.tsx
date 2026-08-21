@@ -323,12 +323,26 @@ interface TreeColumnProps {
   readonly onGoTo: (offset: number) => void;
 }
 
+/**
+ * Whether the Findings panel has anything to say.
+ *
+ * `JsonFindings` renders nothing when there is nothing to report, so the panel
+ * around it has to ask the same question — otherwise a valid document gets a
+ * titled, empty box between its status line and its tree. Found by the M12
+ * visual pass at 390 px, where the wasted band is most obvious.
+ */
+function hasFindings(analysis: JsonAnalysis | null): analysis is JsonAnalysis {
+  return (
+    analysis !== null && (analysis.duplicateKeys.length > 0 || analysis.unsafeNumbers.length > 0)
+  );
+}
+
 function TreeColumn(props: TreeColumnProps): React.JSX.Element {
   const { analysis, rows, analyzing } = props;
 
   return (
     <div className={styles.column}>
-      {analysis !== null && (
+      {hasFindings(analysis) && (
         <Panel title="Findings">
           <JsonFindings analysis={analysis} onGoTo={props.onGoTo} />
         </Panel>
