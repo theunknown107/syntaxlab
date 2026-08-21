@@ -2191,7 +2191,7 @@ worker bundle.
 |---|---|
 | Typecheck | ✅ clean — **and now actually runs** |
 | ESLint / Stylelint / Prettier | ✅ clean, zero warnings |
-| Unit tests | ✅ 2 342 passed, 40 files |
+| Unit tests | ✅ 2 346 passed, 40 files, three consecutive clean runs |
 | Full E2E matrix | ✅ **679 passed**, 11 skipped, 0 failed |
 | Build + budgets | ✅ all six budgets within target |
 | No cron UI | ✅ `src/features/cron/` does not exist; `AnalysisMode` is still `'regex' \| 'json'` |
