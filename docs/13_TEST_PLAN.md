@@ -342,10 +342,10 @@ Coverage is a floor, not a goal. A 95%-covered parser with no fuzz testing is le
 | Suite | Cases | Status |
 |---|---|---|
 | `tests/unit/cron/parser.test.ts` — grammar, the 5-field lock, limits | 33 | ✅ |
-| `tests/unit/cron/semantics.test.ts` — OR rule, Sunday convention, timezone, spans | 22 | ✅ |
+| `tests/unit/cron/semantics.test.ts` — OR rule, Sunday convention, timezone across six real zones, spans | 29 | ✅ |
 | `tests/unit/cron/corpus.test.ts` — the golden corpus: **59 hand-written expressions**, 27 valid, 24 invalid, 8 from other schedulers | 78 | ✅ |
 | `tests/unit/cron/property.test.ts` — 11 fast-check properties at 1 200 runs each, fixed seed 20260821, plus 2 deterministic structural checks | 13 | ✅ |
-| `tests/unit/protocol.test.ts` — the `analysis.cron` boundary | 21 | ✅ |
+| `tests/unit/protocol.test.ts` — the `analysis.cron` boundary | 22 | ✅ |
 
 Coverage is not the interesting number here; the corpus is. Every corpus case was read by a person and its expectation written by hand, which is what makes it a golden corpus rather than a snapshot: a change that quietly alters behaviour has to be argued with rather than absorbed.
 
@@ -370,7 +370,7 @@ Assertion for every row: the message is specific, no schedule is produced, and *
 
 **The DOM/DOW OR-rule *is* tested at M14**, as a warning and an explanation rather than as matching: both fields restricted warns and says "either, not both" in words; one field restricted does not; neither does not; and a full-range list such as `1-31` counts as unrestricted, which is its own regression test.
 
-**Timezone — reduced scope (browser-local and UTC only).** At M14 the tests are about *representation*, not about times, because no times are computed. UTC resolves to a zero offset and `userSelection`; browser-local reports `browserResolvedOptions` and a non-empty zone name; the DST caveat appears in local mode and not in UTC mode; and every analysis carries a `cron-timezone` section, which is invariant C-I1 at the only level M14 can hold it.
+**Timezone — reduced scope (browser-local and UTC only).** At M14 the tests are about *representation*, not about times, because no times are computed. UTC resolves to a zero offset and `userSelection`; browser-local reports `browserResolvedOptions` and a non-empty zone name; the DST caveat appears when — and only when — the browser's zone actually transitions, checked against six real zones by setting `process.env.TZ`, which `Date` honours at runtime in Node; and every analysis carries a `cron-timezone` section, which is invariant C-I1 at the only level M14 can hold it.
 
 **Named-zone selection is not implemented, so it is not tested for correctness — it is tested for absence.** Two separate tests assert that no analysis, in either mode, can produce a third timezone mode. If someone widens the union, those fail. The transition matrix across zone types (spring-forward skip, fall-back repeat, southern hemisphere, `Asia/Kolkata`'s half-hour offset, a no-DST zone) belongs to M16 with the executor.
 

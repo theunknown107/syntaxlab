@@ -185,6 +185,14 @@ export interface CronTimezoneContext {
   readonly ianaZone: string;
   readonly resolvedFrom: 'browserResolvedOptions' | 'userSelection';
   readonly currentOffsetMinutes: number;
+  /**
+   * Whether this zone actually has daylight-saving transitions this year.
+   *
+   * Asked rather than assumed. Saying "this zone observes daylight-saving
+   * changes" to someone in `Asia/Kolkata` is a confidently wrong statement of
+   * exactly the kind this feature exists to avoid.
+   */
+  readonly observesDst: boolean;
 }
 
 /* ------------------------------------------------------------------ *

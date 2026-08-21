@@ -430,6 +430,7 @@ interface CronTimezoneContext {
   readonly ianaZone: string;               // resolved for display, e.g. "Europe/London"
   readonly resolvedFrom: 'browserResolvedOptions' | 'userSelection';
   readonly currentOffsetMinutes: number;
+  readonly observesDst: boolean;         // probed, not assumed
 }
 
 // M16. Not declared at M14 — see 5.0.

@@ -400,7 +400,9 @@ export function explainCron(input: ExplainInput): Explanation {
             text("Times are read in your browser's timezone, "),
             code(timezone.ianaZone),
             text(
-              '. If your scheduler runs somewhere else, these times will not match it. This zone observes daylight-saving changes.',
+              timezone.observesDst
+                ? '. If your scheduler runs somewhere else, these times will not match it. This zone observes daylight-saving changes.'
+                : '. If your scheduler runs somewhere else, these times will not match it. This zone has no daylight-saving transitions this year.',
             ),
           ],
   });

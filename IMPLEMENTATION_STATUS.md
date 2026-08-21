@@ -2110,6 +2110,7 @@ and read):
 | "every 15 minute" | Field specs carry a plural, stored rather than derived |
 | "day of the month `1`, and day of the month `15`" | Only the first term in a list names the field |
 | "during 9 hours of the day" for `9-17` | "between 09:00 and 17:59" — checkable against a real scheduler, and it says out loud that `9-17` includes all of 17 |
+| "This zone observes daylight-saving changes" — told to a reader in `Asia/Kolkata`, which does not | `observesDst` probes twelve monthly offsets. The warning fires only when the zone transitions, and the explanation says which of the two it is |
 
 The first of those is the one that mattered. It is exactly the failure mode
 R-03 describes: a confidently wrong answer, produced silently.
@@ -2143,11 +2144,11 @@ detection result `unknown`, which is not a mode.
 | Suite | Cases |
 |---|---|
 | `parser.test.ts` — grammar, the 5-field lock, limits | 33 |
-| `semantics.test.ts` — OR rule, Sunday convention, timezone, spans | 22 |
+| `semantics.test.ts` — OR rule, Sunday convention, timezone across six real zones, spans | 29 |
 | `corpus.test.ts` — the golden corpus, 59 expressions | 78 |
 | `property.test.ts` — 11 fast-check properties at 1 200 runs each, fixed seed 20260821, plus 2 deterministic checks | 13 |
-| `protocol.test.ts` — the `analysis.cron` boundary | 21 |
-| **Cron total** | **167** |
+| `protocol.test.ts` — the `analysis.cron` boundary | 22 |
+| **Cron total** | **175** |
 
 The corpus is **59 expressions** — 27 valid, 24 invalid, 8 from other
 schedulers — producing 78 test cases. The plan named 100+. Every entry was
@@ -2190,8 +2191,8 @@ worker bundle.
 |---|---|
 | Typecheck | ✅ clean — **and now actually runs** |
 | ESLint / Stylelint / Prettier | ✅ clean, zero warnings |
-| Unit tests | ✅ 2 334 passed, 40 files |
-| Full E2E matrix | ✅ **676 passed**, 11 skipped, 0 failed |
+| Unit tests | ✅ 2 342 passed, 40 files |
+| Full E2E matrix | ✅ **679 passed**, 11 skipped, 0 failed |
 | Build + budgets | ✅ all six budgets within target |
 | No cron UI | ✅ `src/features/cron/` does not exist; `AnalysisMode` is still `'regex' \| 'json'` |
 | No new dependency | ✅ none added; `npm audit` reports 0 vulnerabilities |
@@ -2200,7 +2201,7 @@ worker bundle.
 ### Known limitations at M14
 
 - **No next-run times.** M16. This is the largest one and it is deliberate.
-- **No per-schedule DST detection.** M16. The mode-level caveat ships.
+- **No per-schedule DST detection.** M16. The zone-level caveat ships, and it is accurate about whether the zone transitions at all.
 - **No named timezones**, and that is the locked scope, not a gap to fill.
 - **`0 0 30 2 *` parses without error**, which is correct — it is valid syntax
   that never fires, and saying so needs the executor.

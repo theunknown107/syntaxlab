@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { analyzeCron, resolveTimezone } from '@/domain/cron/analyze';
 import type { CronAnalysis, CronWarningCode } from '@/domain/cron/ast';
@@ -113,9 +113,65 @@ describe('timezone semantics', () => {
     }
   });
 
-  it('warns about daylight saving in browser-local mode only', () => {
-    expect(codes(analyse('0 3 * * *'))).toContain('DST_LOCAL_MODE');
-    expect(codes(analyse('0 3 * * *', true))).not.toContain('DST_LOCAL_MODE');
+  /**
+   * The DST caveat is about the zone, not about the mode.
+   *
+   * It shipped as an unconditional browser-local warning, which told anyone in
+   * `Asia/Kolkata` that their zone observes daylight saving. It does not. A
+   * false statement dressed as a caution teaches people to skip the warnings
+   * that are true, so the zone is now asked rather than assumed.
+   *
+   * `process.env.TZ` is honoured by `Date` at runtime in Node, so these run
+   * against real zone rules rather than a stub of them.
+   */
+  describe('the daylight-saving caveat', () => {
+    const originalTz = process.env.TZ;
+    afterEach(() => {
+      process.env.TZ = originalTz;
+    });
+
+    const withZone = <T>(zone: string, read: () => T): T => {
+      process.env.TZ = zone;
+      return read();
+    };
+
+    it.each([
+      ['Europe/London', true],
+      ['Australia/Sydney', true],
+      ['America/New_York', true],
+    ])('warns in %s, which transitions', (zone, expected) => {
+      const analysis = withZone(zone, () => analyse('0 3 * * *'));
+      expect(analysis.timezone.observesDst, zone).toBe(expected);
+      expect(codes(analysis), zone).toContain('DST_LOCAL_MODE');
+    });
+
+    it.each([['Asia/Kolkata'], ['UTC'], ['Asia/Tokyo']])(
+      'stays quiet in %s, which does not',
+      (zone) => {
+        const analysis = withZone(zone, () => analyse('0 3 * * *'));
+        expect(analysis.timezone.observesDst, zone).toBe(false);
+        expect(codes(analysis), zone).not.toContain('DST_LOCAL_MODE');
+      },
+    );
+
+    it('says which of the two it is, in the explanation as well as the warning', () => {
+      const read = (zone: string): string => {
+        const section = withZone(zone, () =>
+          analyse('0 3 * * *').explanation.details.find((d) => d.id === 'cron-timezone'),
+        );
+        return JSON.stringify(section);
+      };
+      expect(read('Europe/London')).toMatch(/observes daylight-saving changes/);
+      expect(read('Asia/Kolkata')).toMatch(/no daylight-saving transitions/);
+    });
+
+    it('never warns in UTC mode, whatever the browser zone is', () => {
+      // UTC has no transitions by definition, so the caveat would be wrong
+      // even for a reader sitting in a zone that does transition.
+      const analysis = withZone('Europe/London', () => analyse('0 3 * * *', true));
+      expect(analysis.timezone.observesDst).toBe(false);
+      expect(codes(analysis)).not.toContain('DST_LOCAL_MODE');
+    });
   });
 
   it('always says which timezone the reading is in', () => {

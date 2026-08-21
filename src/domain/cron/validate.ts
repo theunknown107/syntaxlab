@@ -199,6 +199,15 @@ function areWarningsValid(warnings: unknown, sourceLength: number): boolean {
   });
 }
 
+/**
+ * Real offsets run from -12:00 to +14:00. Anything outside that is not a
+ * timezone, and would be rendered as one.
+ */
+function isRealOffset(value: unknown): boolean {
+  if (typeof value !== 'number') return false;
+  return value >= -720 && value <= 840;
+}
+
 function isTimezone(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (typeof value.mode !== 'string' || !TIMEZONE_MODES.has(value.mode)) return false;
@@ -206,10 +215,8 @@ function isTimezone(value: unknown): boolean {
   if (typeof value.resolvedFrom !== 'string' || !RESOLVED_FROM.has(value.resolvedFrom)) {
     return false;
   }
-  if (typeof value.currentOffsetMinutes !== 'number') return false;
-  // Real offsets run from -12:00 to +14:00. Anything outside that is not a
-  // timezone, and would be rendered as one.
-  return value.currentOffsetMinutes >= -720 && value.currentOffsetMinutes <= 840;
+  if (typeof value.observesDst !== 'boolean') return false;
+  return isRealOffset(value.currentOffsetMinutes);
 }
 
 /**

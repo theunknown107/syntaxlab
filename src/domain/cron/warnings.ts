@@ -114,7 +114,11 @@ export function scanWarnings(input: WarningScanInput): readonly CronWarning[] {
   warnings.push(...stepBaseWarnings(fields));
   warnings.push(...frequencyWarning(fields));
 
-  if (timezone.mode === 'browserLocal') {
+  // Only when the zone actually transitions. Warning a reader in a zone with
+  // no daylight saving that their zone observes daylight saving is a false
+  // statement dressed as a caution, and it teaches them to skip the warnings
+  // that are true.
+  if (timezone.mode === 'browserLocal' && timezone.observesDst) {
     warnings.push({
       code: 'DST_LOCAL_MODE',
       message: `Times are shown in your browser's timezone (${timezone.ianaZone}), which observes daylight-saving changes.`,

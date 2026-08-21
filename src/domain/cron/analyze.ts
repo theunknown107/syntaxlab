@@ -32,7 +32,13 @@ export function resolveTimezone(
   now: Date = new Date(),
 ): CronTimezoneContext {
   if (mode === 'utc') {
-    return { mode: 'utc', ianaZone: 'UTC', resolvedFrom: 'userSelection', currentOffsetMinutes: 0 };
+    return {
+      mode: 'utc',
+      ianaZone: 'UTC',
+      resolvedFrom: 'userSelection',
+      currentOffsetMinutes: 0,
+      observesDst: false,
+    };
   }
 
   let ianaZone = 'UTC';
@@ -53,7 +59,32 @@ export function resolveTimezone(
     // `getTimezoneOffset` is minutes *behind* UTC, which is the opposite sign
     // to how offsets are written. Negated here so `+60` means UTC+1.
     currentOffsetMinutes: -now.getTimezoneOffset(),
+    observesDst: observesDst(now),
   };
+}
+
+/**
+ * Does the browser's zone have daylight-saving transitions this year?
+ *
+ * Twelve probes, one per month, comparing UTC offsets. If they are not all the
+ * same, the zone shifts at some point in the year.
+ *
+ * Monthly resolution is enough because no real zone has ever run a saving
+ * period shorter than a month; it is also all that is needed, because the
+ * question here is "should we caveat this zone at all", not "when exactly does
+ * it change" — that is M16's problem, with the schedule executor.
+ *
+ * The alternative was to caveat every browser-local analysis unconditionally,
+ * which reads as a warning but is a false statement in every zone that does
+ * not observe DST.
+ */
+export function observesDst(now: Date = new Date()): boolean {
+  const year = now.getUTCFullYear();
+  const first = new Date(Date.UTC(year, 0, 1)).getTimezoneOffset();
+  for (let month = 1; month < 12; month += 1) {
+    if (new Date(Date.UTC(year, month, 1)).getTimezoneOffset() !== first) return true;
+  }
+  return false;
 }
 
 export interface AnalyzeCronOptions {

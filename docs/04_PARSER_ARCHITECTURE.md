@@ -806,6 +806,7 @@ Note that the resolved value sets M14 produces are exactly the inputs this needs
 | `ianaZone` | whatever `Intl.DateTimeFormat().resolvedOptions().timeZone` reports | `UTC` |
 | `resolvedFrom` | `browserResolvedOptions` | `userSelection` |
 | `currentOffsetMinutes` | the offset *now* | `0` |
+| `observesDst` | whether the zone actually transitions this year, probed monthly | `false` |
 
 `resolvedFrom` exists so the UI can say "your browser reported this" rather than "you chose this", which are different claims. `currentOffsetMinutes` is the offset at the moment of analysis and nothing more — it is not a rule set, and M14 does not pretend it is.
 
@@ -817,13 +818,16 @@ Note that the resolved value sets M14 produces are exactly the inputs this needs
 
 Even with only browser-local and UTC, DST is real: the browser's local zone has transitions.
 
-**Built at M14:** a `DST_LOCAL_MODE` warning on any analysis in browser-local mode, and the corresponding note in UTC mode that UTC has no transitions and is therefore the easier mode to check a scheduler against. This is a *mode-level* caveat and does not depend on a schedule's times.
+**Built at M14:** a `DST_LOCAL_MODE` warning in browser-local mode **when the zone actually transitions**, and the corresponding note in UTC mode that UTC has no transitions and is therefore the easier mode to check a scheduler against. This is a *zone-level* caveat: it does not depend on a schedule's times, but it does depend on the zone.
+
+It shipped for an afternoon as an unconditional browser-local warning, and the explanation review caught it: a reader in `Asia/Kolkata` was told their zone observes daylight-saving changes. It does not. `observesDst` now probes twelve monthly offsets and compares them — monthly resolution is enough because no real zone has run a saving period shorter than a month, and the question being asked is "caveat this zone at all", not "when exactly does it change". A false statement dressed as a caution is worse than no caution, because it teaches people to skip the warnings that are true.
 
 **Not built — M16:** per-schedule anomaly detection, which needs the next-run computation of §4.4 before it has anything to detect.
 
 | Case | Behaviour | Status |
 |---|---|---|
-| Browser-local mode selected | Warn that this zone observes DST changes | **built** |
+| Browser-local mode selected, zone transitions | Warn that this zone observes DST changes | **built** |
+| Browser-local mode selected, zone does not transition | Say so, and emit no warning | **built** |
 | UTC mode selected | Note that UTC has no transitions | **built** |
 | Spring forward — 02:30 does not exist | Report the run as `SKIPPED`, explain that schedulers differ (most skip; some run at 03:00) | M16 |
 | Fall back — 01:30 occurs twice | Report `REPEATED`, list both instants with their offsets | M16 |
