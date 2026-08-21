@@ -30,6 +30,11 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Internal build brief — the instruction file this project was built from.
+# Kept on disk because it is the source of the architecture package, but it is
+# not part of the product and is not published.
+syntax_explainer_claude_code_master_brief.txt
+
 # Logs
 *.log
 npm-debug.log*

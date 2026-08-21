@@ -1,8 +1,7 @@
 name: CI
 
-# Runs on the remote once one exists. The repository is local-only at M1
-# (22_OPEN_QUESTIONS.md D-07), so this workflow is authored but not yet
-# executed. Every job here is runnable locally via the matching npm script.
+# Every job here is runnable locally via the matching npm script, which is the
+# point: CI should not be the only place a gate exists.
 
 on:
   push:
@@ -97,7 +96,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npx playwright install chromium --with-deps
+      # All three engines, because `npm run test:e2e` runs the full matrix —
+      # regex, JSON, history, theme and the release journeys each run on
+      # Chromium, Firefox and WebKit, and several findings have been
+      # engine-specific. Installing only Chromium here would fail the job on
+      # its first run against a real remote.
+      - run: npx playwright install chromium firefox webkit --with-deps
       # Includes the axe gate, the CSP-violation check, and the assertion that
       # the app makes no network requests after load.
       - run: npm run test:e2e

@@ -130,7 +130,7 @@ Resolved when implementation began. These close Q-07 and Q-16.
 | **Copyright holder** | `SyntaxLab contributors` | A deliberate placeholder — no individual or organisation name has been supplied, and inventing one would be wrong. Replace before the first public release. |
 | **Node** | **22 LTS**, pinned via `.nvmrc` | The docs specified Node 20, which reached end-of-life in April 2026. Building on an unsupported runtime is not defensible, so the pin moved to Node 22. `17_DEPLOYMENT.md` §3.1 updated. |
 | **npm** | 10+ | Matches the Node 22 toolchain. |
-| **Git remote** | **Not yet created** | See below. |
+| **Git remote** | **Created at the first public push** | `github.com/theunknown107/syntaxlab`, public, `main`. Deferred through M0–M12 because creating it is a human action requiring account access; the local history was preserved and pushed intact rather than re-initialised. |
 
 **Git remote and branch protection are deferred, honestly.** M0's deliverable list includes branch protection per `19_GIT_WORKFLOW.md` §5, which requires a hosted remote. No remote exists and creating one is a human action requiring account access. The repository is initialised **locally** with the documented commit conventions, so no history is lost. Branch protection, CI wiring, and the first push become an explicit task at whichever milestone the remote is created — at the latest M12, since `17_DEPLOYMENT.md` requires CI green before release.
 

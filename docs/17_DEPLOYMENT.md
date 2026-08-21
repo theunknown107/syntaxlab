@@ -159,6 +159,13 @@ dist/
 
 ## 5. Environments
 
+> **The domain is a placeholder and nothing here is deployed yet.**
+> `syntaxlab.app` is not registered, not purchased and not verified
+> (`22_OPEN_QUESTIONS.md` D-07). It appears below as the illustrative canonical
+> URL this plan is written against. The table is the intended shape of the
+> environments, not a description of running infrastructure — as of the first
+> public push there is none.
+
 | Environment | URL | Purpose | Indexed |
 |---|---|---|---|
 | Local | `localhost:5173` | Development | — |
