@@ -21,10 +21,23 @@ const subject = (page: Page) => page.getByRole('textbox', { name: 'Test string' 
  *  to one rather than searching the whole page. */
 const panel = (page: Page, name: string) => page.getByRole('region', { name });
 
+/**
+ * Replaces an editor's contents.
+ *
+ * Select-all then insert, rather than `locator.fill()`. On a CodeMirror
+ * contenteditable under mobile emulation `fill` **appends** instead of
+ * replacing: measured on Pixel 5, filling `a+` over `(a+)+$` left the document
+ * reading `(a+)+$a+`. The app then correctly timed out on a pattern that is
+ * still catastrophic, and the test reported a product defect that was not
+ * there. Desktop Chrome replaces correctly, which is why this only ever bit
+ * the mobile projects.
+ */
 async function type(page: Page, target: 'pattern' | 'subject', value: string): Promise<void> {
   const editor = target === 'pattern' ? pattern(page) : subject(page);
   await editor.click();
-  await editor.fill(value);
+  await page.keyboard.press('ControlOrMeta+a');
+  if (value === '') await page.keyboard.press('Backspace');
+  else await page.keyboard.insertText(value);
 }
 
 test.beforeEach(async ({ page }) => {

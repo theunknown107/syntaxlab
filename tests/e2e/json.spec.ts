@@ -19,9 +19,22 @@ async function openJson(page: Page): Promise<void> {
   await expect(editor(page)).toBeVisible();
 }
 
+/**
+ * Replaces an editor's contents.
+ *
+ * Select-all then insert, rather than `locator.fill()`. On a CodeMirror
+ * contenteditable under mobile emulation `fill` **appends** instead of
+ * replacing: measured on Pixel 5, filling `a+` over `(a+)+$` left the document
+ * reading `(a+)+$a+`. The app then correctly timed out on a pattern that is
+ * still catastrophic, and the test reported a product defect that was not
+ * there. Desktop Chrome replaces correctly, which is why this only ever bit
+ * the mobile projects.
+ */
 async function type(page: Page, value: string): Promise<void> {
   await editor(page).click();
-  await editor(page).fill(value);
+  await page.keyboard.press('ControlOrMeta+a');
+  if (value === '') await page.keyboard.press('Backspace');
+  else await page.keyboard.insertText(value);
 }
 
 test.beforeEach(async ({ page }) => {
