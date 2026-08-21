@@ -46,6 +46,22 @@ export const LIMITS = {
     /** Memory ceiling for the tree. */
     maxNodes: 500_000,
   },
+  cron: {
+    /**
+     * A cron expression is five short fields. Anything approaching this is
+     * either not a cron expression or an attempt to find a limit.
+     */
+    input: 1_000,
+    /** The dialect lock, as a number the parser compares against. */
+    fields: 5,
+    /**
+     * Ceiling on tokens from one expression. `input` already bounds this, but
+     * the parser states its own budget rather than inheriting one.
+     */
+    maxTokens: 2_000,
+    /** Terms in a single field, i.e. commas + 1. Guards a pathological list. */
+    maxTermsPerField: 200,
+  },
   history: {
     maxEntries: 500,
     maxInputChars: 100_000,
