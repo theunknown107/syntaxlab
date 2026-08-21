@@ -127,7 +127,7 @@ Resolved when implementation began. These close Q-07 and Q-16.
 | **Domain** | **`syntaxlab.app` is a PLACEHOLDER** | **Not registered, not verified, not purchased.** It appears in documentation as an illustrative canonical URL only. Nothing may treat it as owned. Registering a domain — or choosing a different one — is an M13 task and a human action. |
 | **Repository visibility** | **Public** | Makes the client-only privacy position independently auditable, which `01_PRD.md` §4 treats as material for the privacy-constrained user. |
 | **Licence** | **MIT** | Consistent with the no-copyleft dependency rule in `16_DEPENDENCIES.md` §7. `LICENSE` created at M0. |
-| **Copyright holder** | `SyntaxLab contributors` | A deliberate placeholder — no individual or organisation name has been supplied, and inventing one would be wrong. Replace before the first public release. |
+| **Copyright holder** | **`theunknown107`** | Resolved at the first public push. Was `SyntaxLab contributors`, a deliberate placeholder held open because no name had been supplied and inventing one would have been wrong. |
 | **Node** | **22 LTS**, pinned via `.nvmrc` | The docs specified Node 20, which reached end-of-life in April 2026. Building on an unsupported runtime is not defensible, so the pin moved to Node 22. `17_DEPLOYMENT.md` §3.1 updated. |
 | **npm** | 10+ | Matches the Node 22 toolchain. |
 | **Git remote** | **Created at the first public push** | `github.com/theunknown107/syntaxlab`, public, `main`. Deferred through M0–M12 because creating it is a human action requiring account access; the local history was preserved and pushed intact rather than re-initialised. |
