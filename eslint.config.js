@@ -312,6 +312,19 @@ export default tseslint.config(
     rules: { 'no-console': 'off', 'boundaries/dependencies': 'off' },
   },
 
+  /* Measurement scripts written in TypeScript. Unlike the .mjs ones below,
+     these import the domain, so they stay type-checked — they are only exempt
+     from the layer rules and from no-console, which is their output. */
+  {
+    files: ['scripts/**/*.ts'],
+    languageOptions: { globals: globals.node },
+    rules: {
+      'no-console': 'off',
+      'boundaries/dependencies': 'off',
+      'boundaries/element-types': 'off',
+    },
+  },
+
   /* Tests may use console for diagnostics and are not layer-bound. */
   {
     files: ['tests/**/*.{ts,tsx}'],
