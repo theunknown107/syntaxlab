@@ -210,6 +210,13 @@ test('a corrupt record does not break the drawer, and is not deleted', async ({ 
       open.onerror = () => {
         reject(open.error ?? new Error('failed'));
       };
+      // `blocked` fires when another connection is still holding an older
+      // version, and without a handler the promise simply never settles — the
+      // test then dies on its own timeout with nothing to say. Seen on WebKit,
+      // where opening alongside the app's own connection is slower to resolve.
+      open.onblocked = () => {
+        reject(new Error('indexedDB.open was blocked by another connection'));
+      };
     });
   });
 
@@ -222,6 +229,15 @@ test('a corrupt record does not break the drawer, and is not deleted', async ({ 
 });
 
 test('a record from a newer version is kept and reported, not destroyed', async ({ page }) => {
+  // Let the application finish opening its own connection before opening a
+  // second one from the page. On WebKit an `indexedDB.open` issued while the
+  // app's open is still in flight settles *no* event at all — not success, not
+  // error, not blocked — and the test dies on its own timeout with nothing to
+  // report. Opening the drawer forces the repository to load and settle.
+  await page.getByRole('button', { name: /^History/ }).click();
+  await expect(page.getByRole('dialog', { name: 'History' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
       const open = indexedDB.open('syntaxlab');
