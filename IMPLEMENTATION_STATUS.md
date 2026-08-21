@@ -2399,3 +2399,83 @@ while `SMARCH` names neither; both timezone modes round-trip and no third
 appears; `CronAnalysis` has neither `nextRuns` nor `schedule`; the explanation
 contains no markup; a real analysis survives worker-result validation; and a
 result with `timezone.mode = 'Europe/Berlin'` is rejected at the boundary.
+
+
+### The push, and what was verified after it
+
+Pushed with `--force-with-lease` against the confirmed remote SHA — not
+`--force`, so the lease would have refused had anything landed on the remote in
+the meantime.
+
+| | SHA / id |
+|---|---|
+| Local final | `3cdcdd0` |
+| GitHub `main` after the push | `3cdcdd0` — GitHub API |
+| **Vercel production deployment** | `dpl_7PCjvDhVmY5urAz1zLdkr6rRvUp6`, `READY`, `githubCommitSha` = `3cdcdd0` — **Vercel API** |
+
+Three-way equality, each side read from its own API rather than inferred.
+
+**GitHub after the push:** one contributor (`theunknown107`, 125 commits); the
+five most recent commits all authored *and* committed as the noreply identity,
+all attributed to the account, none carrying a trailer; `vercel.json`, the cron
+domain, the cron tests, the restored `assets/icon.svg` and the updated
+`IMPLEMENTATION_STATUS.md` all present; `public/_headers`, the internal brief
+and `.env` all absent (404).
+
+**Vercel deployment metadata** now records the noreply address as the commit
+author. Earlier deployments retain the Gmail in their own historical metadata,
+which is a record of what was deployed at the time and is not rewritable.
+
+#### Live headers, measured against the production origin
+
+Every path carries what `vercel.json` declares:
+
+| Path | CSP | Other |
+|---|---|---|
+| `/`, `/assets/*.js`, `/assets/*.css`, `/manifest.webmanifest`, `/icons/*` | page policy, including `connect-src 'none'`, `frame-ancestors 'none'` and `upgrade-insecure-requests` | `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, Permissions-Policy, COOP, CORP, COEP, HSTS |
+| `/sw.js`, `/workbox-2fbc6a65.js` | **worker policy** — `default-src 'none'; script-src 'self'; connect-src 'self'` | `nosniff`, `no-referrer`, CORP, HSTS — and **no** page directives |
+
+Hashed assets and the Workbox chunk are `immutable`; `/`, `/sw.js` and the
+manifest are `must-revalidate`. **Clickjacking protection is live for the first
+time.**
+
+#### Live smoke tests
+
+Eight checks driven against `https://syntaxlab-jet.vercel.app` with Playwright,
+then removed:
+
+| | Result |
+|---|---|
+| App loads — not a Vercel login page — with **zero CSP violations** and no console errors | ✅ |
+| Brand, manifest, icon and worker assets resolve; `favicon.svg` carries `#0D0208` / `#00FF41` / `#008F11`, three paths, and none of the retired greens | ✅ |
+| Service worker registers, reaches `activated`, one registration scoped to the origin root, precache holds the worker chunks, the shell and the icons | ✅ |
+| **Offline:** network cut, page reloaded, app runs and analyses a regex | ✅ |
+| **Regex:** analysis, execution against a subject, catastrophic-backtracking timeout, and recovery on the next request | ✅ |
+| **JSON:** valid document, tree, format, malformed input reported, `__proto__` key pollutes nothing | ✅ |
+| **History and theme:** entry captured and listed, Crimson Night and Matrix both apply | ✅ |
+| **No cron UI:** no cron mode, no next-run or schedule surface | ✅ |
+
+Two of these failed on the first attempt and both were faults in the throwaway
+test rather than in the deployment: `navigator.serviceWorker.ready` resolves
+while the worker can still be `activating`, and the malformed-JSON assertion
+guessed at wording the committed journey already had right. Fixed in the test;
+the deployment was never at fault.
+
+### Deployment protection
+
+Vercel Authentication is **on** for every deployment except the production
+domain: preview and per-deployment URLs sit behind SSO, and
+`syntaxlab-jet.vercel.app` is public. Password protection and trusted IPs are
+off. That is the intended posture and is recorded here because it was read from
+the API rather than assumed.
+
+### Local backup refs
+
+Kept, both local-only and never pushed:
+
+| Ref | Points at |
+|---|---|
+| `refs/backup/pre-m15-authorship-cleanup` | `5993c3b` — the tip before the authorship rewrite |
+| `refs/backup/pre-m15-local-m14` | `71f9c1a` — the verified local M14 state before this session's work |
+
+They are the rollback path. Nothing else needs them.
