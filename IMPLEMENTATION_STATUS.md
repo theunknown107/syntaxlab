@@ -1980,32 +1980,44 @@ live site was showing the browser's blank-document glyph in the tab, because
 `index.html` declared no `rel="icon"` at all and the fallback request for
 `/favicon.ico` found nothing.
 
-**The mark** is an angular **S** framed by the two slashes of a regex literal —
-`/S/`. Full write-up, with the asset-flow diagram, in
+**The mark is `/^/`** — the two slashes of a regex literal with a caret between
+them. Full write-up, with the asset-flow diagram, in
 [`09_DESIGN_SYSTEM.md` §16](docs/09_DESIGN_SYSTEM.md).
 
-Two things worth recording here:
+### Restored, not redrawn
 
-**The existing icon was stale and nobody had noticed.** `assets/icon.svg` still
-used `#00ff88` and `#1fbf6b` — the pre-M10 green, retired when the M10
-correction pass adopted the specified Matrix palette. It now uses `#0D0208`,
-`#00FF41` and `#008F11`, so the icon and the product finally agree.
+The first attempt at this replaced the mark with an angular "S", and **that
+design was rejected.** The geometry was recovered verbatim from git —
+`git show 9364002^:assets/icon.svg` — down to the path data, stroke widths and
+cap style, rather than reinterpreted from memory.
 
-**The design was fixed by looking at it at 16 px, not at 512.** The first
-attempt had a 54 px stroke with the bars 84 apart — a 30 px counter inside a
-54 px stroke — and below about 32 px the letter filled in and read as a blob
-with two notches. The second attempt fixed the counters but kept the delimiters
-at every size, and at 16 px they took the width the S needed. The shipped
-version drops them below 48 px and crops the viewBox to the letter.
+**Only the palette moved.** The original was authored against the M8 theme
+tokens the M10 correction pass retired, and the original relationship —
+delimiters bright, caret deeper — is preserved:
+
+| | Obsolete | Current |
+|---|---|---|
+| Background | `#0a0e0c` | `#0D0208` |
+| Delimiters | `#00ff88` | `#00FF41` |
+| Caret | `#1fbf6b` | `#008F11` |
+
+### Small sizes are scaled, not simplified
+
+As authored the mark has 26/30 strokes inside a 512 box with a wide margin;
+straight to 16 px that is a 0.8 px stroke, under one device pixel, and it
+antialiases to a grey haze. The small lockup crops the viewBox to the mark's
+own bounds (about 1.5×) and grows the strokes to 38/42. **The path data is
+untouched and nothing is removed** — both delimiters and the caret are legible
+at 16 px, verified by rendering rather than assumed.
 
 | Asset | Sizes | Bytes |
 |---|---|---|
-| `public/favicon.svg` | scalable | 456 |
-| `public/favicon.ico` | 16 · 32 · 48 | 986 |
-| `public/apple-touch-icon.png` | 180 | 2 207 |
-| `public/icons/*.png` | 192 · 512 · maskable 512 | 12 458 |
+| `public/favicon.svg` | scalable | 568 |
+| `public/favicon.ico` | 16 · 32 · 48 | 2 521 |
+| `public/apple-touch-icon.png` | 180 | 2 822 |
+| `public/icons/*.png` | 192 · 512 · maskable 512 | 17 935 |
 
-**16.1 KB total, none of it in the JavaScript bundle.** No dependency was
+**23.3 KB total, none of it in the JavaScript bundle.** No dependency was
 added: the rasters come from the Chromium that Playwright already installs, and
 the `.ico` container is thirty lines against the documented format.
 

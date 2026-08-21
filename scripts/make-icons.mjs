@@ -17,32 +17,55 @@ import { chromium } from '@playwright/test';
  * ONE MARK, TWO LOCKUPS, and the rule is about display size rather than about
  * which file is being written:
  *
- *   small  (≤ 48 px — favicon.svg, favicon.ico)
- *          the letter alone, viewBox tightened around it
- *   large  (≥ 180 px — apple-touch-icon, PWA manifest icons)
- *          the full `/S/`, letter plus regex delimiters
+ *   small  (<= 48 px — favicon.svg, favicon.ico)
+ *          the same three elements, optically scaled: viewBox cropped to the
+ *          mark's own bounds and the strokes thickened to survive the tile
+ *   large  (>= 180 px — apple-touch-icon, PWA manifest icons)
+ *          the drawing exactly as authored
  *
- * This is not two designs. It is the same letterform, the same palette and the
- * same geometry, with a subordinate layer dropped where there are not enough
- * pixels to carry it — measured, not assumed: at 16 px the delimiters take the
- * width the S needs and the tile becomes a smudge.
+ * The small lockup is a **scaling**, not a simplification. Nothing is removed:
+ * both delimiters and the caret are present at 16 px, because the mark means
+ * "regex literal" and dropping either half would leave a different symbol.
+ *
+ * Why it is needed at all: as authored, the mark sits inside a 512 box with a
+ * wide margin and 26/30 strokes. Rendered straight to 16 px that is a 0.8 px
+ * stroke — below one device pixel, so it antialiases to a grey haze. Cropping
+ * the viewBox to the mark's bounds magnifies it about 1.5x, and the thicker
+ * strokes carry the rest.
  *
  * `favicon.svg` gets the small lockup specifically because a browser scales
  * one SVG to whatever the tab needs, usually 16 px. It has to be legible at
  * the smallest size it will ever be drawn at, not the largest.
+ *
  */
 
 const SOURCE = await readFile('assets/icon.svg', 'utf8');
 
-/** The letter's bounding box plus even padding, kept square. */
-const SMALL_VIEWBOX = '82 82 348 348';
+/**
+ * The mark's own bounds plus even padding, kept square and centred on 256.
+ *
+ * Union of the stroked slashes (x 93–419, y 125–387) and the caret
+ * (x 181–331, y 197–315), rounded out to a square.
+ */
+const SMALL_VIEWBOX = '81 81 350 350';
 
-/** The letter alone: delimiters removed, viewBox and backdrop cropped to match. */
+/** Stroke weights for the small lockup. Authored values are 26 and 30. */
+const SMALL_DELIMITER_STROKE = 38;
+const SMALL_CARET_STROKE = 42;
+
+/**
+ * The same mark, optically scaled for a tiny tile.
+ *
+ * Three edits, all of them scaling: crop the viewBox to the mark, grow the two
+ * stroke weights, and shrink the backdrop rect to match the crop. The path
+ * data is untouched.
+ */
 function smallLockup(svg) {
   return svg
     .replace('viewBox="0 0 512 512"', `viewBox="${SMALL_VIEWBOX}"`)
-    .replace(/<g id="delimiters"[\s\S]*?<\/g>\s*/, '')
-    .replace('<rect width="512" height="512"', '<rect x="82" y="82" width="348" height="348"');
+    .replace('<rect width="512" height="512"', '<rect x="81" y="81" width="350" height="350"')
+    .replace('stroke-width="26"', `stroke-width="${SMALL_DELIMITER_STROKE}"`)
+    .replace('stroke-width="30"', `stroke-width="${SMALL_CARET_STROKE}"`);
 }
 
 const RASTERS = [

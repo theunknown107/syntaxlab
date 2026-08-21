@@ -862,21 +862,38 @@ nothing, and drew its blank-document glyph in the tab.
 
 ### The mark
 
-An angular **S** framed by the two slashes of a regex literal — `/S/`. The S is
-the product; the slashes are what the application draws around the pattern
-field itself, so the mark says *syntax* without spelling a word that would be
-illegible at 16 px.
+`/^/` — the two slashes of a **regex literal** with a **caret** between them.
+The delimiters are what the application draws around the pattern field itself,
+and the caret is the anchor every developer reads as "start of". Together they
+say *regex* without spelling a word that would be illegible at 16 px.
 
 Colours are the specified Matrix palette (§12.1) rather than the theme tokens:
-`#0D0208` ground, `#00FF41` letter, `#008F11` delimiters. The icon does **not**
+`#0D0208` ground, `#00FF41` delimiters, `#008F11` caret. The icon does **not**
 follow the runtime theme and is not meant to — a manifest is a static build
 artefact, a splash screen cannot re-render on a preference change, and a brand
 mark that changes colour is not a brand mark. A user running Crimson Night gets
 a Matrix-green icon, deliberately.
 
-The previous `assets/icon.svg` used `#00ff88` and `#1fbf6b`: the pre-M10 green,
-retired when the M10 correction pass adopted the specified Matrix palette. The
-icon had simply never been revisited.
+### Restored, not redrawn
+
+An intermediate change replaced this mark with an angular "S" and **that design
+was rejected**. The geometry now in `assets/icon.svg` is recovered verbatim
+from git — `git show 9364002^:assets/icon.svg` — down to the path data, the
+stroke widths and the cap style. Nothing was reinterpreted from memory.
+
+**Only the palette moved**, because the original was authored against the M8
+theme tokens that the M10 correction pass retired. The relationship the
+original expressed — delimiters bright, caret deeper — is preserved:
+
+| | Obsolete | Current |
+|---|---|---|
+| Background | `#0a0e0c` | `#0D0208` |
+| Delimiters | `#00ff88` | `#00FF41` |
+| Caret | `#1fbf6b` | `#008F11` |
+
+`#008F11` is the only value in the palette that keeps the caret a *second*
+green rather than collapsing the mark to one flat colour, which is why it is
+the caret's colour even though it is the dimmer of the two.
 
 ### One mark, two lockups
 
@@ -885,8 +902,8 @@ flowchart TD
     SRC["assets/icon.svg<br/><b>the canonical drawing</b>"]
     GEN["scripts/make-icons.mjs<br/><i>npm run icons</i>"]
 
-    SMALL["small lockup<br/>letter alone, viewBox cropped"]
-    LARGE["large lockup<br/>letter + delimiters"]
+    SMALL["small lockup<br/>optically scaled"]
+    LARGE["large lockup<br/>exactly as authored"]
 
     SVG["public/favicon.svg"]
     ICO["public/favicon.ico<br/>16 · 32 · 48"]
@@ -911,30 +928,19 @@ The split is by **display size, not by file**:
 
 | | Lockup | Why |
 |---|---|---|
-| ≤ 48 px — `favicon.svg`, `favicon.ico` | letter alone | Three vertical elements cannot survive sixteen pixels. The slashes took the width the S needed and the tile became a smudge. |
-| ≥ 180 px — Apple touch, manifest icons | full `/S/` | Always drawn large, where the delimiters are what make the mark distinctive rather than a generic letter tile. |
+| ≤ 48 px — `favicon.svg`, `favicon.ico` | optically scaled | As authored, the mark sits in a 512 box with a wide margin and 26/30 strokes. Rendered straight to 16 px that is a 0.8 px stroke — under one device pixel, so it antialiases to a grey haze. |
+| ≥ 180 px — Apple touch, manifest icons | exactly as authored | Always drawn large, where the original proportions are what the mark is. |
 
-This is not two designs. Same letterform, same palette, same geometry — a
-subordinate layer dropped where there are not enough pixels to carry it, which
-is what optical sizing means. Both lockups are produced from the one drawing by
-transform, so they cannot drift apart by hand.
+**The small lockup is a scaling, not a simplification.** Three edits, all of
+them scaling: crop the viewBox to the mark's own bounds (`81 81 350 350`, about
+1.5×), grow the delimiter stroke 26 → 38 and the caret 30 → 42, and shrink the
+backdrop to match. **The path data is untouched, and nothing is removed** —
+both delimiters and the caret are present at 16 px, because the mark means
+"regex literal" and dropping either half would leave a different symbol.
 
-`favicon.svg` gets the *small* lockup specifically because a browser scales one
+`favicon.svg` gets the small lockup specifically because a browser scales one
 SVG to whatever the tab needs, usually 16 px. It has to be legible at the
 smallest size it will ever be drawn at, not the largest.
-
-### Two things the geometry is solving
-
-Both were found by rendering the mark at 16 px and looking at it, not by
-admiring the 512.
-
-**Counters must be wider than the stroke.** The bars sit 128 apart with a 52
-stroke, leaving a 76 px counter. The first attempt used a 54 stroke with the
-bars 84 apart — a 30 px counter inside a 54 px stroke — and below about 32 px
-the letter filled in and read as a blob with two notches.
-
-**Butt caps and mitred joins.** A typographic S with round terminals turns to
-mush at tab size; a blunt one keeps its corners and stays an S.
 
 ### Assets, and what they cost
 
@@ -945,14 +951,14 @@ need none of it.
 
 | File | Size | Bytes |
 |---|---|---|
-| `favicon.svg` | scalable | 456 |
-| `favicon.ico` | 16 · 32 · 48 | 986 |
-| `apple-touch-icon.png` | 180 | 2 207 |
-| `icons/icon-192.png` | 192 | 2 187 |
-| `icons/icon-512.png` | 512 | 5 317 |
-| `icons/icon-maskable-512.png` | 512, 20% inset | 4 954 |
+| `favicon.svg` | scalable | 568 |
+| `favicon.ico` | 16 · 32 · 48 | 2 521 |
+| `apple-touch-icon.png` | 180 | 2 822 |
+| `icons/icon-192.png` | 192 | 2 949 |
+| `icons/icon-512.png` | 512 | 8 782 |
+| `icons/icon-maskable-512.png` | 512, 20% inset | 6 204 |
 
-**16.1 KB in total, and none of it touches the JavaScript bundle.** The `.ico`
+**23.3 KB in total, and none of it touches the JavaScript bundle.** The `.ico`
 is written by thirty lines against the documented format rather than by a
 dependency: PNG-compressed entries are what every browser and every Windows
 since Vista reads, and the alternative is a BMP encoder and three times the

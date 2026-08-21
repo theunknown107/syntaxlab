@@ -1,60 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SyntaxLab">
   <!--
-    The canonical SyntaxLab mark — 09_DESIGN_SYSTEM.md §15, 07_PWA_OFFLINE.md §6
+    The canonical SyntaxLab mark — 09_DESIGN_SYSTEM.md §16, 07_PWA_OFFLINE.md §6
 
     THE source of truth. Every icon the product ships is rendered from this one
     file by scripts/make-icons.mjs: the browser favicon, the .ico fallback, the
     Apple touch icon and the PWA manifest icons. There is deliberately no
-    second drawing anywhere — four unrelated logos is the usual way an icon set
-    stops being a brand.
+    second drawing anywhere.
 
-    The mark is an angular **S** framed by the two slashes of a regex literal.
-    The S is the product; the slashes are what the application draws around the
-    pattern field itself, so the mark says "syntax" without spelling a word
-    that would be illegible at 16 px.
-
-    Colours are the specified Matrix palette (09_DESIGN_SYSTEM.md §12.1), not
-    the theme tokens. The manifest is a static build artefact and a splash
-    screen cannot follow a runtime theme, so the icon stays Matrix green even
-    for a user running Crimson Night.
+    The mark is `/^/` — the regex literal delimiters that frame the pattern
+    input in the application itself, with a caret between them. It says what
+    the product is without spelling out a word that would be illegible at
+    48 px.
 
     ---
 
-    TWO THINGS THIS GEOMETRY IS SOLVING, both found by rendering it rather than
-    by looking at the 512:
+    RESTORED, NOT REDRAWN. A previous change replaced this with an angular "S"
+    and it was rejected. The geometry below is recovered verbatim from git —
+    `git show 9364002^:assets/icon.svg` — down to the path data, stroke widths
+    and cap style. Nothing was reinterpreted from memory.
 
-    1. **Counters wider than the stroke.** The bars sit 128 apart with a 52
-       stroke, leaving a 76 px counter. A first attempt used a 54 stroke with
-       the bars 84 apart — a 30 px counter inside a 54 px stroke — and the
-       letter filled in below about 32 px and read as a blob with two notches.
-       Once a counter is narrower than the stroke around it, the shape is gone.
+    **Only the palette moved.** The original was authored against the M8 theme
+    tokens, which the M10 correction pass retired. The obsolete values and
+    their replacements, keeping the original relationship intact — delimiters
+    bright, caret deeper:
 
-    2. **The delimiters are a separate layer on purpose.** At 16 px three
-       vertical elements across sixteen pixels cannot all survive; the slashes
-       took the width the S needed and the whole tile became a smudge. So
-       `#delimiters` is hidden and the viewBox tightened to `SMALL_VIEWBOX`
-       below for the 16 and 32 px raster entries. That is a crop and a hidden
-       layer — the same mark, optically sized — not a second drawing.
+        background   #0a0e0c  ->  #0D0208
+        delimiters   #00ff88  ->  #00FF41
+        caret        #1fbf6b  ->  #008F11
+
+    Those are the specified Matrix palette (09_DESIGN_SYSTEM.md §12.1) rather
+    than theme tokens: a manifest is a static build artefact and a splash
+    screen cannot follow a runtime theme, so the icon stays Matrix green even
+    for a user running Crimson Night.
+
+    Small sizes are handled by optical scaling in the generator — thicker
+    strokes and a tighter viewBox, the same three elements. See
+    `scripts/make-icons.mjs`.
   -->
   <rect width="512" height="512" fill="#0D0208" />
 
-  <!-- The regex delimiters. Drawn first so the S sits over them, and kept
-       clear of its outer box (x 138–374) so the two never collide.
-       Hidden for the smallest rasters; see the note above. -->
-  <g id="delimiters" stroke="#008F11" stroke-width="26" stroke-linecap="round" fill="none">
-    <path d="M78 400 L116 112" />
-    <path d="M396 400 L434 112" />
+  <!-- Slashes: the regex delimiters. -->
+  <g stroke="#00FF41" stroke-width="26" stroke-linecap="round" fill="none">
+    <path d="M150 138 L106 374" />
+    <path d="M406 138 L362 374" />
   </g>
 
-  <!-- The S. Butt caps and mitred joins: a typographic S with round terminals
-       turns to mush below about 24 px, where a blunt one keeps its corners. -->
+  <!-- The caret, in the deeper Matrix green, so the mark carries two steps of
+       the palette rather than a single flat colour. -->
   <path
-    id="letter"
-    d="M348 128 L178 128 L178 256 L334 256 L334 384 L164 384"
+    d="M196 300 L256 212 L316 300"
+    stroke="#008F11"
+    stroke-width="30"
+    stroke-linecap="round"
+    stroke-linejoin="round"
     fill="none"
-    stroke="#00FF41"
-    stroke-width="52"
-    stroke-linejoin="miter"
-    stroke-linecap="butt"
   />
 </svg>

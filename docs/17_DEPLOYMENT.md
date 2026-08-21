@@ -1,8 +1,8 @@
 # 17 — Deployment
 
 **Project:** SyntaxLab
-**Status:** Draft for human review
-**Last updated:** 2026-08-17
+**Status:** Partly superseded — see the note below
+**Last updated:** 2026-08-21
 
 ---
 
@@ -10,7 +10,52 @@
 
 ## 1. Target
 
-**Cloudflare Pages**, static hosting, per the brief and the playbook.
+> **What is actually deployed, as of the first public release.**
+>
+> SyntaxLab is hosted on **Vercel**, not Cloudflare Pages, at
+> **https://syntaxlab-jet.vercel.app** — public, serving the application, and
+> deploying automatically from `main` on `github.com/theunknown107/syntaxlab`.
+>
+> The Cloudflare plan below was written in Phase 1 and is kept because the
+> **requirements** it sets out are provider-independent and still govern the
+> build: a static bundle, a real CSP delivered as headers, immutable hashed
+> assets, revalidated entry points, noindexed previews, and no HTML-rewriting
+> features. What is Cloudflare-specific is the *mechanism*:
+>
+> | Cloudflare mechanism | On Vercel |
+> |---|---|
+> | `public/_headers` | Not read by Vercel. Header configuration is provider-specific and **is not yet ported** — see the gap below. |
+> | Pages build settings | Vercel project settings, wired to the GitHub repository |
+> | Rocket Loader / Auto Minify / Email Obfuscation must be off | Not applicable; Vercel does not rewrite HTML by default |
+>
+> **The open gap, measured against the live deployment rather than assumed.**
+> `public/_headers` is Cloudflare's format and Vercel does not read it, so the
+> response headers it defines are not being sent. What that does and does not
+> cost, checked with `curl` against `syntaxlab-jet.vercel.app`:
+>
+> | | Live status |
+> |---|---|
+> | **CSP** — `default-src`, `script-src`, `style-src`, `img-src`, `font-src`, `connect-src`, `worker-src`, `manifest-src`, `base-uri`, `form-action`, `object-src` | ✅ **Enforced**, via the `<meta http-equiv>` tag in `index.html`, which ships in the build and is present in the deployed HTML |
+> | `frame-ancestors` | ❌ **Missing.** It is ignored in a meta tag by specification, so it only ever worked as a header |
+> | `X-Frame-Options` | ❌ Missing — the same clickjacking protection, also header-only |
+> | `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` | ❌ Missing |
+> | `Cross-Origin-Opener-Policy` / `-Resource-Policy` / `-Embedder-Policy` | ❌ Missing |
+> | `Strict-Transport-Security` | ✅ Present — Vercel's own default, and *stronger* than the project's (`max-age=63072000; includeSubDomains; preload`) |
+> | Service-worker CSP on `/sw.js` | ❌ Missing. Harmless in practice: the narrower policy existed to *permit* Workbox's precache fetches under the site-wide `connect-src 'none'`, and with no header at all the worker is simply unrestricted. Offline works. |
+>
+> So the substantive loss is **clickjacking protection** — `frame-ancestors`
+> and `X-Frame-Options` — plus the defence-in-depth headers. The
+> script/style/connect policy that carries the privacy claim is intact.
+>
+> **This is unresolved and is not claimed to be working.** The local production
+> server (`npm run serve:prod`) parses `_headers`, and every header test
+> asserts against it, so the policy is verified *as authored* — which is not
+> the same as verified *as served*. Porting it to `vercel.json` or moving
+> hosting back to Cloudflare is a human decision and has not been made here.
+
+**Cloudflare Pages**, static hosting, per the brief and the playbook — the
+original plan, retained for its requirements rather than as a description of
+current hosting.
 
 | Requirement | Cloudflare Pages |
 |---|---|
@@ -103,7 +148,7 @@ dist/
 │   ├── index-<hash>.css
 │   └── fonts/*.woff2
 ├── icons/                    manifest icons: 192, 512, maskable 512
-├── favicon.svg               tab icon, the letter alone
+├── favicon.svg               tab icon, optically scaled
 ├── favicon.ico               16 · 32 · 48, PNG entries
 ├── apple-touch-icon.png      180, the full mark
 ├── manifest.webmanifest
