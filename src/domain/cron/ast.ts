@@ -46,6 +46,12 @@ export interface CronFieldSpec {
   readonly names: Readonly<Record<string, number>>;
   /** How the field is described in prose. */
   readonly label: string;
+  /**
+   * The plural of `label`. Stored rather than derived: "day of the month"
+   * pluralises on its first word, not its last, and a rule that gets that
+   * right is longer than the five strings it would replace.
+   */
+  readonly pluralLabel: string;
 }
 
 const MONTH_NAMES: Readonly<Record<string, number>> = {
@@ -74,11 +80,32 @@ const DAY_NAMES: Readonly<Record<string, number>> = {
 };
 
 export const CRON_FIELD_SPECS: Readonly<Record<CronFieldName, CronFieldSpec>> = {
-  minute: { name: 'minute', min: 0, max: 59, names: {}, label: 'minute' },
-  hour: { name: 'hour', min: 0, max: 23, names: {}, label: 'hour' },
-  dayOfMonth: { name: 'dayOfMonth', min: 1, max: 31, names: {}, label: 'day of the month' },
-  month: { name: 'month', min: 1, max: 12, names: MONTH_NAMES, label: 'month' },
-  dayOfWeek: { name: 'dayOfWeek', min: 0, max: 7, names: DAY_NAMES, label: 'day of the week' },
+  minute: { name: 'minute', min: 0, max: 59, names: {}, label: 'minute', pluralLabel: 'minutes' },
+  hour: { name: 'hour', min: 0, max: 23, names: {}, label: 'hour', pluralLabel: 'hours' },
+  dayOfMonth: {
+    name: 'dayOfMonth',
+    min: 1,
+    max: 31,
+    names: {},
+    label: 'day of the month',
+    pluralLabel: 'days of the month',
+  },
+  month: {
+    name: 'month',
+    min: 1,
+    max: 12,
+    names: MONTH_NAMES,
+    label: 'month',
+    pluralLabel: 'months',
+  },
+  dayOfWeek: {
+    name: 'dayOfWeek',
+    min: 0,
+    max: 7,
+    names: DAY_NAMES,
+    label: 'day of the week',
+    pluralLabel: 'days of the week',
+  },
 };
 
 /* ------------------------------------------------------------------ *

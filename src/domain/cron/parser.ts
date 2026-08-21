@@ -385,22 +385,30 @@ function parseStep(stepText: string, base: CronTerm, at: StepContext): TermOutco
  * ------------------------------------------------------------------ */
 
 /** Expands one term to the values it selects, within the field's range. */
+function inclusiveRange(from: number, to: number): number[] {
+  const values: number[] = [];
+  for (let value = from; value <= to; value += 1) values.push(value);
+  return values;
+}
+
 function expand(term: CronTerm, spec: CronFieldSpec): number[] {
   switch (term.kind) {
-    case 'all': {
-      const values: number[] = [];
-      for (let value = spec.min; value <= spec.max; value += 1) values.push(value);
-      return values;
-    }
+    case 'all':
+      return inclusiveRange(spec.min, spec.max);
     case 'value':
       return [term.value];
-    case 'range': {
-      const values: number[] = [];
-      for (let value = term.from; value <= term.to; value += 1) values.push(value);
-      return values;
-    }
+    case 'range':
+      return inclusiveRange(term.from, term.to);
     case 'step': {
-      const base = expand(term.base, spec);
+      // A step whose base is a single value runs from that value to the end
+      // of the field: `5/10` is `5-59/10`, which is how Vixie cron and cronie
+      // both read it. Not universal — `NON_STANDARD_STEP_BASE` says so — but
+      // expanding it to the base value alone would be a third reading that no
+      // scheduler implements, which is worse than picking the common one.
+      const base =
+        term.base.kind === 'value'
+          ? inclusiveRange(term.base.value, spec.max)
+          : expand(term.base, spec);
       const start = base[0] ?? spec.min;
       // A step selects every nth value *from the start of the base range*,
       // which is what `*/15` and `1-10/2` both mean.

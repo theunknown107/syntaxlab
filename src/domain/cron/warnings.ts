@@ -68,9 +68,10 @@ function stepBaseWarnings(fields: readonly CronField[]): CronWarning[] {
       if (!stepsOnBareValue(term)) continue;
       warnings.push({
         code: 'NON_STANDARD_STEP_BASE',
-        message: 'A step on a single value behaves differently between schedulers.',
+        message:
+          'A step on a single value behaves differently between schedulers. This reading is "from that value to the end of the field, every nth", which is what Vixie cron and cronie do.',
         span: term.span,
-        hint: 'Some read it as "from this value onwards, every nth"; others reject it. Writing the range explicitly, as `a-b/n`, means the same thing everywhere.',
+        hint: 'Other schedulers reject it outright. Writing the range explicitly, as `a-b/n`, means the same thing everywhere.',
       });
     }
   }

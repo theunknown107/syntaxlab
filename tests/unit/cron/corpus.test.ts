@@ -199,6 +199,45 @@ describe('regressions', () => {
     expect(result.value.errors[0]?.message).toMatch(/Quartz/);
   });
 
+  it('a step on a single value runs to the end of the field', () => {
+    // It expanded to the base value alone, which is a reading no scheduler
+    // implements: `5/10` is `5-59/10` in Vixie cron and cronie.
+    const analysis = analyse('5/10 * * * *');
+    expect(analysis?.fields.find((f) => f.name === 'minute')?.resolved).toEqual([
+      5, 15, 25, 35, 45, 55,
+    ]);
+    // And the warning says which reading was applied, not just that readings
+    // differ — a warning the reader cannot act on is noise.
+    const warning = analysis?.warnings.find((w) => w.code === 'NON_STANDARD_STEP_BASE');
+    expect(warning?.message).toMatch(/end of the field/);
+  });
+
+  it('counts in a step are plural', () => {
+    // "every 15 minute" shipped for a while, because the field label is
+    // singular and the count was concatenated onto it.
+    const body = JSON.stringify(
+      analyse('*/15 * * * *')?.explanation.details.find((d) => d.id === 'cron-minute'),
+    );
+    expect(body).toContain('every 15 minutes');
+    expect(body).not.toContain('every 15 minute.');
+  });
+
+  it('names the field once per list, not once per term', () => {
+    // The section title also carries the field name, so only the body counts.
+    const body = JSON.stringify(
+      analyse('0 0 1,15 * *')?.explanation.details.find((d) => d.id === 'cron-dayOfMonth')?.body,
+    );
+    expect(body.match(/day of the month/g)).toHaveLength(1);
+  });
+
+  it('reads a contiguous hour range as a window, ending at :59', () => {
+    // `9-17` includes the whole of the 17:00 hour. "9 hours of the day" was
+    // true and impossible to check against a scheduler.
+    const summary = JSON.stringify(analyse('*/15 9-17 * * *')?.explanation.summary);
+    expect(summary).toContain('every 15 minutes');
+    expect(summary).toContain('between 09:00 and 17:59');
+  });
+
   it('a full-range list does not count as a restriction for the OR rule', () => {
     const analysis = analyse('0 0 1-31 * 1');
     expect(analysis?.warnings.map((w) => w.code)).not.toContain('DOM_DOW_OR_RULE');
