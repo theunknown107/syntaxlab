@@ -851,3 +851,131 @@ than red by construction and is a yellow.
 **Result: non-green themes contain no green as a decorative/theme hue.** That
 is the claim the tests support — not that no green pixel exists anywhere, which
 would be false, because the success colour is green by design.
+
+---
+
+## 16. The brand mark
+
+The product had no favicon at all until this was built: `index.html` declared
+no `rel="icon"`, so every browser fell back to requesting `/favicon.ico`, found
+nothing, and drew its blank-document glyph in the tab.
+
+### The mark
+
+An angular **S** framed by the two slashes of a regex literal — `/S/`. The S is
+the product; the slashes are what the application draws around the pattern
+field itself, so the mark says *syntax* without spelling a word that would be
+illegible at 16 px.
+
+Colours are the specified Matrix palette (§12.1) rather than the theme tokens:
+`#0D0208` ground, `#00FF41` letter, `#008F11` delimiters. The icon does **not**
+follow the runtime theme and is not meant to — a manifest is a static build
+artefact, a splash screen cannot re-render on a preference change, and a brand
+mark that changes colour is not a brand mark. A user running Crimson Night gets
+a Matrix-green icon, deliberately.
+
+The previous `assets/icon.svg` used `#00ff88` and `#1fbf6b`: the pre-M10 green,
+retired when the M10 correction pass adopted the specified Matrix palette. The
+icon had simply never been revisited.
+
+### One mark, two lockups
+
+```mermaid
+flowchart TD
+    SRC["assets/icon.svg<br/><b>the canonical drawing</b>"]
+    GEN["scripts/make-icons.mjs<br/><i>npm run icons</i>"]
+
+    SMALL["small lockup<br/>letter alone, viewBox cropped"]
+    LARGE["large lockup<br/>letter + delimiters"]
+
+    SVG["public/favicon.svg"]
+    ICO["public/favicon.ico<br/>16 · 32 · 48"]
+    APPLE["public/apple-touch-icon.png<br/>180"]
+    PWA["public/icons/*.png<br/>192 · 512 · maskable 512"]
+
+    TAB["browser tab,<br/>bookmarks"]
+    HOME["iOS home screen"]
+    INSTALL["PWA install,<br/>launcher, splash"]
+
+    SRC --> GEN
+    GEN --> SMALL --> SVG --> TAB
+    SMALL --> ICO --> TAB
+    GEN --> LARGE --> APPLE --> HOME
+    LARGE --> PWA --> INSTALL
+
+    classDef source stroke-width:3px
+    class SRC source
+```
+
+The split is by **display size, not by file**:
+
+| | Lockup | Why |
+|---|---|---|
+| ≤ 48 px — `favicon.svg`, `favicon.ico` | letter alone | Three vertical elements cannot survive sixteen pixels. The slashes took the width the S needed and the tile became a smudge. |
+| ≥ 180 px — Apple touch, manifest icons | full `/S/` | Always drawn large, where the delimiters are what make the mark distinctive rather than a generic letter tile. |
+
+This is not two designs. Same letterform, same palette, same geometry — a
+subordinate layer dropped where there are not enough pixels to carry it, which
+is what optical sizing means. Both lockups are produced from the one drawing by
+transform, so they cannot drift apart by hand.
+
+`favicon.svg` gets the *small* lockup specifically because a browser scales one
+SVG to whatever the tab needs, usually 16 px. It has to be legible at the
+smallest size it will ever be drawn at, not the largest.
+
+### Two things the geometry is solving
+
+Both were found by rendering the mark at 16 px and looking at it, not by
+admiring the 512.
+
+**Counters must be wider than the stroke.** The bars sit 128 apart with a 52
+stroke, leaving a 76 px counter. The first attempt used a 54 stroke with the
+bars 84 apart — a 30 px counter inside a 54 px stroke — and below about 32 px
+the letter filled in and read as a blob with two notches.
+
+**Butt caps and mitred joins.** A typographic S with round terminals turns to
+mush at tab size; a blunt one keeps its corners and stays an S.
+
+### Assets, and what they cost
+
+Rendered by `npm run icons`, which drives the Chromium that Playwright already
+installs rather than adding an image dependency for six files that change
+roughly never. The outputs are committed, so a normal build and a normal clone
+need none of it.
+
+| File | Size | Bytes |
+|---|---|---|
+| `favicon.svg` | scalable | 456 |
+| `favicon.ico` | 16 · 32 · 48 | 986 |
+| `apple-touch-icon.png` | 180 | 2 207 |
+| `icons/icon-192.png` | 192 | 2 187 |
+| `icons/icon-512.png` | 512 | 5 317 |
+| `icons/icon-maskable-512.png` | 512, 20% inset | 4 954 |
+
+**16.1 KB in total, and none of it touches the JavaScript bundle.** The `.ico`
+is written by thirty lines against the documented format rather than by a
+dependency: PNG-compressed entries are what every browser and every Windows
+since Vista reads, and the alternative is a BMP encoder and three times the
+bytes.
+
+The maskable variant is inset to the 80% safe zone, because a maskable icon is
+cropped to whatever shape the platform likes and a mark drawn to the edges
+loses its ends to a circle.
+
+### Declared, without conflicts
+
+```html
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+```
+
+Three, and no more: the `.ico` for browsers that look for only one and for the
+bookmark bar, the SVG that every current browser prefers, and the Apple touch
+icon, which iOS uses for the home screen and never reads from the manifest. The
+manifest itself is injected at build time by `vite-plugin-pwa` and points at
+the same set.
+
+All same-origin static files. The CSP allows `img-src 'self'` and nothing is
+fetched from anywhere else — no CDN, no icon host, no runtime request, and no
+JavaScript that rewrites the favicon when the theme changes.

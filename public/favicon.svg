@@ -1,0 +1,14 @@
+<!-- Generated from assets/icon.svg by scripts/make-icons.mjs. Do not edit. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="82 82 348 348" role="img" aria-label="SyntaxLab">
+  <rect x="82" y="82" width="348" height="348" fill="#0D0208" />
+
+  <path
+    id="letter"
+    d="M348 128 L178 128 L178 256 L334 256 L334 384 L164 384"
+    fill="none"
+    stroke="#00FF41"
+    stroke-width="52"
+    stroke-linejoin="miter"
+    stroke-linecap="butt"
+  />
+</svg>

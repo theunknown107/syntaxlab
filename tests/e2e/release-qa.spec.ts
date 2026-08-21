@@ -100,6 +100,46 @@ async function setEditor(page: Page, name: string | RegExp, text: string): Promi
 }
 
 /* ------------------------------------------------------------------ *
+ * The brand icons, on every engine
+ * ------------------------------------------------------------------ */
+
+test('the browser fetches a branded icon, on every engine', async ({ page, request }) => {
+  const watcher = watch(page);
+  const failed: string[] = [];
+  page.on('requestfailed', (request) => {
+    failed.push(`${request.url()} — ${request.failure()?.errorText ?? 'failed'}`);
+  });
+  const statuses = new Map<string, number>();
+  page.on('response', (response) => {
+    const path = new URL(response.url()).pathname;
+    if (/favicon|apple-touch-icon|\/icons\//.test(path)) statuses.set(path, response.status());
+  });
+
+  await start(page);
+
+  // Requested explicitly rather than waiting to see what this engine chooses
+  // on its own: they differ, and a 404 on any of them is the defect. Chromium
+  // and Firefox take the SVG, Safari the .ico or the touch icon.
+  //
+  // Fetched through the test's own HTTP client, not from inside the page. A
+  // first version used `fetch()` in the document and every engine failed it —
+  // correctly, because the page ships `connect-src 'none'` and blocks exactly
+  // that. The icons are `img-src`, which is a different directive; asking the
+  // document to fetch them was testing the CSP, not the icons.
+  for (const path of ['/favicon.svg', '/favicon.ico', '/apple-touch-icon.png']) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(200);
+    expect((await response.body()).length, path).toBeGreaterThan(100);
+  }
+
+  // Nothing the engine chose for itself may have failed either.
+  expect([...statuses].filter(([, status]) => status >= 400)).toEqual([]);
+  expect(failed.filter((url) => /favicon|apple-touch|icons/.test(url))).toEqual([]);
+
+  await assertClean(page, watcher, 'icon requests');
+});
+
+/* ------------------------------------------------------------------ *
  * Journey A — Regex, end to end
  * ------------------------------------------------------------------ */
 

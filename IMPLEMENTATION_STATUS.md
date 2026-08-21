@@ -1970,3 +1970,60 @@ the readiness document.
 | D50 | **The local production server drops one CSP directive** | `upgrade-insecure-requests` on an HTTP localhost origin makes WebKit rewrite every subresource to `https://localhost`, where nothing listens. A no-op on the HTTPS production origin. Asserted as the only difference, by a test that reads `_headers`. |
 | D51 | **The README ships without a live link or badges** | There is no deployment and no git remote yet, so both would be promises rather than facts. Added at M13, when there is an address behind them. |
 | D52 | **CVD is reported, not gated** | The measurement exists and is recorded; a threshold that fails the build would either be set below what the palette achieves, which is theatre, or block a release over a rare deficiency the interface already mitigates with text. |
+
+---
+
+## Post-M12 — the brand mark
+
+**Not a milestone.** A branding fix applied after the first public push: the
+live site was showing the browser's blank-document glyph in the tab, because
+`index.html` declared no `rel="icon"` at all and the fallback request for
+`/favicon.ico` found nothing.
+
+**The mark** is an angular **S** framed by the two slashes of a regex literal —
+`/S/`. Full write-up, with the asset-flow diagram, in
+[`09_DESIGN_SYSTEM.md` §16](docs/09_DESIGN_SYSTEM.md).
+
+Two things worth recording here:
+
+**The existing icon was stale and nobody had noticed.** `assets/icon.svg` still
+used `#00ff88` and `#1fbf6b` — the pre-M10 green, retired when the M10
+correction pass adopted the specified Matrix palette. It now uses `#0D0208`,
+`#00FF41` and `#008F11`, so the icon and the product finally agree.
+
+**The design was fixed by looking at it at 16 px, not at 512.** The first
+attempt had a 54 px stroke with the bars 84 apart — a 30 px counter inside a
+54 px stroke — and below about 32 px the letter filled in and read as a blob
+with two notches. The second attempt fixed the counters but kept the delimiters
+at every size, and at 16 px they took the width the S needed. The shipped
+version drops them below 48 px and crops the viewBox to the letter.
+
+| Asset | Sizes | Bytes |
+|---|---|---|
+| `public/favicon.svg` | scalable | 456 |
+| `public/favicon.ico` | 16 · 32 · 48 | 986 |
+| `public/apple-touch-icon.png` | 180 | 2 207 |
+| `public/icons/*.png` | 192 · 512 · maskable 512 | 12 458 |
+
+**16.1 KB total, none of it in the JavaScript bundle.** No dependency was
+added: the rasters come from the Chromium that Playwright already installs, and
+the `.ico` container is thirty lines against the documented format.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Typecheck / ESLint / Stylelint / Prettier | ✅ clean |
+| Unit tests | ✅ 2 167 passed |
+| Full E2E matrix | ✅ **681 passed**, 11 skipped, of 682. The one failure is a different `workers-firefox` test on each run — the Vite dev-server contention flake documented in `25_RELEASE_READINESS.md` §3, which passes 3/3 in isolation and has nothing to do with icons |
+| Icon assets resolve on all four targets | ✅ Chromium, Firefox, WebKit, Pixel 5 |
+| `favicon.ico` structure | ✅ parsed: 3 PNG entries, dimensions read from each IHDR |
+| Precache | ✅ all six icons, after adding `ico` to `globPatterns` |
+| Initial JS | ✅ unchanged — icons are static assets |
+| CSP | ✅ unchanged; `img-src 'self'` already covered them |
+
+**One test caught a real thing about the product.** The first version of the
+cross-engine check called `fetch()` from inside the page and failed on every
+engine — correctly, because the app ships `connect-src 'none'`. Icons are
+`img-src`, a different directive; asking the document to fetch them was testing
+the CSP rather than the icons. The check now uses the test's own HTTP client.

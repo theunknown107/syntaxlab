@@ -227,6 +227,107 @@ test.describe('installability', () => {
 });
 
 /* ------------------------------------------------------------------ *
+ * Brand icons
+ * ------------------------------------------------------------------ */
+
+test.describe('brand icons', () => {
+  test('the page declares an icon, and every declaration resolves', async ({ page, request }) => {
+    await page.goto('/');
+
+    // Three declarations and no more: the .ico for browsers that look for only
+    // one, the SVG that current browsers prefer and scale, and the Apple touch
+    // icon iOS uses for the home screen. A fourth would be a conflict, and
+    // none at all is what left the live site showing a blank document.
+    const declared = await page.evaluate(() =>
+      [...document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]')].map(
+        (link) => ({
+          rel: link.getAttribute('rel'),
+          href: link.getAttribute('href'),
+          type: link.getAttribute('type'),
+        }),
+      ),
+    );
+    expect(declared).toEqual([
+      { rel: 'icon', href: '/favicon.ico', type: null },
+      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+      { rel: 'apple-touch-icon', href: '/apple-touch-icon.png', type: null },
+    ]);
+
+    for (const { href } of declared) {
+      const response = await request.get(`${ORIGIN}${href}`);
+      expect(response.status(), href).toBe(200);
+      expect((await response.body()).length, href).toBeGreaterThan(100);
+    }
+  });
+
+  test('favicon.ico carries the small sizes, as PNG entries', async ({ request }) => {
+    const ico = await (await request.get(`${ORIGIN}/favicon.ico`)).body();
+
+    // Parsed rather than trusted: an .ico that declares sizes it does not
+    // contain still returns 200 and still shows nothing in a tab.
+    expect(ico.readUInt16LE(0), 'reserved').toBe(0);
+    expect(ico.readUInt16LE(2), 'type 1 = icon').toBe(1);
+    const count = ico.readUInt16LE(4);
+    expect(count).toBe(3);
+
+    const sizes = [];
+    for (let index = 0; index < count; index += 1) {
+      const at = 6 + index * 16;
+      const declaredSize = ico.readUInt8(at) || 256;
+      const bytes = ico.readUInt32LE(at + 8);
+      const offset = ico.readUInt32LE(at + 12);
+      const entry = ico.subarray(offset, offset + bytes);
+
+      // PNG signature, then the real dimensions out of the IHDR.
+      expect(entry.subarray(0, 8).toString('hex'), 'PNG signature').toBe('89504e470d0a1a0a');
+      expect(entry.readUInt32BE(16), `entry ${declaredSize} width`).toBe(declaredSize);
+      expect(entry.readUInt32BE(20), `entry ${declaredSize} height`).toBe(declaredSize);
+      sizes.push(declaredSize);
+    }
+    expect(sizes).toEqual([16, 32, 48]);
+  });
+
+  test('every icon is one mark — same palette, same source', async ({ request }) => {
+    const svg = await (await request.get(`${ORIGIN}/favicon.svg`)).text();
+
+    // The specified Matrix palette, not the theme tokens: a manifest is a
+    // static build artefact and cannot follow a runtime theme.
+    expect(svg).toContain('#0D0208');
+    expect(svg).toContain('#00FF41');
+    // Generated, so it cannot drift from the canonical drawing by hand.
+    expect(svg).toContain('Generated from assets/icon.svg');
+
+    // Every raster is a real PNG of the size its name and manifest claim.
+    for (const [path, size] of [
+      ['/apple-touch-icon.png', 180],
+      ['/icons/icon-192.png', 192],
+      ['/icons/icon-512.png', 512],
+      ['/icons/icon-maskable-512.png', 512],
+    ] as const) {
+      const body = await (await request.get(`${ORIGIN}${path}`)).body();
+      expect(body.subarray(0, 8).toString('hex'), path).toBe('89504e470d0a1a0a');
+      expect(body.readUInt32BE(16), `${path} width`).toBe(size);
+      expect(body.readUInt32BE(20), `${path} height`).toBe(size);
+    }
+  });
+
+  test('the icons are precached, so they survive offline', async ({ request }) => {
+    const sw = await (await request.get(`${ORIGIN}/sw.js`)).text();
+    // `.ico` had to be added to globPatterns explicitly — it is the one icon a
+    // browser requests entirely on its own, and it was the one that would have
+    // 404'd offline.
+    for (const asset of [
+      'favicon.ico',
+      'favicon.svg',
+      'apple-touch-icon.png',
+      'icons/icon-192.png',
+    ]) {
+      expect(sw, asset).toContain(asset);
+    }
+  });
+});
+
+/* ------------------------------------------------------------------ *
  * Storage at the documented limit
  * ------------------------------------------------------------------ */
 

@@ -54,8 +54,14 @@ const isWorkerChunk = (path) => /\.worker-[\w-]+\.js$/.test(path);
 /** The generated service worker and the Workbox runtime it imports. */
 const isServiceWorker = (path) => /(^|[/\\])(sw\.js|workbox-[\w-]+\.js)$/.test(path);
 
-/** Manifest and PWA icons — precached, but never page JS. */
-const isPwaAsset = (path) => /\.(png|webmanifest)$/.test(path);
+/**
+ * Manifest and brand icons — precached, but never page JS.
+ *
+ * `.ico` and `.svg` are here for `favicon.ico` and `favicon.svg`. Without them
+ * the two icons a browser fetches on its own sat in no bucket at all, and the
+ * reported icon total was smaller than what actually ships.
+ */
+const isPwaAsset = (path) => /\.(png|webmanifest|ico)$/.test(path) || /favicon\.svg$/.test(path);
 
 const kb = (bytes) => `${(bytes / 1024).toFixed(2)} KB`;
 

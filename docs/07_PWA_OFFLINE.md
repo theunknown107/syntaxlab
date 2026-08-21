@@ -516,7 +516,10 @@ Verified against the build rather than assumed (§2.4):
 | `assets/exec.worker-*.js` | **Regex execution.** Spawned per run, so a cache miss appears only when a user actually runs a pattern |
 | `theme-bootstrap.js` | Runs before the bundle; without it every offline load flashes the default theme |
 | `manifest.webmanifest` | Installability |
-| `icons/*.png` × 3 | |
+| `icons/*.png` × 3 | Manifest icons: 192, 512, maskable 512 |
+| `favicon.svg` | The tab icon every current browser prefers |
+| `favicon.ico` | The one asset a browser requests entirely on its own. `ico` had to be added to `globPatterns` explicitly, or this was the single icon that 404'd offline |
+| `apple-touch-icon.png` | The iOS home-screen icon, which is never read from the manifest |
 
 Excluded: `_headers` (Cloudflare configuration, not a runtime asset),
 `robots.txt` (meaningless offline), source maps (not deployed at all).

@@ -80,7 +80,9 @@ export default defineConfig({
          * missing a worker chunk turns every analysis into a silent failure
          * offline, and works perfectly in development.
          */
-        globPatterns: ['**/*.{js,css,html,png,svg,webmanifest,woff2}'],
+        // `ico` is here for `favicon.ico`: without it the one icon a browser
+        // requests entirely on its own is the one asset that 404s offline.
+        globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest,woff2}'],
         // `_headers` is Cloudflare configuration, not a runtime asset, and
         // robots.txt is meaningless to an offline client.
         globIgnores: ['**/_headers', '**/robots.txt', '**/stats.html', '**/icons/README.md'],

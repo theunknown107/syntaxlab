@@ -37,6 +37,23 @@
       content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
     />
 
+    <!-- Brand icons. All same-origin static files rendered from the one
+         canonical drawing, `assets/icon.svg`, by `npm run icons` — the CSP
+         allows `img-src 'self'` and nothing is fetched from anywhere else.
+
+         Three declarations, no duplicates and no conflicts:
+           - `.ico` first, for browsers that only look for one and for the
+             bookmark bar. It carries 16, 32 and 48.
+           - the SVG second, which every current browser prefers and scales to
+             whatever the tab needs.
+           - the Apple touch icon, which iOS uses for the home screen and which
+             is never read from the manifest.
+         The PWA manifest is injected at build time by vite-plugin-pwa and
+         points at the same set. -->
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
     <meta name="referrer" content="no-referrer" />
 
     <!-- Theme bootstrap. A separate same-origin file, never inline: script-src

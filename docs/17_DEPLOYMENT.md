@@ -102,7 +102,10 @@ dist/
 │   ├── exec.worker-<hash>.js
 │   ├── index-<hash>.css
 │   └── fonts/*.woff2
-├── icons/
+├── icons/                    manifest icons: 192, 512, maskable 512
+├── favicon.svg               tab icon, the letter alone
+├── favicon.ico               16 · 32 · 48, PNG entries
+├── apple-touch-icon.png      180, the full mark
 ├── manifest.webmanifest
 ├── sw.js                     generated
 ├── workbox-<hash>.js
