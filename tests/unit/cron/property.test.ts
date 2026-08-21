@@ -23,10 +23,55 @@ const SEED = 20260821;
 const RUNS = 1200;
 const CONFIG = { seed: SEED, numRuns: RUNS } as const;
 
-/** Characters a cron expression can plausibly contain, hostile ones included. */
-const CRON_CHARS = '0123456789*/-, \tLW#?H@abcJANDECMONFRIsun';
+/**
+ * Characters a cron expression can plausibly contain, hostile ones included.
+ * Listed as an array rather than split from a string: every character here is
+ * ASCII, but splitting a string is the habit that breaks the moment one is not.
+ */
+const CRON_CHARS = [
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '*',
+  '/',
+  '-',
+  ',',
+  ' ',
+  '\t',
+  'L',
+  'W',
+  '#',
+  '?',
+  'H',
+  '@',
+  'a',
+  'b',
+  'c',
+  'J',
+  'A',
+  'N',
+  'D',
+  'E',
+  'C',
+  'M',
+  'O',
+  'F',
+  'R',
+  'I',
+  's',
+  'u',
+  'n',
+];
 
-const arbitraryExpression = fc.stringOf(fc.constantFrom(...CRON_CHARS), {
+const arbitraryExpression = fc.string({
+  unit: fc.constantFrom(...CRON_CHARS),
   minLength: 0,
   maxLength: 40,
 });

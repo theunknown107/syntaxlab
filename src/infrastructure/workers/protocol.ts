@@ -253,6 +253,13 @@ const PAYLOAD_VALIDATORS: {
   'analysis.json': (payload): payload is AnalysisJsonPayload =>
     isRecord(payload) && typeof payload.source === 'string',
 
+  // The timezone mode is checked against the two implemented modes here, not
+  // merely typed as them: it reaches a `Date` inside the worker.
+  'analysis.cron': (payload): payload is AnalysisCronPayload =>
+    isRecord(payload) &&
+    typeof payload.source === 'string' &&
+    (payload.timezoneMode === 'browserLocal' || payload.timezoneMode === 'utc'),
+
   'exec.regex': (payload): payload is ExecRegexPayload =>
     isRecord(payload) &&
     typeof payload.source === 'string' &&
@@ -281,6 +288,7 @@ const PAYLOAD_RECONSTRUCTORS: {
   'analysis.echo': (p) => ({ text: p.text }),
   'analysis.regex': (p) => ({ source: p.source, flags: p.flags }),
   'analysis.json': (p) => ({ source: p.source }),
+  'analysis.cron': (p) => ({ source: p.source, timezoneMode: p.timezoneMode }),
   'exec.regex': (p) => ({ source: p.source, flags: p.flags, subject: p.subject }),
   'exec.spin': (p) => ({ durationMs: p.durationMs }),
 };
