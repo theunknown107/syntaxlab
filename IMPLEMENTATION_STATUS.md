@@ -2,8 +2,8 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M12 — integration, end-to-end and release QA
-**Last updated:** 2026-08-20
+**Current milestone:** M14 complete — cron **domain**. M15 (cron UI) is next and has not started.
+**Last updated:** 2026-08-21
 
 > Living document, updated at the end of every milestone. The architecture
 > package in [`docs/`](docs/) remains the source of truth; this file records
@@ -15,8 +15,8 @@
 
 | Release | Scope | Status |
 |---|---|---|
-| **V1.0** | Regex · JSON · history · theme · PWA · a11y · security · tests · perf | **In progress** |
-| V1.1 | Cron — standard 5-field only | Not started, **must not enter V1.0** |
+| **V1.0** | Regex · JSON · history · theme · PWA · a11y · security · tests · perf | ✅ Built and deployed |
+| V1.1 | Cron — standard 5-field only | 🔨 **Domain complete (M14).** No UI, no schedule executor. |
 | V1.2+ | Share URLs, JSONC/JSON5, other flavours | Deferred, unscheduled |
 
 ---
@@ -37,8 +37,12 @@
 | M9 | PWA and offline | ✅ **Complete** |
 | M10 | Accessibility and security hardening | ✅ **Complete** |
 | M11 | Performance and UX refinement | ✅ **Complete** |
-| M12 | Integration, E2E, release QA | 🔨 **Current** |
-| M13 | V1.0 release | ⬜ |
+| M12 | Integration, E2E, release QA | ✅ **Complete** |
+| M13 | V1.0 release | ✅ **Complete** — public on GitHub, deployed on Vercel |
+| — | Post-M12 brand mark; pre-M15 repository and deployment integrity | ✅ **Complete** |
+| M14 | Cron **domain** — V1.1 | ✅ **Complete.** Schedule executor deliberately deferred to M16. |
+| M15 | Cron UI | ⬜ **Next.** Not started. |
+| M16 | Cron schedule executor, next runs, DST anomalies | ⬜ |
 
 ---
 
@@ -2173,11 +2177,12 @@ genuinely comparable property would be.
 | | p99 |
 |---|---|
 | Typical `*/15 9-17 * * 1-5` | 0.133 ms |
-| **Worst valid input** — a 200-term list, the per-field limit | **1.066 ms** |
+| **Worst valid input** — a 200-term list, the per-field limit | **1.066 ms** (1.85 ms on a re-run before the pre-M15 release) |
 | Over the input limit | 0.000 ms — refused on length before tokenising |
 | 6-field | 0.005 ms — refused on count before any field is read |
 
-15x inside a frame at worst. Nothing was optimised, because nothing needed to
+Roughly an order of magnitude inside a frame at worst, across every run
+measured. Nothing was optimised, because nothing needed to
 be; the point of the numbers is that a later change making them untrue becomes
 visible.
 
@@ -2207,3 +2212,190 @@ worker bundle.
   that never fires, and saying so needs the executor.
 - **Cron has no UI**, so it is absent from the a11y, offline and XSS-corpus
   suites. Those need an input surface, which arrives at M15.
+
+
+---
+
+## Pre-M15 — public release integrity and Vercel hardening
+
+**Not a milestone.** A reconciliation of three states that had drifted apart:
+the local repository (M14 complete), the public GitHub repository (branding
+only), and the Vercel deployment.
+
+### The three states, before
+
+| | SHA | How verified |
+|---|---|---|
+| Local `main` | `71f9c1a` | on disk |
+| GitHub `main` / `origin/main` | `9b919c6` | GitHub API |
+| **Vercel production** | `9b919c6` | **Vercel API** — deployment `dpl_3GCRatgYwizfC3tJcUF2dnBioox1`, `READY`, target `production` |
+
+GitHub and Vercel agreed with each other and both were 121 commits behind the
+local work.
+
+### Finding 1 — the header policy was never served
+
+`public/_headers` is Cloudflare Pages configuration. The site is on Vercel,
+which does not read that format. Measured with `curl` against the live origin,
+the deployment was sending **no CSP header, no `X-Frame-Options`, no
+`frame-ancestors`, no `Referrer-Policy`, no `Permissions-Policy`, no
+Cross-Origin headers** — only Vercel's own HSTS and
+`Access-Control-Allow-Origin: *` on static assets.
+
+**What was materially lost: clickjacking protection.** `frame-ancestors` is
+ignored in a `<meta>` tag by specification and `X-Frame-Options` has no meta
+form at all, so both mechanisms that prevent framing were absent and the page
+could be embedded by any origin. The directive carrying the privacy claim,
+`connect-src 'none'`, *was* enforced throughout by the meta CSP that ships in
+`index.html` — that claim never became false. It was resting on one mechanism
+where the documentation said two.
+
+Hashed assets were also being served `max-age=0, must-revalidate`, because the
+immutable caching rules lived in the same ignored file.
+
+#### Why every test passed
+
+The release gate existed, ran on every E2E run, and compared served headers
+against `public/_headers` — the file production ignored. Both halves of the
+comparison agreed; the comparison was meaningless.
+
+**The fix is not another test.** `vercel.json` is now the single source, read
+by three things:
+
+```mermaid
+flowchart LR
+    A["vercel.json"] --> B["Vercel edge"]
+    A --> C["npm run serve:prod"]
+    C --> D["release gate on :4183"]
+    D -->|"asserts against"| A
+    B --> E["live deployment"]
+    F["curl against the live origin"] -->|"verifies"| E
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class A safe
+```
+
+A configuration nobody deploys can no longer pass a test.
+
+#### The rule shape, which is the load-bearing detail
+
+```mermaid
+flowchart TD
+    A["Request path"] --> B{"sw.js or workbox-*.js?"}
+    B -->|no| C["page rule"]
+    B -->|yes| D["worker rule"]
+    C --> C1["CSP with connect-src none<br/>and frame-ancestors none"]
+    C --> C2["XFO DENY, nosniff, no-referrer,<br/>Permissions-Policy, COOP, CORP, COEP, HSTS"]
+    D --> D1["CSP: default-src none,<br/>script-src self, connect-src self"]
+    D --> D2["nosniff, no-referrer, CORP, HSTS"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class C1,D1 safe
+```
+
+The two CSP rules are **mutually exclusive by construction** — the page rule's
+source is a negative lookahead excluding the worker paths — so no response can
+match both. Vercel does not document what happens when two matching rules carry
+the same header key; if it merged rather than overrode, the service worker
+would inherit `connect-src 'none'` and silently never activate, which is the M9
+failure restaged. Rather than depend on an undocumented precedence, the rules
+are shaped so precedence cannot apply.
+
+**Verified as served, on every required path**, against `npm run serve:prod`:
+
+| Path | CSP | Caching |
+|---|---|---|
+| `/`, `/index.html` | page policy | must-revalidate |
+| `/sw.js` | **worker policy**, no page directives | must-revalidate |
+| `/workbox-*.js` | worker policy | immutable |
+| `/assets/*.js`, `/assets/*.css`, analysis worker chunk | page policy | immutable |
+| `/manifest.webmanifest` | page policy | must-revalidate |
+| `/icons/*.png` | page policy | immutable |
+
+### Finding 2 — authorship metadata published by default
+
+| | Before | After |
+|---|---|---|
+| Commits on `main` | 120 | 120 (121 with the `.gitignore` guard) |
+| Author/committer identities | 2 — the GitHub noreply (100) and a personal Gmail (18, two already public) | 1 |
+| `Co-Authored-By` AI trailers | **120 of 120**, including all 102 published commits | 0 |
+| Repository `user.email` | the personal Gmail | the GitHub noreply identity |
+
+The noreply address was **verified, not guessed**: the GitHub API attributes
+existing commits using it to the account `theunknown107`. GitHub never listed a
+second contributor — the trailer address maps to no account — but the trailers
+and the Gmail address were readable in the public history, and the Gmail was
+also visible in Vercel's own deployment metadata.
+
+One `git filter-branch` pass rewrote identity and stripped the trailers.
+**Nothing else changed**, and that is checked rather than asserted:
+
+| Check | Result |
+|---|---|
+| Tree hash of the tip | `f266294c…` **before and after** — byte-identical content |
+| Commit count | 120 → 120 |
+| Author dates | unchanged; chronology preserved |
+| Ancestry | preserved; one root commit, no grafts |
+
+Local-only backup refs hold both the pre-rewrite tip
+(`refs/backup/pre-m15-authorship-cleanup`) and the verified local M14 state
+(`refs/backup/pre-m15-local-m14`). Neither is pushed.
+
+**No second rewrite was performed.** The re-audit on resume found one remaining
+match for `claude` in a commit message — the filename
+`syntax_explainer_claude_code_master_brief.txt`, in the commit that untracked
+it. That is a factual reference, not an authorship trailer, and rewriting
+history to remove a filename would have been a rewrite for its own sake.
+
+### Scans
+
+Restricted to `main`, the branch that gets published — 121 commits, 1 913
+distinct blobs:
+
+| | Result |
+|---|---|
+| AWS / GitHub / Slack / Google / Stripe / OpenAI-Anthropic key shapes | 0 |
+| Private-key and PGP blocks, JWTs, credentialed URLs, bearer tokens | 0 |
+| Assigned `password` / `secret` / `api_key` / `client_secret` literals | 0 |
+| Personal Gmail, AI co-author trailers | 0 |
+| `node_modules`, `dist`, `coverage`, `test-results`, `playwright-report`, `.env`, `.pem`, `.key`, `.tsbuildinfo`, `stats.html` in any tree | 0 |
+| Internal build brief in any commit | 0 — on disk, ignored by `.gitignore:36`, never committed |
+
+`.gitignore` additionally now covers `.vercel/` and `*.tsbuildinfo` — a guard,
+not a cleanup; neither had ever been committed.
+
+### The typecheck gate, re-verified
+
+Planted `export const releaseProbe: number = "not a number";` in `src/`:
+`npm run typecheck` exited **2**. Removed it: exited **0**. The probe is not in
+the repository.
+
+### M14 scope, re-checked before publishing
+
+| Must exist | |
+|---|---|
+| Cron domain, tokenizer, parser, AST, explanation, validation | ✅ seven modules in `src/domain/cron/` |
+| `analysis.cron` worker operation | ✅ |
+
+| Must **not** exist | |
+|---|---|
+| `src/features/cron/` | ✅ absent |
+| Cron mode | ✅ `AnalysisMode` is still `'regex' \| 'json'` |
+| `schedule.ts`, `model.ts`, `nextRun.ts` | ✅ absent |
+| `nextRuns` / `schedule` on `CronAnalysis` | ✅ absent — asserted, not assumed |
+| Named timezone database | ✅ `CronTimezoneMode` has two members |
+
+The only mentions of cron outside the domain are two comments explaining its
+absence.
+
+### The ten correctness checkpoints
+
+Run as a temporary suite, then removed — all ten green:
+
+`5/10` resolves to `[5,15,25,35,45,55]`; the DST warning fires in
+`Europe/London` and stays silent in `Asia/Kolkata`; six and seven fields are
+refused as `UNSUPPORTED`; `L`, `LW`, `6#3` name Quartz and `H/15` names Jenkins
+while `SMARCH` names neither; both timezone modes round-trip and no third
+appears; `CronAnalysis` has neither `nextRuns` nor `schedule`; the explanation
+contains no markup; a real analysis survives worker-result validation; and a
+result with `timezone.mode = 'Europe/Berlin'` is rejected at the boundary.

@@ -272,7 +272,7 @@ Layer ③ is the one that matters: **the worker never trusts its caller.** If a 
 | JSON nodes | 500 000 | Memory ceiling for the tree |
 | Cron input | 1 000 chars | A cron expression is < 100 chars; anything larger is not cron. Checked before tokenising, so an oversized input is rejected on its length rather than parsed and then discarded. |
 | Cron tokens | 2 000 | Bounds the token list independently of the character check |
-| Cron terms per field | 200 | The slowest valid input measured, at 1.07 ms p99 |
+| Cron terms per field | 200 | The slowest valid input measured, at 1.07–1.85 ms p99 across runs |
 | Share payload | 8 192 chars encoded | Below every browser/proxy URL limit, and caps the bomb surface |
 | Import file | 20 MB / 10 000 entries | Above any legitimate export, below anything that hangs a parse |
 | History entry input | 100 000 chars | Keeps IndexedDB usage sane; truncation is disclosed on restore |

@@ -1201,7 +1201,9 @@ low-powered device. Lighthouse's 4x CPU throttle is a simulation, not a phone.
 
 ### 13.2 What the numbers say
 
-**The worst valid input is 15x inside a frame.** A 200-term list at 1.07 ms p99 is the slowest thing the grammar permits, and the limit is what makes that true — without `maxTermsPerField` the cost is linear in a number the user chooses.
+**The worst valid input stays comfortably inside a frame.** A 200-term list is the slowest thing the grammar permits, and the limit is what makes that true — without `maxTermsPerField` the cost is linear in a number the user chooses.
+
+Re-measured before the pre-M15 release on a busier machine, the same case reported **1.85 ms p99** rather than 1.07 — roughly 9x inside a frame instead of 15x. Both runs are recorded because the spread is the honest answer: this is an in-process microbenchmark on a developer laptop, and the figure that matters is the order of magnitude, not the third decimal. Nothing here is close enough to 16 ms for the difference to change a decision.
 
 **Browser-local costs about 4x UTC, and it is worth knowing why.** UTC resolves to a constant; browser-local asks `Intl` for the zone name and then probes twelve monthly offsets to decide whether that zone observes daylight saving (`04_PARSER_ARCHITECTURE.md` §4.6). 0.05 ms p50 against 0.013 ms is a real multiple of a number too small to matter — but the multiple is where a future regression would appear, so it is on the record rather than averaged away. The 3.7 ms max is a first-call `Intl` cost that the warmup does not fully absorb; the p99 is the honest figure for steady state.
 
@@ -1219,7 +1221,7 @@ Explanation is roughly a third of the cost and tokenising is nearly free. If a r
 
 ### 13.3 What was not optimised, and why
 
-**Nothing.** Cron is two orders of magnitude smaller than the regex and JSON inputs the same pipeline already handles, and the slowest case is 15x inside a frame. Optimising it would be work with no measurable outcome, which is the definition of the thing this document exists to prevent.
+**Nothing.** Cron is two orders of magnitude smaller than the regex and JSON inputs the same pipeline already handles, and the slowest case is roughly an order of magnitude inside a frame across every run measured. Optimising it would be work with no measurable outcome, which is the definition of the thing this document exists to prevent.
 
 The point of recording the numbers is not that they are impressive. It is that a later change which makes them untrue becomes visible rather than being assumed away.
 

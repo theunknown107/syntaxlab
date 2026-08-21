@@ -757,7 +757,7 @@ Expanding it to the base value alone — which is what the parser did until the 
 | `cron.input` | 1 000 characters | Checked before tokenising. A cron expression is not a document. |
 | `cron.fields` | 5 | The dialect lock, as a number. |
 | `cron.maxTokens` | 2 000 | Bounds the token list independently of the input check. |
-| `cron.maxTermsPerField` | 200 | The slowest valid input in the performance table is a list at this limit, at 1.07 ms p99 (`12_PERFORMANCE.md` §13). |
+| `cron.maxTermsPerField` | 200 | The slowest valid input in the performance table is a list at this limit, at 1.07–1.85 ms p99 across runs (`12_PERFORMANCE.md` §13). |
 
 ### 4.4 Next-run computation — **NOT BUILT.** M16
 
