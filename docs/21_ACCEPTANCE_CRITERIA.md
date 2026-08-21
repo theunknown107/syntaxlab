@@ -184,7 +184,7 @@
 | S-9 | Theme injection is rejected by the hex allowlist | ✅ **M8** — unit and browser-level |
 | S-10 | Malicious import files are rejected with a specific reason | Security §7.7 |
 | S-11 | Clipboard writes are `text/plain` only, never `text/html` | Code review |
-| S-12 | All security headers are present in production | Post-deploy checklist |
+| S-12 | All security headers are present in production | Post-deploy `curl` against the live origin. **This failed silently until the pre-M15 reconciliation:** the policy lived in a Cloudflare `_headers` file the Vercel host ignored, so the criterion was verified against a configuration nobody served. Now sourced from `vercel.json` and checked as served. |
 | S-13 | `npm audit --audit-level=high` is clean | ✅ **M10** — clean at `--audit-level=low`, which is stricter than the criterion |
 | S-14 | No copyleft licences in the dependency tree | CI |
 | S-15 | Production errors contain no user content, stack traces, or internals | Code review |
@@ -247,7 +247,7 @@
 | # | Criterion | Verification |
 |---|---|---|
 | D-1 | Production is live over HTTPS on the chosen domain | Manual |
-| D-2 | All security headers present | securityheaders.com / curl |
+| D-2 | All security headers present | `curl` against the live origin — never the build log, and never the repository's own configuration file |
 | D-3 | HSTS active | Manual |
 | D-4 | Asset caching immutable; `index.html` and `sw.js` not cached | curl |
 | D-5 | Preview deployments are noindexed | Manual |
