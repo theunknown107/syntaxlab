@@ -81,6 +81,32 @@ out of 3 in isolation** and the whole project passes **22 out of 22** on its
 own. It has appeared as a different test in the project each time — the
 signature of load, not of logic.
 
+**Re-measured before the pre-M15 push**, after the header configuration moved
+to `vercel.json`, because a change to CSP and service-worker headers is exactly
+the kind of thing that could have turned a flake into a fault:
+
+| Run | Result |
+|---|---|
+| Full matrix, 8-way parallel | 678 passed, 11 skipped, **4 failed** — two `offline-firefox`, two `workers-firefox` |
+| `offline-firefox` alone | **13 / 13 pass**, including both tests that had failed and every service-worker and offline test |
+| `workers-firefox` alone, run 1 | **22 / 22 pass** |
+| `workers-firefox` alone, run 2 | 21 passed, 1 failed — **a different test again** |
+| The single failing test, alone | **3 / 3 pass** |
+
+`offline-firefox` is the project that runs against the **production headers**
+on :4183, so its clean isolated run is the one that clears the new
+configuration. `workers-*` remains the dev-server surface, which is not the
+shipped artefact.
+
+Two notes on method, both mistakes made and corrected here:
+
+- **Read Playwright's exit code, not the pipeline's.** `npx playwright test |
+  tail` reports `tail`'s status, which is always 0. Three earlier runs in this
+  project were recorded as "exit code 0" on that basis. Use `PIPESTATUS[0]`, or
+  do not pipe.
+- **Read the whole summary.** The failure count is printed *above* the pass
+  count, so a `tail -5` shows "678 passed" and hides "4 failed".
+
 **It cannot affect the shipped artefact**, because the dev server is not the
 shipped artefact. Not fixed by raising a timeout or adding a retry, both of
 which would hide it. What would close it: warming the dev server's module graph
