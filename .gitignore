@@ -35,6 +35,12 @@ Thumbs.db
 # not part of the product and is not published.
 syntax_explainer_claude_code_master_brief.txt
 
+# Vercel CLI scratch — project linkage and local build output. Never published.
+.vercel/
+
+# TypeScript incremental build info, written by `tsc -b`.
+*.tsbuildinfo
+
 # Logs
 *.log
 npm-debug.log*
