@@ -2,6 +2,7 @@
 import { domainError, truncateForMessage } from '@/domain/shared/result';
 import { analyzeRegex } from '@/domain/regex/analyze';
 import { analyzeJson } from '@/domain/json/analyze';
+import { analyzeCron } from '@/domain/cron/analyze';
 import {
   describeRequestRejection,
   isAnalysisOp,
@@ -10,6 +11,7 @@ import {
   type AnalysisEchoResult,
   type AnalysisPingPayload,
   type AnalysisPingResult,
+  type AnalysisCronPayload,
   type AnalysisJsonPayload,
   type AnalysisRegexPayload,
   type AnalysisRequest,
@@ -84,6 +86,26 @@ function handleJson(id: number, payload: AnalysisJsonPayload): WorkerResponse {
     : { id, ok: false, error: result.error };
 }
 
+/**
+ * Cron parsing and explanation — V1.1.
+ *
+ * On the long-lived analysis worker rather than the disposable one, for the
+ * same reason as JSON: this is our own bounded code, it terminates by
+ * construction, and a regex execution timeout must never destroy an unrelated
+ * parse.
+ *
+ * The timezone mode is re-validated here rather than trusted. A payload that
+ * asked for a named zone would be a request for a feature V1.1 does not
+ * implement, and defaulting is safer than honouring it.
+ */
+function handleCron(id: number, payload: AnalysisCronPayload): WorkerResponse {
+  const mode = payload.timezoneMode === 'utc' ? 'utc' : 'browserLocal';
+  const result = analyzeCron(payload.source, { timezoneMode: mode });
+  return result.ok
+    ? { id, ok: true, result: result.value }
+    : { id, ok: false, error: result.error };
+}
+
 function dispatch(request: AnalysisRequest): WorkerResponse {
   // Exhaustive by design: adding an operation without handling it is a lint
   // error. That rule is what caught this case being missing during M3.
@@ -99,6 +121,9 @@ function dispatch(request: AnalysisRequest): WorkerResponse {
 
     case 'analysis.json':
       return handleJson(request.id, request.payload);
+
+    case 'analysis.cron':
+      return handleCron(request.id, request.payload);
   }
 }
 

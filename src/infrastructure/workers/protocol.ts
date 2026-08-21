@@ -9,6 +9,8 @@ import type {
 import { isValidRegexAnalysis, isValidRegexExecResult } from '@/domain/regex/validate';
 import type { JsonAnalysis } from '@/domain/json/ast';
 import { isValidJsonAnalysis } from '@/domain/json/validate';
+import type { CronAnalysis } from '@/domain/cron/ast';
+import { isValidCronAnalysis } from '@/domain/cron/validate';
 
 /**
  * Worker wire protocol — 15_API_AND_BROWSER_CAPABILITIES.md §2
@@ -40,6 +42,7 @@ export const ANALYSIS_OPS = [
   'analysis.echo',
   'analysis.regex',
   'analysis.json',
+  'analysis.cron',
 ] as const;
 export type AnalysisOp = (typeof ANALYSIS_OPS)[number];
 
@@ -95,6 +98,19 @@ export interface AnalysisJsonPayload {
 }
 
 /**
+ * Cron analysis — V1.1.
+ *
+ * The timezone mode travels with the request rather than being read inside the
+ * worker: a worker has no user preference, and `Intl` in a worker reports the
+ * same zone the page would, so passing it keeps the choice explicit and
+ * testable. The union is the two modes V1.1 implements and no more.
+ */
+export interface AnalysisCronPayload {
+  readonly source: string;
+  readonly timezoneMode: 'browserLocal' | 'utc';
+}
+
+/**
  * The only operation that runs foreign code. It lives on the disposable
  * worker so its deadline can be enforced by destroying the thread, which is
  * the only reliable stop for an uninterruptible regex.
@@ -121,6 +137,7 @@ export interface OpTypes {
   'analysis.echo': { payload: AnalysisEchoPayload; result: AnalysisEchoResult };
   'analysis.regex': { payload: AnalysisRegexPayload; result: RegexAnalysis };
   'analysis.json': { payload: AnalysisJsonPayload; result: JsonAnalysis };
+  'analysis.cron': { payload: AnalysisCronPayload; result: CronAnalysis };
   'exec.spin': { payload: ExecSpinPayload; result: ExecSpinResult };
   'exec.regex': { payload: ExecRegexPayload; result: RegexExecResult };
 }
@@ -333,6 +350,8 @@ const RESULT_VALIDATORS: {
 
   'analysis.json': (result): result is JsonAnalysis => isValidJsonAnalysis(result),
 
+  'analysis.cron': (result): result is CronAnalysis => isValidCronAnalysis(result),
+
   'exec.regex': (result): result is RegexExecResult => isValidRegexExecResult(result),
 };
 
@@ -389,6 +408,10 @@ const RESULT_RECONSTRUCTORS: {
   // and cost more than the parse did. The validator is what stands between a
   // malformed result and application state.
   'analysis.json': (r) => r,
+  // Small and completely bounded — five fields — so `isValidCronAnalysis`
+  // checks it exhaustively rather than to a budget, and there is nothing left
+  // for a reconstruction pass to add.
+  'analysis.cron': (r) => r,
   'exec.regex': (r) => ({
     kind: 'regexExec',
     matches: r.matches.map(reconstructMatch),
