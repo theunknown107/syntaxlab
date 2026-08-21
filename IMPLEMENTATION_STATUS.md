@@ -2144,11 +2144,11 @@ detection result `unknown`, which is not a mode.
 | Suite | Cases |
 |---|---|
 | `parser.test.ts` — grammar, the 5-field lock, limits | 33 |
-| `semantics.test.ts` — OR rule, Sunday convention, timezone across six real zones, spans | 29 |
+| `semantics.test.ts` — OR rule, Sunday convention, timezone across six real zones, spans including UTF-16 edge cases | 33 |
 | `corpus.test.ts` — the golden corpus, 59 expressions | 78 |
 | `property.test.ts` — 11 fast-check properties at 1 200 runs each, fixed seed 20260821, plus 2 deterministic checks | 13 |
 | `protocol.test.ts` — the `analysis.cron` boundary | 22 |
-| **Cron total** | **175** |
+| **Cron total** | **179** |
 
 The corpus is **59 expressions** — 27 valid, 24 invalid, 8 from other
 schedulers — producing 78 test cases. The plan named 100+. Every entry was

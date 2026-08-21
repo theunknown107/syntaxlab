@@ -342,7 +342,7 @@ Coverage is a floor, not a goal. A 95%-covered parser with no fuzz testing is le
 | Suite | Cases | Status |
 |---|---|---|
 | `tests/unit/cron/parser.test.ts` — grammar, the 5-field lock, limits | 33 | ✅ |
-| `tests/unit/cron/semantics.test.ts` — OR rule, Sunday convention, timezone across six real zones, spans | 29 | ✅ |
+| `tests/unit/cron/semantics.test.ts` — OR rule, Sunday convention, timezone across six real zones, spans including UTF-16 edge cases | 33 | ✅ |
 | `tests/unit/cron/corpus.test.ts` — the golden corpus: **59 hand-written expressions**, 27 valid, 24 invalid, 8 from other schedulers | 78 | ✅ |
 | `tests/unit/cron/property.test.ts` — 11 fast-check properties at 1 200 runs each, fixed seed 20260821, plus 2 deterministic structural checks | 13 | ✅ |
 | `tests/unit/protocol.test.ts` — the `analysis.cron` boundary | 22 | ✅ |

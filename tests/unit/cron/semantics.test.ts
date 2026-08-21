@@ -127,7 +127,12 @@ describe('timezone semantics', () => {
   describe('the daylight-saving caveat', () => {
     const originalTz = process.env.TZ;
     afterEach(() => {
-      process.env.TZ = originalTz;
+      // Delete rather than assign when TZ was unset. `process.env.TZ =
+      // undefined` stores the *string* "undefined", which Node treats as UTC —
+      // silently retiming every later test that shares this worker process.
+      // That leak produced one intermittent failure before it was found.
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
     });
 
     const withZone = <T>(zone: string, read: () => T): T => {
@@ -252,6 +257,31 @@ describe('source spans', () => {
       cursor = token.span.end;
     }
     expect(cursor).toBe(source.length);
+  });
+
+  /**
+   * Spans are string indices, which in JavaScript are UTF-16 code units.
+   *
+   * Nobody writes an emoji in a cron expression on purpose, but a paste can
+   * carry one, and a tokenizer that counted code points instead would hand the
+   * editor offsets landing inside a surrogate pair. The lone surrogate is in
+   * the list because that is the case a well-formed-string assumption breaks
+   * on.
+   */
+  it.each([
+    ['an astral character', '0 0 * * \u{1F642}'],
+    ['an astral character mid-token', '0 0 \u{1F600}x * *'],
+    ['a precomposed accent', '0 0 é * *'],
+    ['a lone surrogate', '0 0 * * \uD800'],
+  ])('keeps spans gapless and in code units with %s', (_label, source) => {
+    const tokens = tokenize(source);
+    let cursor = 0;
+    for (const token of tokens) {
+      expect(token.span.start, source).toBe(cursor);
+      cursor = token.span.end;
+    }
+    expect(cursor, source).toBe(source.length);
+    expect(() => analyzeCron(source), source).not.toThrow();
   });
 
   it('points an error at the offending field', () => {
