@@ -3,9 +3,15 @@ import { cp, mkdir, readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
 /**
- * Serves `dist/` with the **real** production headers from `public/_headers`.
+ * Serves `dist/` with the **real** production headers from `vercel.json`.
  *
  *   node scripts/serve-production.mjs [port] [root]
+ *
+ * The source of truth moved from `public/_headers` to `vercel.json` when the
+ * host was reconciled: Vercel does not read the Cloudflare `_headers` format,
+ * so that file was declaring a policy nobody served. Reading the deployed
+ * configuration here is the whole point — a preview server that agrees with a
+ * file production ignores proves nothing.
  *
  * `vite preview` serves no security headers at all, which means the entire
  * E2E suite validates the application under a policy that is not the one it
@@ -43,26 +49,13 @@ const TYPES = {
   '.woff2': 'font/woff2',
 };
 
-/** Parses the Cloudflare `_headers` format: a path pattern, then indented headers. */
+/** Reads the header rules out of the deployed `vercel.json`. */
 async function readHeaderRules() {
-  const text = await readFile('public/_headers', 'utf8');
-  const rules = [];
-  let current = null;
-
-  for (const raw of text.split('\n')) {
-    if (raw.trim() === '' || raw.trimStart().startsWith('#')) continue;
-    if (!raw.startsWith(' ') && !raw.startsWith('\t')) {
-      current = { pattern: raw.trim(), headers: [] };
-      rules.push(current);
-      continue;
-    }
-    const line = raw.trim();
-    const colon = line.indexOf(':');
-    if (colon > 0 && current !== null) {
-      current.headers.push([line.slice(0, colon).trim(), line.slice(colon + 1).trim()]);
-    }
-  }
-  return rules;
+  const config = JSON.parse(await readFile('vercel.json', 'utf8'));
+  return (config.headers ?? []).map((rule) => ({
+    pattern: rule.source,
+    headers: rule.headers.map((header) => [header.key, header.value]),
+  }));
 }
 
 /**
@@ -87,17 +80,18 @@ function localise(name, value) {
     .join('; ');
 }
 
+/**
+ * Vercel matches `source` with path-to-regexp, and every rule in this
+ * project's `vercel.json` is written in its regex form. Anchoring the pattern
+ * at both ends is the same match Vercel performs.
+ *
+ * The CSP rules are deliberately *mutually exclusive* — the site-wide pattern
+ * excludes `sw.js` and the Workbox chunk by negative lookahead — so no request
+ * ever matches two rules carrying the same header key. That removes any
+ * dependence on which rule would have won, here or at the edge.
+ */
 function matches(pattern, pathname) {
-  if (pattern.endsWith('/*')) return pathname.startsWith(pattern.slice(0, -1));
-  // A `*` anywhere else, as in `/workbox-*.js`, matches within one segment.
-  if (pattern.includes('*')) {
-    const escaped = pattern
-      .split('*')
-      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`))
-      .join('[^/]*');
-    return new RegExp(`^${escaped}$`).test(pathname);
-  }
-  return pattern === pathname;
+  return new RegExp(`^${pattern}$`).test(pathname);
 }
 
 const rules = await readHeaderRules();
@@ -107,8 +101,10 @@ const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     let pathname = decodeURIComponent(url.pathname);
 
-    // Later rules win, so a specific `/sw.js` block overrides the `/*` block —
-    // the same precedence Cloudflare Pages applies.
+    // Every matching rule contributes its headers. The rules are written so
+    // that two rules matching the same request never carry the same key,
+    // which is why nothing here depends on an ordering Vercel does not
+    // document.
     for (const rule of rules) {
       if (matches(rule.pattern, pathname)) {
         for (const [name, value] of rule.headers) response.setHeader(name, localise(name, value));

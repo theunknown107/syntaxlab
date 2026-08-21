@@ -9,7 +9,8 @@ import { expect, test, type Page } from '@playwright/test';
  * journey: the headers a browser actually receives, whether the app is
  * installable, and whether it survives a full history at the documented limit.
  *
- * Runs against :4183, which parses the real `public/_headers`.
+ * Runs against :4183, which serves the real `vercel.json` header rules —
+ * the configuration production actually applies, not a second copy of it.
  */
 
 const ORIGIN = 'http://localhost:4183';
@@ -18,27 +19,36 @@ const ORIGIN = 'http://localhost:4183';
  * Production headers and CSP
  * ------------------------------------------------------------------ */
 
+interface VercelHeaderRule {
+  readonly source: string;
+  readonly headers: readonly { readonly key: string; readonly value: string }[];
+}
+
 /**
- * The site-wide policy, read out of `public/_headers` rather than restated.
+ * The policy, read out of `vercel.json` rather than restated.
  *
  * A header test that hard-codes the policy it expects passes forever after
- * someone edits the file, which is the opposite of what it is for.
+ * someone edits the configuration, which is the opposite of what it is for.
+ * Reading the *deployed* configuration is the part that matters: until M14 this
+ * read `public/_headers`, a Cloudflare file Vercel never looked at, so the gate
+ * was green while production served no CSP at all.
  */
-function declaredPolicy(pattern: string): Record<string, string> {
-  const text = readFileSync('public/_headers', 'utf8');
-  const lines = text.split('\n');
-  const start = lines.findIndex((line) => line.trim() === pattern);
-  expect(start, `no ${pattern} block in public/_headers`).toBeGreaterThanOrEqual(0);
+function declaredPolicy(source: string): Record<string, string> {
+  const config = JSON.parse(readFileSync('vercel.json', 'utf8')) as {
+    headers: readonly VercelHeaderRule[];
+  };
+  const rule = config.headers.find((entry) => entry.source === source);
+  expect(rule, `no rule with source ${source} in vercel.json`).toBeDefined();
 
   const headers: Record<string, string> = {};
-  for (const line of lines.slice(start + 1)) {
-    if (!line.startsWith('  ')) break;
-    const colon = line.indexOf(':');
-    if (colon === -1) continue;
-    headers[line.slice(0, colon).trim().toLowerCase()] = line.slice(colon + 1).trim();
-  }
+  for (const header of rule?.headers ?? []) headers[header.key.toLowerCase()] = header.value;
   return headers;
 }
+
+/** The site-wide rule: everything except the service worker and its Workbox chunk. */
+const PAGE_RULE = String.raw`/((?!sw\.js$)(?!workbox-[^/]*\.js$).*)`;
+/** The service worker and the chunk it importScripts, which share a context. */
+const WORKER_RULE = String.raw`/(sw\.js|workbox-[^/]*\.js)`;
 
 /** Splits a CSP into its directives, so a reordering is not a failure. */
 function directives(policy: string): string[] {
@@ -50,8 +60,8 @@ function directives(policy: string): string[] {
 }
 
 test.describe('production headers', () => {
-  test('the page is served the policy that `_headers` declares', async ({ request }) => {
-    const declared = declaredPolicy('/*');
+  test('the page is served the policy that `vercel.json` declares', async ({ request }) => {
+    const declared = declaredPolicy(PAGE_RULE);
     const response = await request.get(`${ORIGIN}/`);
     expect(response.status()).toBe(200);
 
@@ -104,6 +114,16 @@ test.describe('production headers', () => {
     const response = await request.get(`${ORIGIN}/sw.js`);
     expect(response.status()).toBe(200);
     const served = response.headers()['content-security-policy'] ?? '';
+
+    // It must be the worker rule's policy, and the two rules must be mutually
+    // exclusive: the page rule excludes this path by negative lookahead, so no
+    // response can carry both and nothing depends on which would have won.
+    expect(directives(served)).toEqual(
+      directives(declaredPolicy(WORKER_RULE)['content-security-policy'] ?? ''),
+    );
+    expect(new RegExp(`^${PAGE_RULE}$`).test('/sw.js')).toBe(false);
+    expect(new RegExp(`^${PAGE_RULE}$`).test('/workbox-abc123.js')).toBe(false);
+    expect(response.headers()['x-frame-options']).toBeUndefined();
 
     // A worker's CSP comes from the headers on its own script. The page's
     // `connect-src 'none'` is right for the page and fatal here — Workbox

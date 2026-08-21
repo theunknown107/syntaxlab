@@ -83,9 +83,9 @@ export default defineConfig({
         // `ico` is here for `favicon.ico`: without it the one icon a browser
         // requests entirely on its own is the one asset that 404s offline.
         globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest,woff2}'],
-        // `_headers` is Cloudflare configuration, not a runtime asset, and
-        // robots.txt is meaningless to an offline client.
-        globIgnores: ['**/_headers', '**/robots.txt', '**/stats.html', '**/icons/README.md'],
+        // Not runtime assets: `stats.html` is a build artefact, the icons
+        // README is documentation, and robots.txt is meaningless offline.
+        globIgnores: ['**/robots.txt', '**/stats.html', '**/icons/README.md'],
         navigateFallback: 'index.html',
         // Old precaches from previous revisions, and only those.
         cleanupOutdatedCaches: true,

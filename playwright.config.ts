@@ -39,7 +39,7 @@ export default defineConfig({
     {
       /*
        * M12 release QA — the complete user journeys, against the production
-       * build under the *production* `_headers` on :4183. A release gate that
+       * build under the *production* `vercel.json` headers on :4183. A gate that
        * validates a policy the app does not ship with is not a release gate.
        */
       name: 'release-chromium',

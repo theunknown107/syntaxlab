@@ -9,7 +9,7 @@ import { expect, test, type ConsoleMessage, type Page } from '@playwright/test';
  * carry on.
  *
  * It runs against **:4183, the production build under the production
- * `_headers`**, because a release gate that validates a policy the app does not
+ * `vercel.json` headers**, because a gate that validates a policy the app does not
  * ship with is not a release gate. Every journey watches for CSP violations and
  * page errors for its whole duration rather than checking at the end, so a
  * violation is attributed to the step that caused it.
