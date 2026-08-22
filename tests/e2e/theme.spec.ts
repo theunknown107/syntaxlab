@@ -530,6 +530,7 @@ test('remains usable in forced-colors mode', async ({ page }) => {
 test('theme changes do not touch history records', async ({ page }) => {
   // 19: theme is a global preference; a history entry is independent of it.
   await page.getByRole('textbox', { name: 'Regular expression' }).fill('ab+c');
+  await page.getByRole('button', { name: 'Analyze pattern' }).click();
   await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(4_000);
 
@@ -564,18 +565,27 @@ test('theme changes do not touch history records', async ({ page }) => {
   }
 });
 
-test('two tabs stay in step', async ({ page, context }) => {
+test('two tabs are independent, because two URLs are two documents', async ({ page, context }) => {
   const second = await context.newPage();
   await second.goto('/');
 
   await openDrawer(page);
   await drawer(page).getByRole('radio', { name: 'Emerald' }).click();
   await closeDrawer(page);
+  await expect(page).toHaveURL(/theme=emerald/);
 
-  // localStorage broadcasts its own changes; the other tab re-reads.
-  await expect
-    .poll(async () => token(second, '--gradient-from'), { timeout: 5_000 })
-    .toBe('#10b981');
+  // Until M15 the theme lived in localStorage, which broadcasts its own
+  // changes, and this asserted that the second tab followed. It no longer
+  // does, and that is the correct behaviour: the theme is part of the address
+  // now, and two tabs on two URLs are two documents — exactly as they are for
+  // any other page on the web. Recreating the old coupling with a
+  // BroadcastChannel would rebuild what moving to the URL removed.
+  await second.waitForTimeout(1_000);
+  expect(await token(second, '--gradient-from')).toBe('#00FF41');
+
+  // And the link itself is what carries the theme between them.
+  await second.goto(new URL(page.url()).search);
+  expect(await token(second, '--gradient-from')).toBe('#10b981');
 
   await second.close();
 });
@@ -713,6 +723,9 @@ test('the editor decorations carry no green inside a non-green theme', async ({ 
 
   await page.locator('.cm-content').first().click();
   await page.keyboard.type('^(a|b)+' + String.raw`\d` + '[x-z]$');
+  // M15: typing analyses nothing, and the token decorations come from the
+  // analysis. They arrive when one is asked for.
+  await page.getByRole('button', { name: 'Analyze pattern' }).click();
 
   // Highlighting arrives from the analysis worker, so the decorations are not
   // in the DOM on the same tick as the keystrokes.
@@ -729,4 +742,174 @@ test('the editor decorations carry no green inside a non-green theme', async ({ 
   );
   expect(decorations.length).toBeGreaterThan(3);
   expect(decorations.filter(isGreen)).toEqual([]);
+});
+
+/* ------------------------------------------------------------------ *
+ * URL-backed preferences — M15
+ * ------------------------------------------------------------------ */
+
+test.describe('the theme lives in the URL', () => {
+  test('a theme change is written to the address bar, not to storage', async ({ page }) => {
+    await openDrawer(page);
+    await drawer(page).getByRole('radio', { name: 'Amber Console' }).click();
+    await closeDrawer(page);
+
+    await expect(page).toHaveURL(/theme=amber/);
+    // The architectural claim of M15, checked against the real browser.
+    const stored = await page.evaluate(() => localStorage.getItem('syntaxlab.theme.v1'));
+    expect(stored).toBeNull();
+  });
+
+  test('an unmodified preset is one readable parameter, not fourteen', async ({ page }) => {
+    await openDrawer(page);
+    await drawer(page).getByRole('radio', { name: 'Mono' }).click();
+    await closeDrawer(page);
+
+    await expect.poll(() => new URL(page.url()).search).toBe('?theme=mono');
+  });
+
+  test('a shared link paints the theme before the first frame', async ({ page }) => {
+    await page.addInitScript(() => {
+      document.addEventListener('readystatechange', () => {
+        if (document.readyState === 'interactive') {
+          (window as unknown as { __early?: string }).__early = getComputedStyle(
+            document.documentElement,
+          )
+            .getPropertyValue('--gradient-from')
+            .trim();
+        }
+      });
+    });
+
+    // A bare preset id, which is what a shared link almost always is. Without
+    // the bootstrap's preset table this paints Matrix green for one frame.
+    await page.goto('/?theme=crimsonNight');
+    const early = await page.evaluate(() => (window as unknown as { __early?: string }).__early);
+    expect(early).toBe('#DC143C');
+  });
+
+  test('dragging a slider does not fill the history stack', async ({ page }) => {
+    const before = await page.evaluate(() => history.length);
+
+    await openDrawer(page);
+    const intensity = drawer(page)
+      .getByRole('slider', { name: /intensity/i })
+      .first();
+    for (const value of ['20', '40', '60', '80']) {
+      await intensity.fill(value);
+      await page.waitForTimeout(300);
+    }
+    await closeDrawer(page);
+
+    // replaceState, not pushState: Back must still reach wherever the user
+    // came from, not four indistinguishable copies of this page.
+    expect(await page.evaluate(() => history.length)).toBe(before);
+  });
+
+  test('parameters this app does not own are left alone', async ({ page }) => {
+    // `mode` is not a good example: it is a PWA shortcut the app deliberately
+    // consumes and deletes on startup. These are parameters nothing here owns.
+    await page.goto('/?utm_source=somewhere&ref=a-friend');
+    await openDrawer(page);
+    await drawer(page).getByRole('radio', { name: 'Mono' }).click();
+    await closeDrawer(page);
+
+    await expect.poll(() => new URL(page.url()).searchParams.get('theme')).toBe('mono');
+    const query = new URL(page.url()).searchParams;
+    expect(query.get('utm_source')).toBe('somewhere');
+    expect(query.get('ref')).toBe('a-friend');
+  });
+
+  test('an existing stored theme migrates into the URL once, and the key is dropped', async ({
+    page,
+  }) => {
+    await plantTheme(
+      page,
+      JSON.stringify({
+        schemaVersion: 2,
+        preset: 'cyan',
+        gradient: {
+          from: '#22d3ee',
+          mid1: '#1ba7bd',
+          mid2: '#157b8d',
+          to: '#0e4f5c',
+          angleDeg: 135,
+          intensity: 40,
+        },
+        accent: '#22d3ee',
+        accentLegible: '#22d3ee',
+        family: 'cyan',
+        glowIntensity: 25,
+        contrastMode: 'normal',
+        reducedMotion: 'system',
+        fontScale: 1,
+      }),
+    );
+
+    await page.goto('/');
+    await expect(page).toHaveURL(/theme=cyan/);
+    expect(await token(page, '--gradient-from')).toBe('#22d3ee');
+    // Read once, moved, forgotten.
+    expect(await page.evaluate(() => localStorage.getItem('syntaxlab.theme.v1'))).toBeNull();
+  });
+
+  test('a migration does not touch storage it was not asked about', async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem('syntaxlab.settings.v1', '{"historyEnabled":true}');
+      localStorage.setItem('something.else', 'keep me');
+    });
+    await plantTheme(page, JSON.stringify({ schemaVersion: 2, preset: 'mono' }));
+
+    await page.goto('/');
+    expect(await page.evaluate(() => localStorage.getItem('syntaxlab.settings.v1'))).toBe(
+      '{"historyEnabled":true}',
+    );
+    expect(await page.evaluate(() => localStorage.getItem('something.else'))).toBe('keep me');
+  });
+});
+
+test.describe('a hostile link', () => {
+  const HOSTILE = [
+    ['a CSS injection through a colour', '?theme=matrix&accent=red%3Bbackground%3Aurl(x)'],
+    ['a url() gradient stop', '?theme=matrix&gf=url(https%3A%2F%2Fattacker.example)'],
+    ['an attribute break in an enum', '?contrast=high%22%5D%20*%20%7Bdisplay%3Anone%7D'],
+    ['an out-of-range angle', '?theme=matrix&ga=99999'],
+    ['a preset that is a path', '?theme=..%2F..%2Fetc%2Fpasswd'],
+    ['a value past the size cap', `?theme=matrix&accent=${'a'.repeat(2000)}`],
+  ] as const;
+
+  for (const [label, query] of HOSTILE) {
+    test(`refuses ${label} and still paints a real theme`, async ({ page }) => {
+      const failures: string[] = [];
+      page.on('console', (message) => {
+        if (/content security policy|refused to/i.test(message.text()))
+          failures.push(message.text());
+      });
+
+      await page.goto(`/${query}`);
+
+      // Whatever the URL said, every colour that reached CSS is a hex triple.
+      for (const name of ['--gradient-from', '--gradient-to', '--color-accent']) {
+        expect(await token(page, name), `${label} → ${name}`).toMatch(/^#[0-9a-fA-F]{6}$/);
+      }
+      expect(await token(page, '--gradient-angle')).toMatch(/^\d{1,3}deg$/);
+      expect(failures, failures.join('\n')).toEqual([]);
+      // And the app is usable rather than blank.
+      await expect(page.getByRole('radio', { name: 'Regex' })).toBeVisible();
+    });
+  }
+
+  test('never carries editor content, however the app is used', async ({ page }) => {
+    // The guard against this quietly becoming the deferred share-URL feature.
+    await start(page);
+    await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
+    await page.keyboard.insertText('secret-[a-z]+-pattern');
+    await page.getByRole('button', { name: 'Analyze pattern' }).click();
+    await page.waitForTimeout(1000);
+
+    const url = page.url();
+    expect(url).not.toContain('secret');
+    expect(url).not.toContain('pattern=');
+    expect(new URL(url).searchParams.has('regex')).toBe(false);
+  });
 });

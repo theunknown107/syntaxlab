@@ -92,11 +92,27 @@ async function start(page: Page): Promise<void> {
 const CAPTURE_QUIET_MS = 2_500;
 
 /** Types into an editor without the clipboard, which needs different permissions per engine. */
+/**
+ * Types into an editor without the clipboard, then asks for an analysis.
+ *
+ * From M15 typing analyses nothing. The test string is the exception: the
+ * tester is live and runs against the pattern that has already been analysed.
+ */
 async function setEditor(page: Page, name: string | RegExp, text: string): Promise<void> {
   const editor = page.getByRole('textbox', { name });
   await editor.click();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.insertText(text);
+
+  const isTestString = typeof name === 'string' && /test string/i.test(name);
+  if (isTestString) return;
+  for (const label of ['Analyze pattern', 'Analyze JSON document', 'Analyze cron expression']) {
+    const button = page.getByRole('button', { name: label });
+    if ((await button.count()) > 0 && (await button.isEnabled())) {
+      await button.click();
+      return;
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ *

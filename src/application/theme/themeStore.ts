@@ -221,10 +221,19 @@ export function selectPreset(id: string): void {
     reducedMotion: current.reducedMotion,
     fontScale: current.fontScale,
   });
+  // Written at once. Picking a preset is a single deliberate act, not a drag,
+  // and someone who chooses a theme and immediately reloads must not lose it
+  // to a debounce that had not fired yet.
+  flushTheme();
 }
 
 /**
  * Applies one change to the gradient.
+ *
+ * **The one action that stays debounced.** A slider drag calls this on every
+ * frame, and rewriting the address bar that often is the thing the debounce
+ * exists to prevent. The trailing edge is covered by the `pagehide` and
+ * `visibilitychange` flushes in `ThemeControls`.
  *
  * The preset name is re-derived from the resulting values rather than carried
  * forward, so it describes what the theme *is*. Editing away from Amber names
@@ -253,8 +262,16 @@ export function updateGradient(patch: Partial<ThemePreferences['gradient']>): vo
   });
 }
 
+/**
+ * One discrete change — a radio, a select, a font size.
+ *
+ * Flushed immediately for the same reason `selectPreset` is: these are single
+ * decisions rather than a continuous drag, and the debounce exists only for
+ * the latter.
+ */
 export function updateTheme(patch: Partial<ThemePreferences>): void {
   setTheme({ ...themeStore.getState(), ...patch });
+  flushTheme();
 }
 
 /**

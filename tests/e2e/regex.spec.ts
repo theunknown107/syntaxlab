@@ -32,12 +32,27 @@ const panel = (page: Page, name: string) => page.getByRole('region', { name });
  * there. Desktop Chrome replaces correctly, which is why this only ever bit
  * the mobile projects.
  */
+/**
+ * Puts text in an editor and, for the pattern, asks for it to be analysed.
+ *
+ * From M15 typing analyses nothing, so a helper that only typed would leave
+ * every caller asserting against a panel that was never asked to update. The
+ * test string is deliberately excluded: the tester is live and runs against
+ * the committed pattern, which is the behaviour under test.
+ */
 async function type(page: Page, target: 'pattern' | 'subject', value: string): Promise<void> {
   const editor = target === 'pattern' ? pattern(page) : subject(page);
   await editor.click();
   await page.keyboard.press('ControlOrMeta+a');
   if (value === '') await page.keyboard.press('Backspace');
   else await page.keyboard.insertText(value);
+  if (target === 'pattern') await analyze(page);
+}
+
+/** Presses Analyze when there is something to analyse. */
+async function analyze(page: Page): Promise<void> {
+  const button = page.getByRole('button', { name: 'Analyze pattern' });
+  if (await button.isEnabled()) await button.click();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -114,14 +129,23 @@ test('reports a zero-length match rather than an empty row', async ({ page }) =>
  * Flags
  * ------------------------------------------------------------------ */
 
-test('a flag change re-runs the analysis and the match', async ({ page }) => {
+test('a flag change waits to be analysed, then re-runs the match', async ({ page }) => {
   await type(page, 'pattern', 'abc');
   await type(page, 'subject', 'ABC');
   const matches = panel(page, 'Matches');
   await expect(matches.getByText('No matches.')).toBeVisible({ timeout: 10_000 });
 
   await page.getByRole('button', { name: /Ignore case/ }).click();
+
+  // M15: a flag change is an edit. Both panels wait rather than repainting —
+  // a match list that updated here would look fresh while describing a flag
+  // set the user can no longer see selected.
+  await expect(page.getByText('Unanalyzed changes')).toBeVisible();
+  await expect(matches.getByText('No matches.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Analyze pattern' }).click();
   await expect(matches.getByText('1 match')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Unanalyzed changes')).toBeHidden();
 });
 
 test('u and v are never both active', async ({ page }) => {
@@ -392,6 +416,8 @@ test('renders a large match list progressively rather than all at once', async (
 
   await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
   await page.keyboard.type('a');
+  // The tester runs the *committed* pattern, so it has to be analysed first.
+  await page.getByRole('button', { name: 'Analyze pattern' }).click();
 
   // ~4 000 matches. `insertText` dispatches one input event rather than 12 000
   // key events, which keeps this test to a second and needs no clipboard
@@ -422,6 +448,7 @@ test('resets the match list when the result changes', async ({ page }) => {
 
   await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
   await page.keyboard.type('a');
+  await page.getByRole('button', { name: 'Analyze pattern' }).click();
   await page.getByRole('textbox', { name: 'Test string' }).click();
   await page.keyboard.insertText('ab '.repeat(4_000));
 
@@ -433,5 +460,6 @@ test('resets the match list when the result changes', async ({ page }) => {
   // result would be both wrong and slow.
   await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
   await page.keyboard.type('b');
+  await page.getByRole('button', { name: 'Analyze pattern' }).click();
   await expect(page.locator('tbody tr')).toHaveCount(200);
 });

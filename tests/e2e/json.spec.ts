@@ -30,11 +30,20 @@ async function openJson(page: Page): Promise<void> {
  * there. Desktop Chrome replaces correctly, which is why this only ever bit
  * the mobile projects.
  */
+/**
+ * Puts a document in the editor and asks for it to be analysed.
+ *
+ * From M15 typing analyses nothing, so a helper that only typed would leave
+ * every caller asserting against a tree that was never asked to update.
+ */
 async function type(page: Page, value: string): Promise<void> {
   await editor(page).click();
   await page.keyboard.press('ControlOrMeta+a');
   if (value === '') await page.keyboard.press('Backspace');
   else await page.keyboard.insertText(value);
+
+  const button = page.getByRole('button', { name: 'Analyze JSON document' });
+  if (await button.isEnabled()) await button.click();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -281,18 +290,23 @@ test('a payload in an error message stays text', async ({ page }) => {
  * Large documents
  * ------------------------------------------------------------------ */
 
-test('a large document waits for an explicit action', async ({ page }) => {
+test('a large document waits for an explicit action — as every document now does', async ({
+  page,
+}) => {
   test.slow();
 
   const big = `[${Array.from({ length: 18_000 }, (_, i) => `{"id":${i},"name":"item number ${i}"}`).join(',')}]`;
-  // Above `manualAnalyzeBytes`, which is what puts the workspace in manual mode.
   expect(big.length).toBeGreaterThan(500_000);
 
-  await type(page, big);
-  await expect(page.getByText(/analysed when you ask/)).toBeVisible({ timeout: 20_000 });
+  // Until M15 a size threshold decided whether a document was parsed on a
+  // debounce or on request. Every document is on request now, so what is left
+  // to check is that a large one is no different — and that nothing is parsed
+  // before it is asked for.
+  await editor(page).click();
+  await page.keyboard.insertText(big);
   await expect(tree(page)).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Analyze JSON' }).click();
+  await page.getByRole('button', { name: 'Analyze JSON document' }).click();
   await expect(page.getByText(/^Valid ·/)).toBeVisible({ timeout: 30_000 });
   await expect(tree(page)).toBeVisible();
 });
@@ -360,9 +374,14 @@ test('the suggestion can be dismissed for the session', async ({ page }) => {
   await expect(page.getByText('This looks like JSON.')).toHaveCount(0);
 });
 
-test('offers no cron affordance anywhere', async ({ page }) => {
-  await expect(page.getByText(/cron/i)).toHaveCount(0);
-  await expect(page.getByRole('radio')).toHaveCount(2);
+test('offers cron as a third real mode', async ({ page }) => {
+  // The inverse of what this asserted until M15. Cron was kept out while it
+  // had no workspace, because a disabled segment reads as broken; it has one
+  // now, so the rule it protected is satisfied by the mode being real.
+  const cron = page.getByRole('radio', { name: 'Cron' });
+  await expect(cron).toBeVisible();
+  await expect(cron).toBeEnabled();
+  await expect(page.getByRole('radio')).toHaveCount(3);
 });
 
 /* ------------------------------------------------------------------ *
