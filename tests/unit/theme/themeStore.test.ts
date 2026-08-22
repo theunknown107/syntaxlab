@@ -3,23 +3,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyTheme,
   flushTheme,
-  reloadTheme,
+  reloadThemeFromUrl,
   resetTheme,
   selectPreset,
   setTheme,
   themeStore,
   updateGradient,
   updateTheme,
-  THEME_STORAGE_KEY,
+  THEME_LEGACY_STORAGE_KEY,
 } from '@/application/theme/themeStore';
 import { DEFAULT_THEME, isHexColor, PRESETS, readTheme } from '@/domain/theme/preferences';
+import { encodeThemeParams } from '@/domain/theme/urlPreferences';
 
 /**
  * Theme application — 09_DESIGN_SYSTEM.md §4.4
  *
  * What matters here is that a change reaches CSS custom properties and only
- * validated values ever get there, and that persistence is debounced without
+ * validated values ever get there, and that the URL write is debounced without
  * the *visual* update being debounced with it.
+ *
+ * From M15 the theme persists in the URL rather than localStorage, so the
+ * persistence tests below assert on `location.search` and on the *absence* of
+ * storage writes.
  */
 
 const root = document.documentElement;
@@ -28,14 +33,23 @@ function property(name: string): string {
   return root.style.getPropertyValue(name);
 }
 
-function stored(): unknown {
-  const raw = localStorage.getItem(THEME_STORAGE_KEY);
-  return raw === null ? null : JSON.parse(raw);
+/** The theme parameters currently in the address bar. */
+function urlParams(): URLSearchParams {
+  return new URLSearchParams(location.search);
+}
+
+function urlValue(name: string): string | null {
+  return urlParams().get(name);
+}
+
+function setUrl(search: string): void {
+  history.replaceState(null, '', `/${search}`);
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
+  setUrl('');
   root.removeAttribute('style');
   delete root.dataset.contrast;
   delete root.dataset.motion;
@@ -78,43 +92,84 @@ describe('applyTheme', () => {
 });
 
 describe('setTheme', () => {
-  it('applies immediately and saves after a delay', () => {
+  it('applies immediately and writes the URL after a delay', () => {
     setTheme({ ...DEFAULT_THEME, glowIntensity: 60 });
 
     // Visible at once — a slider must not lag behind the thumb.
     expect(property('--glow-intensity')).toBe('0.6');
-    expect(stored()).toBeNull();
+    expect(urlValue('glow')).toBeNull();
 
     vi.advanceTimersByTime(300);
-    expect((stored() as { glowIntensity: number }).glowIntensity).toBe(60);
+    expect(urlValue('glow')).toBe('60');
   });
 
-  it('writes once for a burst of changes, not once per change', () => {
-    // Spied on the instance rather than `Storage.prototype`: under happy-dom a
-    // prototype spy does not observe these writes, which would make this test
-    // pass without measuring anything.
-    const setItem = vi.spyOn(localStorage, 'setItem');
+  it('writes the URL once for a burst of changes, not once per change', () => {
+    const replaceState = vi.spyOn(history, 'replaceState');
 
     for (let value = 0; value <= 100; value += 5) {
       setTheme({ ...DEFAULT_THEME, glowIntensity: value });
     }
-    expect(setItem).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(300);
-    expect(setItem).toHaveBeenCalledTimes(1);
+    expect(replaceState).toHaveBeenCalledTimes(1);
+    replaceState.mockRestore();
+  });
+
+  it('never pushes a history entry — Back must stay useful', () => {
+    // Dragging a slider changes the theme dozens of times. Each one pushing an
+    // entry would bury the page the user came from under identical URLs.
+    const pushState = vi.spyOn(history, 'pushState');
+    const replaceState = vi.spyOn(history, 'replaceState');
+
+    for (let value = 0; value <= 100; value += 10) {
+      setTheme({ ...DEFAULT_THEME, glowIntensity: value });
+      vi.advanceTimersByTime(300);
+    }
+
+    expect(pushState).not.toHaveBeenCalled();
+    expect(replaceState.mock.calls.length).toBeGreaterThan(0);
+    pushState.mockRestore();
+    replaceState.mockRestore();
+  });
+
+  it('never writes the theme to localStorage', () => {
+    // The architectural claim of M15, asserted rather than assumed.
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const instanceSetItem = vi.spyOn(localStorage, 'setItem');
+
+    setTheme({ ...DEFAULT_THEME, glowIntensity: 33 });
+    selectPreset('amber');
+    updateGradient({ from: '#ff0000' });
+    updateTheme({ fontScale: 1.25 });
+    vi.advanceTimersByTime(1000);
+    flushTheme();
+
+    expect(setItem).not.toHaveBeenCalled();
+    expect(instanceSetItem).not.toHaveBeenCalled();
     setItem.mockRestore();
+    instanceSetItem.mockRestore();
+  });
+
+  it('leaves parameters it does not own alone', () => {
+    setUrl('?mode=json');
+    setTheme({ ...DEFAULT_THEME, preset: 'amber' });
+    vi.advanceTimersByTime(300);
+
+    expect(urlValue('mode')).toBe('json');
+    expect(urlValue('theme')).toBe('amber');
   });
 
   it('flushes a pending write on demand', () => {
     setTheme({ ...DEFAULT_THEME, glowIntensity: 42 });
-    expect(stored()).toBeNull();
+    expect(urlValue('glow')).toBeNull();
 
     flushTheme();
-    expect((stored() as { glowIntensity: number }).glowIntensity).toBe(42);
+    expect(urlValue('glow')).toBe('42');
   });
 
-  it('survives storage that refuses to write', () => {
-    const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+  it('survives a history API that refuses to write', () => {
+    const replaceState = vi.spyOn(history, 'replaceState').mockImplementation(() => {
       throw new DOMException('denied', 'SecurityError');
     });
 
@@ -124,7 +179,7 @@ describe('setTheme', () => {
     }).not.toThrow();
     // The theme still applies for the session.
     expect(property('--glow-intensity')).toBe('0.1');
-    setItem.mockRestore();
+    replaceState.mockRestore();
   });
 });
 
@@ -198,58 +253,70 @@ describe('reset', () => {
     expect(themeStore.getState()).toEqual(DEFAULT_THEME);
     expect(property('--gradient-from')).toBe('#00FF41');
     expect(property('--font-scale')).toBe('1');
-    // Persisted at once, not on a debounce: reset is a deliberate act.
-    expect(stored()).toEqual(DEFAULT_THEME);
+    // Written at once, not on a debounce: reset is a deliberate act.
+    expect(urlValue('theme')).toBe('matrix');
+    // And the overrides are gone rather than left behind.
+    expect(urlValue('font')).toBeNull();
+    expect(urlValue('gf')).toBeNull();
   });
 });
 
-describe('reading back from storage', () => {
-  it('applies what another tab wrote', () => {
-    localStorage.setItem(
-      THEME_STORAGE_KEY,
-      JSON.stringify(
-        readTheme({
-          ...DEFAULT_THEME,
-          preset: 'cyan',
-          gradient: { from: '#22d3ee', to: '#0e4f5c', angleDeg: 145, intensity: 35 },
-        }),
-      ),
+describe('reading the theme back from the URL', () => {
+  it('applies what the URL says', () => {
+    setUrl(
+      `?${new URLSearchParams(
+        encodeThemeParams(
+          readTheme({
+            ...DEFAULT_THEME,
+            preset: 'cyan',
+            gradient: { from: '#22d3ee', to: '#0e4f5c', angleDeg: 145, intensity: 35 },
+          }),
+        ),
+      ).toString()}`,
     );
-    reloadTheme();
+    reloadThemeFromUrl();
     expect(property('--gradient-from')).toBe('#22d3ee');
     expect(themeStore.getState().preset).toBe('cyan');
   });
 
-  it('falls back to the default when another tab wrote rubbish', () => {
-    localStorage.setItem(THEME_STORAGE_KEY, '{not json');
-    reloadTheme();
+  it('falls back to the default when the URL says nothing', () => {
+    setUrl('?mode=json');
+    reloadThemeFromUrl();
     expect(themeStore.getState()).toEqual(DEFAULT_THEME);
     expect(property('--gradient-from')).toBe('#00FF41');
   });
 
-  it('never writes an unvalidated value into CSS, whatever storage holds', () => {
-    const payloads = [
-      '{"gradient":{"from":"red; background:url(https://attacker.example)"}}',
-      '{"gradient":{"from":"url(x)","to":"javascript:alert(1)"},"accent":"<style>x</style>"}',
-      '{"gradient":{"angleDeg":"90deg; --color-bg: red"}}',
-      '{"schemaVersion":99,"gradient":{"from":"#000000"}}',
-      '{"contrastMode":"high\\"] * { display: none } [x=\\""}',
-      '[]',
-      'null',
-      '"a string"',
+  it('never writes an unvalidated value into CSS, whatever the URL holds', () => {
+    // A URL is attacker-authored in a way localStorage never was: anyone can
+    // send anyone a link. These are the payloads that would matter.
+    const queries = [
+      '?theme=matrix&gf=red%3Bbackground%3Aurl(https%3A%2F%2Fattacker.example)',
+      '?theme=matrix&gf=url(x)&gt=javascript%3Aalert(1)&accent=%3Cstyle%3Ex%3C%2Fstyle%3E',
+      '?theme=matrix&ga=90deg%3B%20--color-bg%3A%20red',
+      '?theme=matrix&tv=99&gf=000000',
+      '?theme=matrix&contrast=high%22%5D%20*%20%7B%20display%3A%20none%20%7D%20%5Bx%3D%22',
+      '?theme=%2E%2E%2F%2E%2E%2F',
+      '?accent=%23%23%23%23%23%23',
+      '?gi=1e309',
     ];
 
-    for (const payload of payloads) {
-      localStorage.setItem(THEME_STORAGE_KEY, payload);
-      reloadTheme();
+    for (const query of queries) {
+      setUrl(query);
+      reloadThemeFromUrl();
 
       for (const name of ['--gradient-from', '--gradient-to', '--color-accent']) {
-        expect(isHexColor(property(name)), `${payload} → ${name}`).toBe(true);
+        expect(isHexColor(property(name)), `${query} → ${name}`).toBe(true);
       }
-      expect(property('--gradient-angle')).toMatch(/^\d{1,3}deg$/);
-      expect(property('--gradient-intensity')).toMatch(/^\d(\.\d+)?$/);
-      expect(['normal', 'high']).toContain(root.dataset.contrast);
+      expect(property('--gradient-angle'), query).toMatch(/^\d{1,3}deg$/);
+      expect(property('--gradient-intensity'), query).toMatch(/^\d(\.\d+)?$/);
+      expect(['normal', 'high'], query).toContain(root.dataset.contrast);
     }
+  });
+
+  it('exposes the legacy storage key only so a migration can read it', () => {
+    // The key still exists as an export because the one-time migration needs
+    // it. Nothing writes it.
+    expect(THEME_LEGACY_STORAGE_KEY).toBe('syntaxlab.theme.v1');
   });
 });
 

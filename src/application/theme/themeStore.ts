@@ -8,6 +8,7 @@ import {
   themeFromPreset,
   type ThemePreferences,
 } from '@/domain/theme/preferences';
+import { themeFromParams, withThemeParams } from '@/domain/theme/urlPreferences';
 
 import { createStore } from '../stores/createStore';
 
@@ -24,27 +25,93 @@ import { createStore } from '../stores/createStore';
  * currently set. Nothing else in the application subscribes to it, which is
  * why a slider drag costs one style recalculation rather than a render of the
  * component tree.
+ *
+ * **Where a theme lives changed at M15: the URL, not localStorage.** The store
+ * is still in-memory state and `applyTheme` still writes CSS properties; what
+ * moved is persistence. A theme is now something you can send someone, and
+ * something that survives a browser that clears site data. localStorage is
+ * read exactly once, to migrate an existing user, and then let go of.
+ *
+ * The chain is unchanged where it matters:
+ *
+ *   URL params → readTheme → in-memory store → CSS custom properties
+ *
+ * `readTheme` is still the single validation choke point. A URL is
+ * attacker-authored in a way localStorage never was — anyone can send anyone a
+ * link — which makes that choke point more important, not less.
  */
 
-const STORAGE_KEY = 'syntaxlab.theme.v1';
+/**
+ * The key M8 through M14 wrote to.
+ *
+ * Kept only so an existing user's theme can be read once and moved into the
+ * URL. Nothing writes it any more.
+ */
+const LEGACY_STORAGE_KEY = 'syntaxlab.theme.v1';
 
-/** How long after the last change the preference is written to disk. */
-const PERSIST_DELAY_MS = 250;
+/** How long after the last change the URL is rewritten. */
+const URL_WRITE_DELAY_MS = 250;
 
-function readStored(): ThemePreferences {
+/**
+ * The theme an existing installation left behind, if any.
+ *
+ * Read through `readTheme` exactly as before, because a stored value is still
+ * attacker-writable and this is still a `setProperty` sink. The only change is
+ * that the result is migrated into the URL rather than trusted as the ongoing
+ * source of truth.
+ */
+function readLegacyStored(): ThemePreferences | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    // `readTheme` is total, so a null, a corrupt string or a hostile object
-    // all resolve to something usable. There is no error path to handle.
-    return readTheme(raw === null ? null : (JSON.parse(raw) as unknown));
+    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (raw === null) return null;
+    return readTheme(JSON.parse(raw) as unknown);
   } catch {
-    // Unparseable JSON, or storage that throws on access — private mode, or
-    // an enterprise policy. Defaults are a working app.
-    return DEFAULT_THEME;
+    // Unparseable JSON, or storage that throws on access — private mode, or an
+    // enterprise policy. There is nothing to migrate, and defaults are a
+    // working app.
+    return null;
   }
 }
 
-export const themeStore = createStore<ThemePreferences>(readStored());
+/**
+ * Forgets the legacy key, and only that key.
+ *
+ * History lives in IndexedDB and settings under their own keys; a migration
+ * that swept localStorage would destroy data it was never asked about.
+ */
+function dropLegacyStored(): void {
+  try {
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // Storage unavailable. The value is already superseded by the URL, so a
+    // failure to tidy up changes nothing the user can see.
+  }
+}
+
+function currentParams(): URLSearchParams {
+  return new URLSearchParams(typeof location === 'undefined' ? '' : location.search);
+}
+
+/**
+ * The theme this document starts with.
+ *
+ * The URL wins. Only when it says nothing about the theme is the legacy store
+ * consulted, and a value found there is migrated into the URL immediately so
+ * the next load takes the first branch.
+ */
+function readInitial(): ThemePreferences {
+  const fromUrl = themeFromParams(currentParams());
+  if (fromUrl !== null) return fromUrl;
+
+  const legacy = readLegacyStored();
+  if (legacy === null) return DEFAULT_THEME;
+
+  writeUrl(legacy);
+  dropLegacyStored();
+  return legacy;
+}
+
+export const themeStore = createStore<ThemePreferences>(readInitial());
 
 /**
  * Writes the theme into CSS custom properties.
@@ -76,14 +143,14 @@ export function applyTheme(theme: ThemePreferences): void {
   root.dataset.motion = theme.reducedMotion;
 }
 
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let urlTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
- * Applies immediately, saves shortly afterwards.
+ * Applies immediately, rewrites the URL shortly afterwards.
  *
  * The split matters for a slider: dragging it should repaint on every frame,
- * and must not serialise JSON into localStorage on every frame. The visual
- * update is synchronous; only the write is debounced.
+ * and must not rewrite the address bar on every frame. The visual update is
+ * synchronous; only the URL write is debounced.
  *
  * **Everything is revalidated here, including values from our own UI.** The
  * colour controls hand over `input[type="color"].value`, which the platform
@@ -98,29 +165,42 @@ export function setTheme(candidate: ThemePreferences): void {
   themeStore.setState(theme);
   applyTheme(theme);
 
-  if (persistTimer !== null) clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => {
-    persistTimer = null;
-    persist(theme);
-  }, PERSIST_DELAY_MS);
+  if (urlTimer !== null) clearTimeout(urlTimer);
+  urlTimer = setTimeout(() => {
+    urlTimer = null;
+    writeUrl(theme);
+  }, URL_WRITE_DELAY_MS);
 }
 
-function persist(theme: ThemePreferences): void {
+/**
+ * Rewrites the address bar in place.
+ *
+ * **`replaceState`, never `pushState`.** Dragging the intensity slider changes
+ * the theme dozens of times; each one pushing a history entry would bury
+ * whatever page the user came from under a hundred identical-looking URLs and
+ * make Back useless. A theme tweak is not a navigation.
+ *
+ * Debounced above as well, so a drag rewrites the URL once when it settles
+ * rather than on every frame.
+ */
+function writeUrl(theme: ThemePreferences): void {
+  if (typeof history === 'undefined' || typeof location === 'undefined') return;
+  const search = withThemeParams(location.search, theme);
+  if (search === location.search) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(theme));
+    history.replaceState(history.state, '', `${location.pathname}${search}${location.hash}`);
   } catch {
-    // A theme that cannot be saved still applies for this session. Reporting
-    // it would be noise about a preference, and the user can see their theme
-    // working in front of them.
+    // Some embedded contexts refuse history writes. The theme still applies
+    // for this session; it simply will not survive a reload.
   }
 }
 
 /** Writes any pending change now. Used before the tab is hidden or closed. */
 export function flushTheme(): void {
-  if (persistTimer === null) return;
-  clearTimeout(persistTimer);
-  persistTimer = null;
-  persist(themeStore.getState());
+  if (urlTimer === null) return;
+  clearTimeout(urlTimer);
+  urlTimer = null;
+  writeUrl(themeStore.getState());
 }
 
 /* ------------------------------------------------------------------ *
@@ -188,11 +268,24 @@ export function resetTheme(): void {
   flushTheme();
 }
 
-/** Re-reads from storage. Used when another tab changes the theme. */
-export function reloadTheme(): void {
-  const theme = readStored();
+/**
+ * Re-reads the theme from the URL and applies it.
+ *
+ * Used when the document's URL changes underneath the app — a Back or Forward
+ * that lands on a different theme, which is the one navigation case
+ * `replaceState` does not eliminate.
+ *
+ * **Not a cross-tab mechanism.** Losing localStorage's `storage` event means
+ * two tabs no longer share a theme, and that is the correct behaviour now that
+ * the theme is part of the address: two tabs on two URLs are two documents
+ * with two themes, exactly as they are with any other page. Adding a
+ * BroadcastChannel to recreate the old behaviour would be rebuilding a
+ * coupling the move to the URL deliberately removed.
+ */
+export function reloadThemeFromUrl(): void {
+  const theme = themeFromParams(currentParams()) ?? DEFAULT_THEME;
   themeStore.setState(theme);
   applyTheme(theme);
 }
 
-export { STORAGE_KEY as THEME_STORAGE_KEY };
+export { LEGACY_STORAGE_KEY as THEME_LEGACY_STORAGE_KEY };

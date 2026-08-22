@@ -176,7 +176,10 @@ describe('the pre-paint bootstrap', () => {
   it('allows exactly the families the domain defines', () => {
     // The bootstrap duplicates the validation rules by necessity — it runs
     // before any module loads. Duplication drifts, so it is pinned here.
-    const listed = /applyEnum\('themeFamily',\s*theme\.family,\s*\[([^\]]+)\]/.exec(BOOTSTRAP)?.[1];
+    // Matches the call however its value argument is spelled — at M15 the
+    // family arrives through `pick`, which resolves a URL override against the
+    // preset table. What is pinned is the allowlist, not the plumbing.
+    const listed = /applyEnum\('themeFamily',[^[]*\[([^\]]+)\]/.exec(BOOTSTRAP)?.[1];
     expect(listed).toBeDefined();
     const families = [...(listed ?? '').matchAll(/'([\w-]+)'/g)].map(([, name]) => name);
     expect(families).toEqual([...THEME_FAMILIES]);
