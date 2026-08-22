@@ -1,0 +1,111 @@
+/*
+ * Explanation rendering — 08_UI_UX_SPEC.md §7
+ *
+ * Shared by every mode that produces an `Explanation`: regex, JSON and cron.
+ * Lived in `regex.module.css` until M15, when cron became the second consumer
+ * and a feature-owned stylesheet stopped being the right home.
+ */
+
+/* ---- Explanation ---- */
+
+.explanation {
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+
+.summary {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text);
+}
+
+.emphasis {
+  font-style: normal;
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+}
+
+.code {
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  background-color: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+}
+
+/* A ref is a button so the explanation-to-source link is keyboard reachable;
+   it is styled as inline code so it does not read as a form control. */
+.ref {
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--color-accent-text);
+  cursor: pointer;
+  background-color: var(--color-surface-raised);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.ref:hover,
+.ref:focus-visible {
+  border-color: var(--color-border-accent);
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.section {
+  display: grid;
+  grid-template-columns: minmax(6rem, 12rem) minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.sectionTitle {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.sectionLink {
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-accent-text);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+  overflow-wrap: anywhere;
+}
+
+.sectionLink:hover,
+.sectionLink:focus-visible {
+  text-decoration: underline;
+}
+
+.sectionBody {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.explanationList {
+  padding-inline-start: var(--space-4);
+  margin: var(--space-1) 0;
+}
+
+@media (width <= 767px) {
+  .section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}

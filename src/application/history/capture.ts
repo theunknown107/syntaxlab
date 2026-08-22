@@ -119,7 +119,7 @@ export async function captureNow(): Promise<void> {
   if (!capturing()) return;
 
   const state = workspaceStore.getState();
-  const candidate = state.mode === 'regex' ? regexCandidate(state) : jsonCandidate(state);
+  const candidate = candidateFor(state);
   if (candidate === null) return;
 
   const fingerprint = fingerprintOf(candidate.type, candidate.input);
@@ -130,6 +130,31 @@ export async function captureNow(): Promise<void> {
 }
 
 type Workspace = ReturnType<typeof workspaceStore.getState>;
+
+/**
+ * What, if anything, the current mode offers history.
+ *
+ * A `switch` rather than a ternary, so adding a mode is a compile error here
+ * rather than a silent fall-through. That is not hypothetical: when cron
+ * arrived at M15 the old `mode === 'regex' ? … : …` would have sent every cron
+ * analysis down the JSON branch and re-saved whatever JSON document happened
+ * to be in the other editor.
+ *
+ * **Cron records nothing yet.** `HistoryEntry` has no cron type, and inventing
+ * one here — without the metadata the drawer renders, the validation an import
+ * is checked against, or the migration an older build needs — would be a
+ * half-built record on disk. It arrives with that work, not before it.
+ */
+function candidateFor(state: Workspace): ReturnType<typeof newEntry> | null {
+  switch (state.mode) {
+    case 'regex':
+      return regexCandidate(state);
+    case 'json':
+      return jsonCandidate(state);
+    case 'cron':
+      return null;
+  }
+}
 
 function regexCandidate(state: Workspace): ReturnType<typeof newEntry> | null {
   const analysis = state.analysis;

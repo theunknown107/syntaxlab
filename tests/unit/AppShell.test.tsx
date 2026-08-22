@@ -87,23 +87,35 @@ describe('AppShell', () => {
     expect(screen.queryByRole('heading', { name: 'Pattern' })).not.toBeInTheDocument();
   });
 
-  it('does not offer any cron affordance', () => {
+  it('offers cron as a real mode, not a promise', () => {
     render(<App />);
 
-    // V1.0 must read as complete rather than partial. A disabled or
-    // "coming soon" cron control anywhere in the workspace is a defect
-    // (21_ACCEPTANCE_CRITERIA.md M-8).
-    expect(screen.queryByText(/cron/i)).not.toBeInTheDocument();
+    // Until M15 this asserted that no cron affordance existed at all, because
+    // V1.0 had to read as complete rather than partial. Cron now exists, so
+    // the rule it was protecting applies in its original form: the control is
+    // there and it works (21_ACCEPTANCE_CRITERIA.md M-8).
+    const cron = screen.getByRole('radio', { name: 'Cron' });
+    expect(cron).toBeEnabled();
+    expect(screen.queryByText(/coming soon|not yet available/i)).not.toBeInTheDocument();
   });
 
-  it('renders no disabled controls', () => {
+  it('renders no control that is disabled because the feature is missing', () => {
     const { container } = render(<App />);
 
-    // Queried by attribute rather than by role: the assertion is "nothing
-    // anywhere is disabled", and a disabled affordance is a defect regardless
-    // of which role it carries (21_ACCEPTANCE_CRITERIA.md M-8).
-    const disabled = container.querySelectorAll('[disabled], [aria-disabled="true"]');
+    // The assertion is still "nothing advertises an absent feature", but a
+    // control may legitimately be disabled for the state it is in. Analyze on
+    // an empty editor is the case: there is nothing to analyse yet, and a
+    // button that submits nothing is worse than one that waits.
+    const disabled = Array.from(
+      container.querySelectorAll('[disabled], [aria-disabled="true"]'),
+    ).filter((element) => !(element.getAttribute('aria-label') ?? '').startsWith('Analyze '));
 
-    expect(Array.from(disabled)).toHaveLength(0);
+    expect(disabled).toHaveLength(0);
+  });
+
+  it('enables Analyze once there is something to analyse', () => {
+    render(<App />);
+    const analyze = screen.getByRole('button', { name: 'Analyze pattern' });
+    expect(analyze).toBeDisabled();
   });
 });

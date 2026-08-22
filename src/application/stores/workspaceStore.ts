@@ -1,5 +1,6 @@
 import type { RegexAnalysis } from '@/domain/regex/ast';
 import type { JsonAnalysis } from '@/domain/json/ast';
+import type { CronAnalysis, CronTimezoneMode } from '@/domain/cron/ast';
 import type { IndentStyle } from '@/domain/json/format';
 import type { DetectionResult } from '@/domain/shared/detect';
 import type { RegexExecResult } from '@/domain/regex/execute';
@@ -9,18 +10,28 @@ import { createStore } from './createStore';
 /**
  * Workspace state — 11_STATE_MANAGEMENT.md §4.1
  *
- * V1.0 has two modes. Cron is V1.1 and must not appear here, in the type or
- * anywhere else, until that milestone (`22_OPEN_QUESTIONS.md` D-01).
+ * Three modes from M15: regex, JSON and cron.
  *
- * The regex fields arrive at M4 with the feature that uses them. `pattern`
- * changes on every keystroke, so only the editor subscribes to it; the
- * analysis pane subscribes to `analysis` and `analysisStatus`, which change at
- * most once per debounce interval.
+ * **Draft and committed input are separate, and that is the point.** Every
+ * mode holds what the user is typing *and* the input the visible result was
+ * produced from. Typing changes the first; only Analyze changes the second.
+ * The result on screen always belongs to the committed input, so it is never a
+ * fresh-looking explanation of text the user has since edited away.
+ *
+ *     draft  →  Analyze  →  committed  →  worker  →  result
+ *
+ * `committed*` is `null` until the first analysis. Staleness is *derived* from
+ * the two rather than stored as a third flag, because a boolean that can
+ * disagree with the strings it summarises is a bug waiting to be written.
+ *
+ * `pattern` changes on every keystroke, so only the editor subscribes to it;
+ * the analysis pane subscribes to `analysis` and `analysisStatus`, which now
+ * change only when someone asks for an analysis.
  */
 
-export type AnalysisMode = 'regex' | 'json';
+export type AnalysisMode = 'regex' | 'json' | 'cron';
 
-export const ANALYSIS_MODES = ['regex', 'json'] as const;
+export const ANALYSIS_MODES = ['regex', 'json', 'cron'] as const;
 
 export type AnalysisStatus = 'idle' | 'analyzing' | 'ready' | 'error';
 
@@ -67,6 +78,16 @@ export interface WorkspaceState {
   readonly flags: string;
   readonly testSubject: string;
 
+  /**
+   * The pattern and flags the visible analysis was produced from.
+   *
+   * `null` before the first Analyze. Execution reads these rather than the
+   * draft: testing a pattern the engine has not been asked about would report
+   * matches for text that is not on screen.
+   */
+  readonly committedPattern: string | null;
+  readonly committedFlags: string | null;
+
   readonly analysis: RegexAnalysis | null;
   readonly analysisStatus: AnalysisStatus;
   readonly analysisError: WorkspaceFailure | null;
@@ -78,18 +99,29 @@ export interface WorkspaceState {
   /* ---- JSON ---- */
 
   readonly jsonInput: string;
+  /** The document the visible tree was parsed from. `null` before the first Analyze. */
+  readonly jsonCommitted: string | null;
   readonly jsonAnalysis: JsonAnalysis | null;
   readonly jsonStatus: AnalysisStatus;
   readonly jsonError: WorkspaceFailure | null;
-  /**
-   * Above `manualAnalyzeBytes` the user presses a button instead of the
-   * document being parsed on a debounce. A multi-megabyte paste must not
-   * re-analyse on every keystroke (12_PERFORMANCE.md §3.2).
-   */
-  readonly jsonManual: boolean;
-  /** True when the editor holds changes the current analysis does not reflect. */
-  readonly jsonStale: boolean;
   readonly jsonIndent: IndentStyle;
+
+  /* ---- Cron — M15 ---- */
+
+  readonly cronInput: string;
+  /** The expression the visible analysis was produced from. */
+  readonly cronCommitted: string | null;
+  readonly cronAnalysis: CronAnalysis | null;
+  readonly cronStatus: AnalysisStatus;
+  readonly cronError: WorkspaceFailure | null;
+  /**
+   * Which clock the times are read in.
+   *
+   * Two values, and no more: named IANA zones are not implemented, and a
+   * selector offering one would promise an answer the domain cannot give
+   * (`04_PARSER_ARCHITECTURE.md` §4.5).
+   */
+  readonly cronTimezoneMode: CronTimezoneMode;
 }
 
 const initialState: WorkspaceState = {
@@ -97,6 +129,8 @@ const initialState: WorkspaceState = {
   pattern: '',
   flags: 'g',
   testSubject: '',
+  committedPattern: null,
+  committedFlags: null,
   analysis: null,
   analysisStatus: 'idle',
   analysisError: null,
@@ -109,12 +143,18 @@ const initialState: WorkspaceState = {
   suggestionDismissed: false,
 
   jsonInput: '',
+  jsonCommitted: null,
   jsonAnalysis: null,
   jsonStatus: 'idle',
   jsonError: null,
-  jsonManual: false,
-  jsonStale: false,
   jsonIndent: 'two',
+
+  cronInput: '',
+  cronCommitted: null,
+  cronAnalysis: null,
+  cronStatus: 'idle',
+  cronError: null,
+  cronTimezoneMode: 'browserLocal',
 };
 
 export const workspaceStore = createStore<WorkspaceState>(initialState);
@@ -131,10 +171,80 @@ export function setMode(mode: AnalysisMode): void {
 /** Narrows an untrusted string to a mode. Used at every boundary that can
  *  supply one (the `?mode=` PWA shortcut, restored state, tests). */
 export function isAnalysisMode(value: unknown): value is AnalysisMode {
-  return value === 'regex' || value === 'json';
+  return value === 'regex' || value === 'json' || value === 'cron';
 }
 
 export const MODE_LABELS: Readonly<Record<AnalysisMode, string>> = {
   regex: 'Regex',
   json: 'JSON',
+  cron: 'Cron',
 };
+
+/* ------------------------------------------------------------------ *
+ * Submission state
+ * ------------------------------------------------------------------ */
+
+/**
+ * The draft and the committed input for one mode.
+ *
+ * Derived rather than stored. A `stale` boolean kept alongside the two strings
+ * is a third thing that can disagree with them, and the disagreement would
+ * show as a result presented as current when it is not.
+ */
+export interface SubmissionState {
+  /** Nothing has been analysed yet, so there is no result to be stale. */
+  readonly untouched: boolean;
+  /** The editor holds changes the visible result does not reflect. */
+  readonly stale: boolean;
+  /** There is something worth submitting. */
+  readonly submittable: boolean;
+}
+
+export function submissionOf(draft: string, committed: string | null): SubmissionState {
+  return {
+    untouched: committed === null,
+    stale: committed !== null && draft !== committed,
+    // An empty editor has nothing to explain, and re-submitting the exact text
+    // that produced the visible result would spend a worker round trip to
+    // arrive back where it started.
+    submittable: draft.trim() !== '' && draft !== committed,
+  };
+}
+
+/** The submission state of whichever mode is on screen. */
+export function submissionFor(state: WorkspaceState): SubmissionState {
+  switch (state.mode) {
+    case 'regex':
+      return regexSubmission(
+        state.pattern,
+        state.flags,
+        state.committedPattern,
+        state.committedFlags,
+      );
+    case 'json':
+      return submissionOf(state.jsonInput, state.jsonCommitted);
+    case 'cron':
+      return submissionOf(state.cronInput, state.cronCommitted);
+  }
+}
+
+/**
+ * Regex is the one mode whose committed input is two values.
+ *
+ * Toggling a flag changes what an analysis would say without changing a
+ * character of the pattern, so flags count as an edit.
+ */
+export function regexSubmission(
+  pattern: string,
+  flags: string,
+  committedPattern: string | null,
+  committedFlags: string | null,
+): SubmissionState {
+  const base = submissionOf(pattern, committedPattern);
+  const flagsMoved = committedFlags !== null && flags !== committedFlags;
+  return {
+    untouched: base.untouched,
+    stale: base.stale || flagsMoved,
+    submittable: pattern.trim() !== '' && (base.submittable || flagsMoved),
+  };
+}

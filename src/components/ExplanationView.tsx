@@ -1,6 +1,6 @@
 import type { Explanation, ExplanationNode } from '@/domain/shared/explanation';
 import type { SourceSpan } from '@/domain/shared/result';
-import styles from './regex.module.css';
+import styles from './explanation.module.css';
 
 /**
  * Renders `ExplanationNode[]` — 03_DOMAIN_MODEL.md §2.4, ADR-011

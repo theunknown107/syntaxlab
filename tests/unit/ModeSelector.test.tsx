@@ -19,14 +19,24 @@ describe('ModeSelector', () => {
     expect(screen.getByRole('radiogroup', { name: 'Analysis mode' })).toBeInTheDocument();
   });
 
-  it('renders exactly the two V1.0 modes', () => {
+  it('renders exactly the three modes that exist', () => {
     render(<ModeSelector />);
     const options = screen.getAllByRole('radio');
 
-    // V1.0 is Regex + JSON. A third segment appearing here means cron leaked
-    // into V1.0, which the release scope forbids (22_OPEN_QUESTIONS.md D-01).
-    expect(options).toHaveLength(2);
-    expect(options.map((option) => option.textContent)).toEqual(['Regex', 'JSON']);
+    // Cron joined at M15, when it had a workspace behind it. A fourth segment
+    // appearing here means a mode was added to the union without one.
+    expect(options).toHaveLength(3);
+    expect(options.map((option) => option.textContent)).toEqual(['Regex', 'JSON', 'Cron']);
+  });
+
+  it('offers no mode that cannot be selected', () => {
+    // The rule that kept cron out until M15: a greyed-out segment reads as
+    // broken and gets filed as a bug (08_UI_UX_SPEC.md §2.1).
+    render(<ModeSelector />);
+    for (const option of screen.getAllByRole('radio')) {
+      expect(option).toBeEnabled();
+      expect(option).not.toHaveAttribute('aria-disabled', 'true');
+    }
   });
 
   it('marks regex as the default selection', () => {
@@ -65,7 +75,8 @@ describe('ModeSelector', () => {
     await user.tab();
     await user.keyboard('{ArrowLeft}');
 
-    expect(screen.getByRole('radio', { name: 'JSON' })).toBeChecked();
+    // Regex is first, so arrowing left wraps to the last segment.
+    expect(screen.getByRole('radio', { name: 'Cron' })).toBeChecked();
   });
 
   it('keeps only the selected option in the tab order', async () => {

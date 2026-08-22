@@ -12,9 +12,9 @@ import styles from './ModeSelector.module.css';
 /**
  * Mode selector — 08_UI_UX_SPEC.md §6
  *
- * Two segments in V1.0, presented as the complete set. A two-segment control
- * looks deliberate; a three-segment control with one greyed out reads as
- * broken and gets filed as a bug (§2.1). Cron adds a third segment in V1.1.
+ * Three segments from M15, presented as the complete set. Cron joined when it
+ * had a workspace behind it — never as a greyed-out promise, because a control
+ * with a disabled option reads as broken and gets filed as a bug (§2.1).
  *
  * Radiogroup semantics rather than plain buttons: arrow keys move between
  * options and only the selected one is in the tab order (roving tabindex),

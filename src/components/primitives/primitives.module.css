@@ -245,3 +245,13 @@
   color: var(--color-text-inverse);
   border-color: var(--color-error);
 }
+
+/* The Analyze control: button, with the stale badge beside it rather than
+   over the result. The result is still correct — it describes the last
+   submitted input — so it is labelled, not dimmed. */
+.analyzeAction {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

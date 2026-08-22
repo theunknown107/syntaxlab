@@ -30,7 +30,8 @@ vi.mock('@/infrastructure/workers/workers', () => ({
   isRegexExecutionAvailable: () => workersAvailable(),
 }));
 
-const { workspaceStore } = await import('@/application/stores/workspaceStore');
+const { workspaceStore, regexSubmission, submissionOf } =
+  await import('@/application/stores/workspaceStore');
 const {
   analyzeNow,
   clearWorkspace,
@@ -120,6 +121,7 @@ describe('regex workspace use-cases', () => {
     it('sends the pattern and flags exactly as shown', async () => {
       setFlags('gi');
       setPattern('abc');
+      analyzeNow();
       await vi.advanceTimersByTimeAsync(500);
 
       const [op, payload, options] = analysisRequest.mock.calls[0] ?? [];
@@ -132,6 +134,8 @@ describe('regex workspace use-cases', () => {
 
     it('sends pattern, flags and subject to the execution worker', async () => {
       setPattern('a');
+      analyzeNow();
+      await vi.advanceTimersByTimeAsync(500);
       setTestSubject('aaa');
       await vi.advanceTimersByTimeAsync(500);
 
@@ -141,22 +145,54 @@ describe('regex workspace use-cases', () => {
       expect(typeof options?.supersedeKey).toBe('string');
     });
 
-    it('debounces rather than sending one request per keystroke', async () => {
+    it('sends nothing at all while the user is only typing', async () => {
+      // The M15 change. Typing used to start a debounce; it now starts
+      // nothing, so an unfinished pattern costs no worker round trip and
+      // cannot replace a correct explanation with an error about half a
+      // pattern.
       setPattern('a');
       setPattern('ab');
       setPattern('abc');
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(analysisRequest).not.toHaveBeenCalled();
+      expect(workspaceStore.getState().analysisStatus).toBe('idle');
+    });
+
+    it('sends exactly one request per Analyze, whatever was typed first', async () => {
+      setPattern('a');
+      setPattern('ab');
+      setPattern('abc');
+      analyzeNow();
       await vi.advanceTimersByTimeAsync(500);
 
       expect(analysisRequest).toHaveBeenCalledTimes(1);
       expect(analysisRequest.mock.calls[0]?.[1]).toEqual({ source: 'abc', flags: 'g' });
     });
 
+    it('does not send a second request when Analyze is pressed twice on the same input', async () => {
+      setPattern('abc');
+      analyzeNow();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(analysisRequest).toHaveBeenCalledTimes(1);
+
+      // The button is disabled in this state, but the use-case is what has to
+      // hold: re-submitting identical text would spend a round trip arriving
+      // back where it started.
+      expect(
+        submissionOf(workspaceStore.getState().pattern, workspaceStore.getState().committedPattern)
+          .submittable,
+      ).toBe(false);
+    });
+
     it('does not analyse an empty pattern', async () => {
       setPattern('a');
+      analyzeNow();
       await vi.advanceTimersByTimeAsync(500);
       analysisRequest.mockClear();
 
       setPattern('');
+      analyzeNow();
       await vi.advanceTimersByTimeAsync(500);
 
       expect(analysisRequest).not.toHaveBeenCalled();
@@ -165,12 +201,25 @@ describe('regex workspace use-cases', () => {
 
     it('does not execute without a test string', async () => {
       setPattern('a');
+      analyzeNow();
       await vi.advanceTimersByTimeAsync(500);
       expect(execRequest).not.toHaveBeenCalled();
     });
 
-    it('re-runs both when a flag changes', async () => {
+    it('does not execute a pattern that has never been analysed', async () => {
+      // The tester runs the *committed* pattern. Testing one the engine has
+      // not been asked about would report matches for an expression the
+      // explanation panel is silent about.
       setPattern('a');
+      setTestSubject('aaa');
+      await vi.advanceTimersByTimeAsync(500);
+      expect(execRequest).not.toHaveBeenCalled();
+    });
+
+    it('marks both panels stale when a flag changes, and re-runs neither', async () => {
+      setPattern('a');
+      analyzeNow();
+      await vi.advanceTimersByTimeAsync(500);
       setTestSubject('aaa');
       await vi.advanceTimersByTimeAsync(500);
       analysisRequest.mockClear();
@@ -179,9 +228,18 @@ describe('regex workspace use-cases', () => {
       toggleFlag('i');
       await vi.advanceTimersByTimeAsync(500);
 
-      expect(analysisRequest).toHaveBeenCalledTimes(1);
-      expect(execRequest).toHaveBeenCalledTimes(1);
-      expect(execRequest.mock.calls[0]?.[1]).toMatchObject({ flags: 'gi' });
+      // Neither panel moves. Flags change what both would say, so both go
+      // stale and wait to be asked — a match list that repainted here would
+      // look fresh while describing a flag set the user can no longer see
+      // selected.
+      expect(analysisRequest).not.toHaveBeenCalled();
+      expect(execRequest).not.toHaveBeenCalled();
+
+      const state = workspaceStore.getState();
+      expect(
+        regexSubmission(state.pattern, state.flags, state.committedPattern, state.committedFlags)
+          .stale,
+      ).toBe(true);
     });
   });
 
@@ -210,6 +268,7 @@ describe('regex workspace use-cases', () => {
     it('applies a response that still matches the current input', async () => {
       setPattern('abc');
       analysisRequest.mockResolvedValue(analysisFor('abc'));
+      analyzeNow();
       await vi.advanceTimersByTimeAsync(500);
 
       expect(workspaceStore.getState().analysis?.source).toBe('abc');
@@ -255,6 +314,8 @@ describe('regex workspace use-cases', () => {
       );
 
       setPattern('(a+)+$');
+      analyzeNow();
+      await vi.advanceTimersByTimeAsync(500);
       setTestSubject('aaaa!');
       await vi.advanceTimersByTimeAsync(500);
 
@@ -277,6 +338,7 @@ describe('regex workspace use-cases', () => {
       );
 
       setPattern('(');
+      analyzeNow();
       await vi.advanceTimersByTimeAsync(500);
 
       const state = workspaceStore.getState();
@@ -292,6 +354,8 @@ describe('regex workspace use-cases', () => {
       );
 
       setPattern('a');
+      analyzeNow();
+      await vi.advanceTimersByTimeAsync(500);
       setTestSubject('a');
       await vi.advanceTimersByTimeAsync(500);
 
@@ -320,6 +384,7 @@ describe('regex workspace use-cases', () => {
       analysisRequest.mockResolvedValue(analysisFor('abc'));
 
       setPattern('abc');
+      analyzeNow();
       await vi.advanceTimersByTimeAsync(500);
 
       expect(workspaceStore.getState().analysis?.source).toBe('abc');

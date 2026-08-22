@@ -1,5 +1,5 @@
 import type { DomainError } from '@/domain/shared/result';
-import { ANALYSIS_THRESHOLDS, debounceForSize, LIMITS } from '@/domain/shared/limits';
+import { LIMITS } from '@/domain/shared/limits';
 import { detectInput, AUTO_SELECT, SUGGEST } from '@/domain/shared/detect';
 import { formatJson, minifyJson, type IndentStyle } from '@/domain/json/format';
 import type { WorkerError } from '@/infrastructure/workers/protocol';
@@ -32,17 +32,6 @@ import {
  */
 
 const ANALYSIS_KEY = 'json-analysis';
-
-function signature(state: WorkspaceState): string {
-  return state.jsonInput;
-}
-
-let timer: ReturnType<typeof setTimeout> | null = null;
-
-function cancelTimer(): void {
-  if (timer !== null) clearTimeout(timer);
-  timer = null;
-}
 
 /* ------------------------------------------------------------------ *
  * Failure translation
@@ -85,31 +74,46 @@ function fromWorkerError(error: WorkerError): WorkspaceFailure {
 function clearAnalysis(): void {
   workspaceStore.setState((previous) => ({
     ...previous,
+    jsonCommitted: null,
     jsonAnalysis: null,
     jsonStatus: 'idle',
     jsonError: null,
-    jsonStale: false,
   }));
 }
 
-async function runAnalysis(explicit: boolean): Promise<void> {
-  const requested = workspaceStore.getState();
-  if (requested.jsonInput === '') {
+/**
+ * Analyses the document the user just submitted.
+ *
+ * The submitted text is committed to the store *before* the request goes out,
+ * so the result that comes back has something to belong to. Everything after
+ * this point compares against `jsonCommitted`, not against the editor: the
+ * user is free to keep typing while the worker is busy, and the answer will
+ * still be labelled with the document it actually describes.
+ */
+async function runAnalysis(): Promise<void> {
+  const source = workspaceStore.getState().jsonInput;
+  if (source === '') {
     clearAnalysis();
     return;
   }
 
-  workspaceStore.setState((previous) => ({ ...previous, jsonStatus: 'analyzing' }));
+  workspaceStore.setState((previous) => ({
+    ...previous,
+    jsonCommitted: source,
+    jsonStatus: 'analyzing',
+  }));
 
   const response = await getAnalysisClient().request(
     'analysis.json',
-    { source: requested.jsonInput },
+    { source },
     { supersedeKey: ANALYSIS_KEY },
   );
 
-  // The second staleness guard: a response can already be in the message
-  // queue when a newer request is issued, so supersession alone is not enough.
-  if (signature(workspaceStore.getState()) !== signature(requested)) return;
+  // The second staleness guard: a response can already be in the message queue
+  // when a newer request is issued, so supersession alone is not enough. The
+  // comparison is against the committed document — the draft may well have
+  // moved on, and that is not a reason to throw away a correct answer.
+  if (workspaceStore.getState().jsonCommitted !== source) return;
 
   if (response.ok) {
     workspaceStore.setState((previous) => ({
@@ -117,11 +121,11 @@ async function runAnalysis(explicit: boolean): Promise<void> {
       jsonAnalysis: response.value,
       jsonStatus: 'ready',
       jsonError: null,
-      jsonStale: false,
     }));
     // Only a *valid* document is eventually recorded; capture itself decides
-    // that (06_DATA_STORAGE.md §4.1).
-    scheduleCapture(explicit);
+    // that (06_DATA_STORAGE.md §4.1). Always explicit now: nothing else
+    // reaches this function.
+    scheduleCapture(true);
     return;
   }
 
@@ -132,7 +136,6 @@ async function runAnalysis(explicit: boolean): Promise<void> {
     jsonAnalysis: null,
     jsonStatus: 'error',
     jsonError: fromWorkerError(response.error),
-    jsonStale: false,
   }));
 }
 
@@ -140,48 +143,43 @@ async function runAnalysis(explicit: boolean): Promise<void> {
  * Commands
  * ------------------------------------------------------------------ */
 
+/**
+ * Records what the user is typing. **Analyses nothing.**
+ *
+ * Before M15 this started a debounce that parsed the document a moment after
+ * the last keystroke. It no longer does: typing is not a request for an
+ * answer, and treating it as one meant every intermediate, half-typed document
+ * cost a worker round trip and replaced a correct explanation with an error
+ * about text the user was still in the middle of writing.
+ *
+ * The previous tree stays on screen, and `jsonCommitted` still names the
+ * document it came from, so the UI can say the editor has moved on.
+ */
 export function setJsonInput(jsonInput: string): void {
-  const manual = jsonInput.length >= ANALYSIS_THRESHOLDS.manualAnalyzeBytes;
-
   workspaceStore.setState((previous) => {
     if (previous.jsonInput === jsonInput) return previous;
     return {
       ...previous,
       jsonInput,
-      jsonManual: manual,
-      // A large document keeps whatever tree it already has, marked stale, so
-      // the user is not left staring at an empty pane while they scroll.
-      jsonStale: manual && previous.jsonAnalysis !== null,
       detected: detectInput(jsonInput),
       detectedOnEmpty: previous.jsonInput === '',
     };
   });
-
-  cancelTimer();
-  if (manual) return;
-
-  timer = setTimeout(() => {
-    timer = null;
-    void runAnalysis(false);
-  }, debounceForSize(jsonInput.length));
 }
 
-/** The explicit action for a large document, and `Ctrl/⌘ + Enter` anywhere. */
+/** The Analyze button, and `Ctrl/⌘ + Enter`. The only way a document is parsed. */
 export function analyzeJsonNow(): void {
-  cancelTimer();
-  void runAnalysis(true);
+  void runAnalysis();
 }
 
 export function clearJson(): void {
-  cancelTimer();
   workspaceStore.setState((previous) => ({
     ...previous,
     jsonInput: '',
+    jsonCommitted: null,
     jsonAnalysis: null,
     jsonStatus: 'idle',
     jsonError: null,
-    jsonManual: false,
-    jsonStale: false,
     detected: null,
   }));
 }
@@ -262,7 +260,12 @@ export function isOverJsonLimit(input: string): boolean {
   return input.length > LIMITS.json.input;
 }
 
-/** Test-only: drops a pending debounce so one test cannot bleed into the next. */
+/**
+ * Test-only. Kept as a no-op so the suites that call it keep compiling.
+ *
+ * There is no longer a pending debounce to drop: nothing is scheduled, because
+ * nothing is analysed without being asked for.
+ */
 export function resetJsonScheduling(): void {
-  cancelTimer();
+  /* nothing to cancel — analysis is explicit */
 }

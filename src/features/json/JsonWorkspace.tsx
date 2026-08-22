@@ -11,22 +11,21 @@ import {
   setJsonInput,
 } from '@/application/json/jsonWorkspace';
 import { copyToClipboard } from '@/application/clipboard';
-import { workspaceStore, type WorkspaceFailure } from '@/application/stores/workspaceStore';
+import {
+  submissionOf,
+  workspaceStore,
+  type SubmissionState,
+  type WorkspaceFailure,
+} from '@/application/stores/workspaceStore';
 import { useStore } from '@/components/hooks/useStore';
+import { AnalyzeAction, AnalyzeStatus } from '@/components/primitives/AnalyzeAction';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CodeEditor, type EditorRange, type EditorSelection } from '@/components/editor/CodeEditor';
 import { Button } from '@/components/primitives/Button';
 import { Splitter } from '@/components/primitives/Splitter';
 import { CopyButton } from '@/components/primitives/CopyButton';
 import { Panel } from '@/components/primitives/Panel';
-import {
-  JsonErrors,
-  JsonFindings,
-  JsonManualPrompt,
-  JsonSearch,
-  JsonSelected,
-  JsonToolbar,
-} from './JsonPanels';
+import { JsonErrors, JsonFindings, JsonSearch, JsonSelected, JsonToolbar } from './JsonPanels';
 import { JsonTree } from './JsonTree';
 import {
   allExpandableKeys,
@@ -65,9 +64,9 @@ export function JsonWorkspace(): React.JSX.Element {
   const analysis = useStore(workspaceStore, (state) => state.jsonAnalysis);
   const status = useStore(workspaceStore, (state) => state.jsonStatus);
   const failure = useStore(workspaceStore, (state) => state.jsonError);
-  const manual = useStore(workspaceStore, (state) => state.jsonManual);
-  const stale = useStore(workspaceStore, (state) => state.jsonStale);
+  const committed = useStore(workspaceStore, (state) => state.jsonCommitted);
   const indent = useStore(workspaceStore, (state) => state.jsonIndent);
+  const submission = submissionOf(input, committed);
 
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<JsonRow | null>(null);
@@ -154,8 +153,8 @@ export function JsonWorkspace(): React.JSX.Element {
           input={input}
           analysis={analysis}
           failure={failure}
-          manual={manual}
-          stale={stale}
+          submission={submission}
+          busy={status === 'analyzing'}
           indent={indent}
           errorRanges={errorRanges}
           selection={selection}
@@ -208,8 +207,8 @@ interface InputColumnProps {
   readonly input: string;
   readonly analysis: JsonAnalysis | null;
   readonly failure: WorkspaceFailure | null;
-  readonly manual: boolean;
-  readonly stale: boolean;
+  readonly submission: SubmissionState;
+  readonly busy: boolean;
   readonly indent: IndentStyle;
   readonly errorRanges: readonly EditorRange[];
   readonly selection: EditorSelection | null;
@@ -221,8 +220,8 @@ function InputColumn({
   input,
   analysis,
   failure,
-  manual,
-  stale,
+  submission,
+  busy,
   indent,
   errorRanges,
   selection,
@@ -260,20 +259,25 @@ function InputColumn({
           Parsed as strict JSON (RFC 8259) in a background thread. Nothing is uploaded.
         </p>
 
-        <JsonToolbar
-          indent={indent}
-          onIndent={setJsonIndent}
-          onPrettify={prettifyJson}
-          onMinify={minifyJsonInput}
-          canFormat={analysis?.valid === true}
-          reason={
-            input === '' ? 'Paste some JSON to format it.' : 'Formatting needs a valid document.'
-          }
-        />
-
-        {manual && (
-          <JsonManualPrompt size={input.length} stale={stale} onAnalyze={analyzeJsonNow} />
-        )}
+        <div className={styles.submitRow}>
+          <AnalyzeAction
+            submission={submission}
+            busy={busy}
+            onAnalyze={analyzeJsonNow}
+            subject="JSON document"
+          />
+          <JsonToolbar
+            indent={indent}
+            onIndent={setJsonIndent}
+            onPrettify={prettifyJson}
+            onMinify={minifyJsonInput}
+            canFormat={analysis?.valid === true}
+            reason={
+              input === '' ? 'Paste some JSON to format it.' : 'Formatting needs a valid document.'
+            }
+          />
+        </div>
+        <AnalyzeStatus submission={submission} busy={busy} subject="JSON document" />
       </Panel>
 
       {statusText !== null && (

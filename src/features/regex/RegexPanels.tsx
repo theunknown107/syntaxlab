@@ -7,7 +7,7 @@ import type {
 import type { DomainError, SourceSpan } from '@/domain/shared/result';
 import { Badge } from '@/components/primitives/Button';
 import { groupLabelFor, warningKind, warningTone } from './viewModel';
-import type { SpanLinkHandlers } from './ExplanationView';
+import type { SpanLinkHandlers } from '@/components/ExplanationView';
 import styles from './regex.module.css';
 
 /**

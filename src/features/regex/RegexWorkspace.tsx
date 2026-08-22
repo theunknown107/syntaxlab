@@ -6,6 +6,7 @@ import type { SourceSpan } from '@/domain/shared/result';
 import {
   analyzeNow,
   clearTestSubject,
+  runMatchesNow,
   clearWorkspace,
   loadExample,
   resetFlags,
@@ -14,11 +15,13 @@ import {
   toggleFlag,
 } from '@/application/regex/regexWorkspace';
 import {
+  regexSubmission,
   workspaceStore,
   type AnalysisStatus,
   type WorkspaceFailure,
 } from '@/application/stores/workspaceStore';
 import { useStore } from '@/components/hooks/useStore';
+import { AnalyzeAction, AnalyzeStatus } from '@/components/primitives/AnalyzeAction';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CodeEditor, type EditorSelection } from '@/components/editor/CodeEditor';
 import { Button } from '@/components/primitives/Button';
@@ -27,7 +30,7 @@ import { Panel } from '@/components/primitives/Panel';
 import { Splitter } from '@/components/primitives/Splitter';
 import { TreeView } from '@/components/tree/TreeView';
 import { EXAMPLES } from './examples';
-import { ExplanationView, type SpanLinkHandlers } from './ExplanationView';
+import { ExplanationView, type SpanLinkHandlers } from '@/components/ExplanationView';
 import { FlagBar } from './FlagBar';
 import { MatchResults } from './MatchResults';
 import { CompatibilityView, GroupTable, TokenTable, WarningList } from './RegexPanels';
@@ -57,6 +60,12 @@ export function RegexWorkspace(): React.JSX.Element {
   const exec = useStore(workspaceStore, (state) => state.exec);
   const execStatus = useStore(workspaceStore, (state) => state.execStatus);
   const execError = useStore(workspaceStore, (state) => state.execError);
+  const committedPattern = useStore(workspaceStore, (state) => state.committedPattern);
+  const committedFlags = useStore(workspaceStore, (state) => state.committedFlags);
+
+  // Derived, not stored: a `stale` flag kept beside the strings it summarises
+  // is a third thing that can disagree with them.
+  const submission = regexSubmission(pattern, flags, committedPattern, committedFlags);
 
   const [hoveredSpan, setHoveredSpan] = useState<SourceSpan | null>(null);
   const [selection, setSelection] = useState<EditorSelection | null>(null);
@@ -176,6 +185,20 @@ export function RegexWorkspace(): React.JSX.Element {
               </span>
               <ExamplePicker />
             </div>
+
+            <div className={styles.inputFooter}>
+              <AnalyzeAction
+                submission={submission}
+                busy={analysisStatus === 'analyzing'}
+                onAnalyze={analyzeNow}
+                subject="pattern"
+              />
+            </div>
+            <AnalyzeStatus
+              submission={submission}
+              busy={analysisStatus === 'analyzing'}
+              subject="pattern"
+            />
           </Panel>
 
           <Panel title="Test string" meta={`${testSubject.length.toLocaleString('en')} characters`}>
@@ -193,7 +216,7 @@ export function RegexWorkspace(): React.JSX.Element {
               <Button onClick={clearTestSubject} variant="ghost">
                 Clear test string
               </Button>
-              <Button onClick={analyzeNow} variant="primary">
+              <Button onClick={runMatchesNow} variant="primary">
                 Run now
               </Button>
             </div>

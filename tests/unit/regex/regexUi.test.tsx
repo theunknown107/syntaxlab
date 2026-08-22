@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SourceSpan } from '@/domain/shared/result';
 import { analyzeRegex } from '@/domain/regex/analyze';
 import { executeRegex, type RegexExecResult } from '@/domain/regex/execute';
-import { ExplanationView, type SpanLinkHandlers } from '@/features/regex/ExplanationView';
+import { ExplanationView, type SpanLinkHandlers } from '@/components/ExplanationView';
 import { FlagBar } from '@/features/regex/FlagBar';
 import { MatchResults } from '@/features/regex/MatchResults';
 import { WarningList } from '@/features/regex/RegexPanels';

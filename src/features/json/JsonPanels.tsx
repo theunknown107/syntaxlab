@@ -4,7 +4,7 @@ import { INDENT_LABELS, type IndentStyle } from '@/domain/json/format';
 import type { DomainError } from '@/domain/shared/result';
 import { Badge, Button } from '@/components/primitives/Button';
 import type { JsonMatch, JsonRow } from './viewModel';
-import { excerptFor, formatBytes, TYPE_LABELS } from './viewModel';
+import { excerptFor, TYPE_LABELS } from './viewModel';
 import styles from './json.module.css';
 
 /**
@@ -346,37 +346,6 @@ export function JsonSearch({
         ariaLabel="Next match"
       >
         ↓
-      </Button>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * Large-document state
- * ------------------------------------------------------------------ */
-
-interface ManualProps {
-  readonly size: number;
-  readonly stale: boolean;
-  readonly onAnalyze: () => void;
-}
-
-/**
- * The manual-analysis prompt for a large document.
- *
- * Above `manualAnalyzeBytes` nothing is parsed on a debounce, because
- * re-parsing megabytes on every keystroke is exactly the expensive work
- * nobody asked for (08_UI_UX_SPEC.md §3).
- */
-export function JsonManualPrompt({ size, stale, onAnalyze }: ManualProps): React.JSX.Element {
-  return (
-    <div className={styles.manual} role="status">
-      <p>
-        This document is {formatBytes(size)}. It is analysed when you ask, rather than as you type.
-        {stale ? ' The tree below is from the previous analysis.' : ''}
-      </p>
-      <Button onClick={onAnalyze} variant="primary">
-        Analyze JSON
       </Button>
     </div>
   );
