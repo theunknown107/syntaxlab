@@ -459,15 +459,29 @@ The milestone was re-scoped at its start: **M14 is the domain representation, no
 
 ---
 
-### M16 — Cron integration and hardening *(0.5–1 day)*
+### M16 — Cron schedule execution — ✅ **COMPLETE**
 
-History supports cron entries; security corpus extended to cron fields; offline test covers three modes; bundle re-measured with the cron chunk.
+Re-scoped at its start and again in hindsight. The plan said "integration and
+hardening"; what M16 actually built was the **schedule engine itself** —
+next-run computation and per-schedule DST anomalies — which M14 had deferred
+here deliberately.
 
----
+| Planned | Outcome |
+|---|---|
+| History supports cron entries | ➡️ **Deferred.** `HistoryEntry` has no cron type, and inventing half a record — without the metadata the drawer renders, the validation an import is checked against, or a migration for older builds — would be worse than not having one |
+| Security corpus extended to cron fields | ✅ 24 boundary forgeries for the schedule operation, plus hostile start instants and counts |
+| Offline test covers three modes | ✅ |
+| Bundle re-measured | ✅ 174.69 KB, +2.43 KB for the whole engine |
 
-### M17 — V1.1 release *(0.5 day)*
+### M17 — V1.1 release — ✅ **COMPLETE**
 
-Full acceptance run including `21_ACCEPTANCE_CRITERIA.md` §11 (cron); deploy; post-deploy checklist.
+Full release gate on the release tree rather than carried-forward numbers:
+clean install, typecheck (with a planted-error probe proving it checks source),
+lint, format, 2 585 unit tests, build, budgets, `npm audit`, secret and history
+scans, the full browser matrix, live production verification against the
+deployed commit, and the post-deploy checklist in `17_DEPLOYMENT.md` §8.
+
+Recorded in `25_RELEASE_READINESS.md` under the v1.1.0 gate.
 
 **V1.1 total: 4–5.5 days.**
 

@@ -1,9 +1,9 @@
 # 25 — Release Readiness
 
 **Project:** SyntaxLab
-**Gate:** M12 — integration, end-to-end and release QA
+**Gate:** M17 — the v1.1.0 release (M12's V1.0 gate is kept below, unchanged)
 **Status:** Complete
-**Last updated:** 2026-08-21
+**Last updated:** 2026-08-22
 
 > **Verdict: ready to release, with three gates open and named.** None of the
 > three blocks a release; each is recorded here rather than absorbed, and each
@@ -316,3 +316,86 @@ six themes, both modes, both drawers, and the error, warning and empty states.
 The second is a verification gap, not a known defect, and the data a screen
 reader consumes is asserted. The third is measured, understood, and mitigated
 by the interface naming every construct in words.
+
+
+---
+
+# v1.1.0 release gate — M17
+
+Everything below was executed on the release tree
+(`feat/m16-cron-schedule`, merged to `main` as v1.1.0) rather than carried
+forward from M12. Exit codes were captured directly, never through a pipe.
+
+## 1. Build and code quality
+
+| Check | State | Evidence |
+|---|---|---|
+| `npm ci` from the lockfile | **PASS** | exit 0, 0 vulnerabilities reported by the installer |
+| `npm run typecheck` | **PASS** | exit 0 |
+| Typecheck *actually checks source* | **PASS** | deliberate error planted in `CronSchedule.tsx` → **exit 2**, error located at 281:14; removed → **exit 0**; tree clean |
+| `npm run lint` | **PASS** | exit 0 |
+| `npm run format:check` | **PASS** | exit 0 |
+| `npm test` | **PASS** | exit 0, **2 585 passed**, 47 files |
+| `npm run build` | **PASS** | exit 0 |
+| `npm audit --audit-level=low` | **PASS** | exit 0, 0 vulnerabilities |
+| Banned sinks absent | **PASS** | no `eval`, `new Function`, `innerHTML`, `outerHTML`, `document.write`, `insertAdjacentHTML`, `dangerouslySetInnerHTML` in `src/` |
+| Secret scan | **PASS** | no token, key or credential patterns in tracked files; no `.env` ever committed |
+| Release history clean | **PASS** | 0 co-author trailers, 0 personal email, single identity `theunknown107@users.noreply.github.com` |
+| Working tree clean | **PASS** | |
+
+## 2. Budgets — measured on the release build
+
+| Measure | Result | Target | Hard | State |
+|---|---|---|---|---|
+| **Initial JS** | **174.69 KB** | 170 KB | 200 KB | **ACCEPTED RISK** — over target, 12.7% under the hard limit |
+| Worker chunks | 27.24 KB | 80 KB | 120 KB | **PASS** |
+| Service worker | 6.02 KB | 15 KB | 30 KB | **PASS** |
+| CSS | 8.95 KB | 15 KB | 20 KB | **PASS** |
+| Icons + manifest | 20.36 KB | 40 KB | 60 KB | **PASS** |
+| Total precache | 239.06 KB | 1 536 KB | 2 048 KB | **PASS** |
+
+The 4.69 KB over target buys the entire cron schedule engine, its boundary
+validator and its UI panel. Code-splitting cron has been measured as *worse*
+twice, and nothing was going to be removed from accessibility, security or
+functionality to recover it.
+
+## 3. Latency — release tree, idle machine
+
+| | Median | Range |
+|---|---|---|
+| Startup FCP, cold | **122 ms** | |
+| Startup FCP, warm | 127 ms | |
+| Startup FCP, offline | **114 ms** | |
+| Regex analysis | 109–125 ms | includes the Analyze round trip |
+| Regex execution, 64 KB subject | 909 ms | |
+| JSON analysis, 977 KB | 117 ms | 91 ms at 98 KB |
+| JSON expand-all, 500 KB | 51 ms | |
+| Format | 41 ms | |
+| History drawer open | 23 ms | |
+| Theme switch | 31 ms | |
+| **Cron search, worst p99** | **0.209 ms** | 326 steps of 100 000 allowed |
+| Cron browser-local, DST-adjacent | 0.024–0.026 ms p99 | a transition costs nothing extra |
+| Cron worker round trip | 0.008 ms search · 0.026 ms clone · 0.003 ms validate | 1 138 bytes |
+
+Regex analysis is not directly comparable with the M11 figure: it now measures
+a submitted analysis rather than a debounced one.
+
+## 4. End-to-end
+
+| | |
+|---|---|
+| Command | `npx playwright test`, exit code captured directly |
+| Result | **845 passed, 2 failed** of 847 · **exit 1** |
+| Failures | Both Firefox: one regex match list, one analysis arrival |
+| In isolation | **6/6 across three repeats · exit 0** |
+| Two Firefox projects together | 49/1 — and a *different* test fails |
+
+**ACCEPTED RISK, characterised.** Every failure of this family asserts that a
+worker's answer *arrived*, never that it was *correct*; none has produced a
+wrong time, match or tree. The rate tracks host load, not the product. Root
+cause and the concurrency correction are in `13_TEST_PLAN.md`.
+
+## 5. Deferred, and still deferred
+
+Cron history, named IANA timezones, a cron builder, six/seven-field cron,
+seconds and year fields. Recorded in `22_OPEN_QUESTIONS.md`.

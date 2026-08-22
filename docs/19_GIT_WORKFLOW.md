@@ -177,7 +177,7 @@ Requirements: all CI green, self-review complete, no unresolved comments, branch
 5. Tag: git tag -a v1.2.0 -m "Release v1.2.0"
 6. Push with --follow-tags
 7. Create a GitHub release with the changelog section
-8. Cloudflare deploys main
+8. Vercel deploys main (the host changed at V1.0; see 17_DEPLOYMENT.md)
 9. Run the post-deploy checklist (17_DEPLOYMENT.md §8)
 ```
 

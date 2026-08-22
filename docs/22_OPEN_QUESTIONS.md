@@ -176,6 +176,41 @@ V1.1 supports browser-local and UTC only (D-04). Named IANA zones are deferred.
 
 **Do not ship named zones without that test matrix.** A wrong schedule in a named zone is worse than no named-zone support, because the user cannot tell it is wrong.
 
+**Status after M16 — closer, but not close enough, and for a specific reason.**
+M16 built offset probing and tested it across most of that matrix: `Europe/London`
+(both directions), `Australia/Sydney` (southern hemisphere), `Asia/Kolkata`
+(half-hour offset and no DST), `America/New_York`, and `Pacific/Kiritimati`.
+
+That does **not** transfer to named zones, because the mechanism does not.
+`getTimezoneOffset()` reports the offset of the *ambient* zone — the one the
+runtime is in — so probing it can only ever answer questions about the user's
+own clock. Resolving a wall-clock reading in an *arbitrary* zone needs a
+different mechanism entirely: `Intl.DateTimeFormat` with a `timeZone` option,
+formatted to parts and inverted, which has its own edge cases and its own test
+burden. M16 makes the DST *reasoning* proven; it does not make named zones a
+smaller job than it was.
+
+Still deferred. Q-09 stays open.
+
+---
+
+### Q-11 — Cron history — *raised at M15, still open at v1.1.0*
+
+Regex and JSON analyses are recorded in history. **Cron analyses are not.**
+
+`HistoryEntry` has no cron variant, and adding one is not a small change: the
+drawer renders type-specific metadata, an import is validated field by field
+against the known variants, and an older build opening a newer export has to
+degrade rather than break. A half-built record would put data on disk that a
+later version has to migrate or discard.
+
+**Revisit when** the cron entry has a designed shape — what is shown in the
+drawer row, what a restore does to the timezone mode, and what an older build
+does with an entry type it does not know.
+
+**Until then this is stated plainly in the README** rather than left for a user
+to discover by analysing a cron expression and finding no trace of it.
+
 ---
 
 ### Q-10 — Optional history encryption

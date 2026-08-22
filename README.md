@@ -2,15 +2,16 @@
 
 **Understand developer syntax instantly.**
 
-Regular expressions and JSON — explained in plain English, tested live, and
-processed in your browser. The app doesn't upload what you paste.
+Regular expressions, JSON and cron — explained in plain English, tested live,
+and processed in your browser. The app doesn't upload what you paste.
 
-[Documentation](./docs) · [Security](./SECURITY.md) · [Licence](./LICENSE)
+**[syntaxlab-jet.vercel.app](https://syntaxlab-jet.vercel.app)**
 
-> **Status: V1.0 release candidate.** The application is complete and has
-> passed its release-QA gate ([docs/25_RELEASE_READINESS.md](./docs/25_RELEASE_READINESS.md));
-> it has not been deployed yet, so there is no public link in this README. One
-> will be added when there is a real address behind it.
+[Documentation](./docs) · [Changelog](./CHANGELOG.md) · [Security](./SECURITY.md) · [Licence](./LICENSE)
+
+> **Status: v1.1.0, live.** Cron joins regex and JSON: five-field expressions,
+> explained field by field, with the next ten run times and honest
+> daylight-saving behaviour.
 
 ---
 
@@ -34,6 +35,28 @@ reason — _"trailing comma before `}`"_ — instead of a character offset. Plus
 collapsible tree, copyable JSON paths, duplicate-key detection, and a warning
 when a number cannot survive a round trip through JavaScript's `number`.
 
+**Cron.** Paste `*/15 9-17 * * 1-5` and get back what each of the five fields
+selects, in words, plus **when it actually runs next** — the next occurrence and
+up to ten after it, each labelled with the clock they are read in.
+
+Three things make this more than a countdown:
+
+- **The day-of-month / day-of-week rule.** `0 0 1 * MON` means "the 1st, **and
+  also** every Monday", not "the 1st if it's a Monday". Almost everyone reads
+  it the other way, so SyntaxLab warns whenever both fields are restricted and
+  spells the reading out.
+- **Daylight saving, reported rather than resolved.** A run the clocks jump
+  over is shown as skipped, with **no time invented for it**. A run the clocks
+  fall back through is shown as happening twice, with both instants and both
+  offsets. Schedulers genuinely differ here; this one tells you what the clock
+  does and says so.
+- **Refusals that teach.** Six- and seven-field expressions, and `L`, `W`, `#`,
+  `?` and `H`, are refused by name — "that's Quartz" — rather than guessed at.
+
+**Two timezone modes only:** your browser's zone, or UTC. Named IANA zones are
+not offered, because getting them right needs a test matrix this project has
+not earned yet — and a timezone picker you cannot trust is worse than none.
+
 ## Why it's different
 
 - **It explains, rather than just validating.** Most tools tell you whether
@@ -41,12 +64,16 @@ when a number cannot survive a round trip through JavaScript's `number`.
 - **Nothing you paste is uploaded.** See [Privacy](#privacy) — including the
   caveats.
 - **It keeps working offline.** Install it, and it runs with no network at all.
-- **It does two things properly** instead of ten approximately.
+- **It does three things properly** instead of ten approximately.
 
 ## Quick start
 
-Open the app, pick **Regex** or **JSON**, and paste. There is no sign-up, no
-configuration and no first-run tour.
+Open the app, pick **Regex**, **JSON** or **Cron**, paste, and press
+**Analyze**. There is no sign-up, no configuration and no first-run tour.
+
+**Nothing is analysed while you type.** Analysis happens when you ask for it,
+which is what makes it unambiguous which text the panels are describing; a
+badge tells you when the editor has moved on from the result on screen.
 
 If your browser offers to install it, doing so gives you an app window and
 makes it work offline. Nothing else changes.
@@ -65,11 +92,19 @@ control, not a mathematical proof.
 
 **What is stored locally:**
 
-|                    | Where         | You can                                          |
-| ------------------ | ------------- | ------------------------------------------------ |
-| Analysis history   | IndexedDB     | pause, search, rename, pin, export, delete, wipe |
-| Theme and settings | localStorage  | change or reset at any time                      |
-| The app itself     | Cache Storage | clear through your browser                       |
+|                  | Where         | You can                                          |
+| ---------------- | ------------- | ------------------------------------------------ |
+| Analysis history | IndexedDB     | pause, search, rename, pin, export, delete, wipe |
+| Settings         | localStorage  | change or reset at any time                      |
+| Theme            | **the URL**   | copy the address to carry the look with it       |
+| The app itself   | Cache Storage | clear through your browser                       |
+
+**The theme lives in the address bar**, not in storage — so a link carries it.
+Only preferences travel that way: **nothing you type ever enters the URL**, and
+neither does anything the app works out from it, including run times.
+
+**History records regex and JSON only.** Cron analyses are not recorded — see
+Roadmap.
 
 **What the app does not do:** no accounts, no analytics, no telemetry, no error
 reporting, no cookies, and no fonts, scripts or images from anyone else. The
@@ -152,16 +187,24 @@ module is an `import type` that TypeScript erases, so no main-thread path can
 run a user pattern even by accident.
 
 Five runtime dependencies: React, React DOM, and three CodeMirror packages.
+**No date or timezone library** — the cron schedule engine does wall-clock
+arithmetic on plain integers and detects daylight-saving transitions by probing
+`Date`, which is exact for whole-minute schedules in every real zone.
 
 Details, with diagrams, in [docs/02_ARCHITECTURE.md](./docs/02_ARCHITECTURE.md).
 
 ## Testing
 
-|            |                                                                      |
-| ---------- | -------------------------------------------------------------------- |
-| Unit       | 2 167 tests, including 644 JSONTestSuite conformance cases           |
-| End-to-end | 674 passing across Chromium, Firefox, WebKit and an emulated Pixel 5 |
-| Skipped    | 11, all WebKit engine or harness limitations, each named in the test |
+|            |                                                                     |
+| ---------- | ------------------------------------------------------------------- |
+| Unit       | 2 585 tests, including 644 JSONTestSuite conformance cases          |
+| End-to-end | 845 of 847 across Chromium, Firefox, WebKit and an emulated Pixel 5 |
+| Known      | 2 Firefox-only failures, load-bound and root-caused — see below     |
+
+The two are not product defects and are not hidden: on a loaded machine
+Firefox occasionally fails to deliver a **worker's answer** inside a test's
+timeout — never a wrong answer. Each passes in isolation, and the analysis is
+written up in [docs/13_TEST_PLAN.md](./docs/13_TEST_PLAN.md).
 
 The end-to-end suite drives the **production build under production headers**,
 not a development server. Four of its specs walk complete user journeys rather
@@ -208,11 +251,13 @@ Known differences, all handled rather than hidden:
 
 ## Roadmap
 
-**Now (v1.0)** — Regex · JSON · local history · theming · offline PWA
+**Now (v1.1)** — Regex · JSON · **Cron with next-run times** · local history ·
+URL-backed theming · offline PWA
 
-**Next (v1.1)** — Cron: standard five-field expressions, field-by-field
-explanation, next run times, and an explicit timezone. One dialect done
-properly rather than five guessed at.
+**Deferred, deliberately** — cron history (the record format is not designed
+yet), named IANA timezones, and a visual cron builder. Each is recorded in
+[docs/22_OPEN_QUESTIONS.md](./docs/22_OPEN_QUESTIONS.md) with the reason it is
+not here.
 
 **Considering** — JSON → TypeScript · JSON → JSON Schema · shareable links ·
 a ReDoS risk report · a light theme · explanations for other regex flavours
