@@ -150,6 +150,40 @@ describe('when captures happen', () => {
 });
 
 describe('what is never captured', () => {
+  it('records nothing for a draft nobody asked to analyse', async () => {
+    // M15: typing produces no analysis, so there is nothing to record. A
+    // history full of half-typed patterns helps nobody, and the guard is that
+    // capture is only ever reached from a completed analysis.
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      mode: 'regex',
+      pattern: 'ab+c',
+      // No analysis: the user typed and stopped.
+      analysis: null,
+    }));
+
+    scheduleCapture(true);
+    await vi.advanceTimersByTimeAsync(CAPTURE_DELAY_MS * 2);
+    expect(backend.records).toHaveLength(0);
+  });
+
+  it('records nothing in cron mode, which has no entry type yet', async () => {
+    // Before M15 the candidate was chosen with `mode === 'regex' ? … : …`, so
+    // a cron analysis would have re-saved whatever JSON sat in the other
+    // editor. The switch is exhaustive now and cron returns nothing.
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      mode: 'cron',
+      cronInput: '*/15 * * * *',
+      jsonInput: '{"leftover": true}',
+      jsonAnalysis: jsonAnalysis('{"leftover": true}', true),
+    }));
+
+    scheduleCapture(true);
+    await vi.advanceTimersByTimeAsync(CAPTURE_DELAY_MS * 2);
+    expect(backend.records).toHaveLength(0);
+  });
+
   it('records nothing while history is paused', async () => {
     setHistoryEnabled(false);
     workspaceStore.setState((previous) => ({
