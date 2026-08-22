@@ -472,6 +472,24 @@ Between three and fourteen tests failed per run, a different set each time,
 across Firefox **and** Chromium. Every one of them passed in isolation and in a
 single-project run.
 
+**The residual, after that fix, is Firefox worker round trips.** About half a
+percent of a full run, always Firefox, always the same shape — *a worker's
+answer did not arrive in time*, never a wrong answer — and the rate tracks
+concurrent load:
+
+| Scope | Tests | Failed |
+|---|---|---|
+| `regex-firefox` alone, three consecutive runs | 26 each | 0 |
+| every Firefox project together | 226 | 1 |
+| the whole suite | 847 | 4 |
+
+`workers.spec.ts:63` is the clearest case: a **50 ms** busy-spin expected to
+finish inside the product's **2-second** execution deadline. When the host is
+saturated the round trip misses two seconds and the product correctly reports a
+timeout — the assertion is about wall-clock time on the machine, so the machine
+is what fails it. Tests that assert *timing* rather than *behaviour* are the
+ones to suspect first when a suite is load-sensitive.
+
 `workers` is therefore set from the core count divided by four rather than two.
 The suite passes at that concurrency and — because the machine is no longer
 thrashing — takes the same wall-clock time either way. **This is not a retry and
