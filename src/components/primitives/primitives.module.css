@@ -81,12 +81,16 @@
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not(:disabled, [aria-disabled='true']) {
   border-color: var(--color-border-strong);
   background-color: var(--color-surface);
 }
 
-.button:disabled {
+/* Both spellings look identical. `aria-disabled` is used where the control
+   must stay focusable — see the Button primitive — and it would otherwise
+   keep the enabled styling while announcing itself as unavailable. */
+.button:disabled,
+.button[aria-disabled='true'] {
   color: var(--color-text-disabled);
   cursor: not-allowed;
 }
@@ -109,7 +113,7 @@
   border-color: transparent;
 }
 
-.ghost:hover:not(:disabled) {
+.ghost:hover:not(:disabled, [aria-disabled='true']) {
   background-color: var(--color-surface-raised);
 }
 
@@ -240,7 +244,7 @@
   font-weight: var(--weight-medium);
 }
 
-.danger:hover:not(:disabled) {
+.danger:hover:not(:disabled, [aria-disabled='true']) {
   background-color: var(--color-error);
   color: var(--color-text-inverse);
   border-color: var(--color-error);

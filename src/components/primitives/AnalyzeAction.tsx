@@ -51,6 +51,10 @@ export function AnalyzeAction({
         onClick={onAnalyze}
         variant="primary"
         disabled={disabled}
+        // Pressing this is what makes it unavailable — there is nothing left
+        // to submit once the analysis lands. A real `disabled` would blur it
+        // at that moment and drop a keyboard user back to the document top.
+        keepFocusWhenDisabled
         // Named for what it analyses. "Analyze" alone, repeated in three
         // modes, gives a screen-reader user listing the buttons no way to
         // tell which editor it belongs to.

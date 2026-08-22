@@ -128,9 +128,25 @@ describe('the Analyze control', () => {
     expect(screen.getByRole('button', { name: 'Analyze cron expression' })).toBeInTheDocument();
   });
 
-  it('is disabled when there is nothing to analyse', () => {
+  it('is unavailable when there is nothing to analyse, without losing its place', () => {
+    // `aria-disabled` rather than `disabled`: pressing this button is what
+    // makes it unavailable, and a real `disabled` would blur it at that
+    // moment and drop a keyboard user back to the top of the document.
     render(<AnalyzeAction submission={idle} busy={false} onAnalyze={vi.fn()} subject="pattern" />);
-    expect(screen.getByRole('button', { name: 'Analyze pattern' })).toBeDisabled();
+    const button = screen.getByRole('button', { name: 'Analyze pattern' });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toBeEnabled();
+  });
+
+  it('refuses the click while it is unavailable', async () => {
+    const onAnalyze = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AnalyzeAction submission={idle} busy={false} onAnalyze={onAnalyze} subject="pattern" />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Analyze pattern' }));
+    expect(onAnalyze).not.toHaveBeenCalled();
   });
 
   it('is disabled when the visible result already describes the editor', () => {
@@ -139,12 +155,33 @@ describe('the Analyze control', () => {
     render(
       <AnalyzeAction submission={settled} busy={false} onAnalyze={vi.fn()} subject="pattern" />,
     );
-    expect(screen.getByRole('button', { name: 'Analyze pattern' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Analyze pattern' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
-  it('is enabled once there is something new to submit', () => {
+  it('is available once there is something new to submit', () => {
     render(<AnalyzeAction submission={ready} busy={false} onAnalyze={vi.fn()} subject="pattern" />);
-    expect(screen.getByRole('button', { name: 'Analyze pattern' })).toBeEnabled();
+    const button = screen.getByRole('button', { name: 'Analyze pattern' });
+    expect(button).toBeEnabled();
+    expect(button).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps focus when it becomes unavailable', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <AnalyzeAction submission={ready} busy={false} onAnalyze={vi.fn()} subject="pattern" />,
+    );
+    await user.tab();
+    const button = screen.getByRole('button', { name: 'Analyze pattern' });
+    expect(button).toHaveFocus();
+
+    // The state a successful analysis leaves behind.
+    rerender(
+      <AnalyzeAction submission={settled} busy={false} onAnalyze={vi.fn()} subject="pattern" />,
+    );
+    expect(screen.getByRole('button', { name: 'Analyze pattern' })).toHaveFocus();
   });
 
   it('submits once per click and cannot be double-fired while busy', async () => {
@@ -158,7 +195,12 @@ describe('the Analyze control', () => {
     expect(onAnalyze).toHaveBeenCalledTimes(1);
 
     rerender(<AnalyzeAction submission={ready} busy onAnalyze={onAnalyze} subject="pattern" />);
-    expect(screen.getByRole('button', { name: 'Analyze pattern' })).toBeDisabled();
+    const busyButton = screen.getByRole('button', { name: 'Analyze pattern' });
+    expect(busyButton).toHaveAttribute('aria-disabled', 'true');
+    // Focus is not thrown away mid-interaction.
+    expect(busyButton).toBeEnabled();
+    await user.click(busyButton);
+    expect(onAnalyze).toHaveBeenCalledTimes(1);
   });
 
   it('works from the keyboard', async () => {

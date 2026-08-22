@@ -14,6 +14,18 @@ export interface ButtonProps {
   readonly onClick: () => void;
   readonly variant?: ButtonVariant;
   readonly disabled?: boolean;
+  /**
+   * Marks the control unavailable **without removing it from the tab order.**
+   *
+   * A real `disabled` attribute makes the browser blur the element, so a
+   * control that disables itself in response to being pressed throws the
+   * keyboard user back to the top of the document. Analyze does exactly that:
+   * press it, the analysis lands, and there is nothing left to submit.
+   *
+   * `aria-disabled` announces the same state, keeps focus where the user put
+   * it, and the click is refused here rather than by the platform.
+   */
+  readonly keepFocusWhenDisabled?: boolean;
   readonly title?: string;
   readonly ariaLabel?: string;
 }
@@ -23,15 +35,21 @@ export function Button({
   onClick,
   variant = 'secondary',
   disabled = false,
+  keepFocusWhenDisabled = false,
   title,
   ariaLabel,
 }: ButtonProps): React.JSX.Element {
+  const soft = disabled && keepFocusWhenDisabled;
   return (
     <button
       type="button"
       className={`${styles.button} ${styles[variant]}`}
-      onClick={onClick}
-      disabled={disabled}
+      onClick={() => {
+        if (disabled) return;
+        onClick();
+      }}
+      disabled={disabled && !soft}
+      aria-disabled={soft ? true : undefined}
       title={title}
       aria-label={ariaLabel}
     >

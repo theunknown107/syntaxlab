@@ -113,9 +113,10 @@ describe('AppShell', () => {
     expect(disabled).toHaveLength(0);
   });
 
-  it('enables Analyze once there is something to analyse', () => {
+  it('marks Analyze unavailable on an empty editor, without removing it from the tab order', () => {
     render(<App />);
     const analyze = screen.getByRole('button', { name: 'Analyze pattern' });
-    expect(analyze).toBeDisabled();
+    expect(analyze).toHaveAttribute('aria-disabled', 'true');
+    expect(analyze).toBeEnabled();
   });
 });
