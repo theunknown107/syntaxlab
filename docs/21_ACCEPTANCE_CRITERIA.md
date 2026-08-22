@@ -356,3 +356,54 @@ Not automatable. Failing these blocks release even with every checkbox ticked.
 | Q-9 | Nothing is animated without a reason |
 | Q-10 | A developer would keep this tab open |
 | Q-11 | **V1.0 feels like a finished tool, not two-thirds of one** |
+
+
+---
+
+## M15 — explicit analysis, URL preferences, cron UI
+
+### Explicit analysis
+
+| # | Criterion | Verification |
+|---|---|---|
+| X-1 | Typing alone sends no analysis request, in any mode | Unit, counted at the worker seam |
+| X-2 | Typing alone creates no history entry | Unit |
+| X-3 | Analyze sends exactly one request | Unit |
+| X-4 | Analyze is disabled when the editor is empty, when it is busy, and when the visible result already describes the editor | Unit + component |
+| X-5 | The Analyze button has an accessible name naming what it analyses | Component |
+| X-6 | `Ctrl/⌘ + Enter` analyses; plain Enter remains an editing key in every mode | Component + E2E |
+| X-7 | The result on screen always belongs to the last committed input | Unit — responses are matched against `committed*` |
+| X-8 | An editor that has moved on is visibly marked, with the previous result kept | Component |
+| X-9 | Busy state is announced politely, not only shown | Component |
+| X-10 | Analyze does not execute the regex tester, and does not format JSON | Unit |
+| X-11 | The tester runs the committed pattern, never an unanalysed draft | Unit |
+
+### URL-backed preferences
+
+| # | Criterion | Verification |
+|---|---|---|
+| U-1 | A theme is fully expressible as validated URL parameters | Unit, round trip |
+| U-2 | Theme changes never write localStorage | Unit, both spies |
+| U-3 | No editor content of any kind appears in a URL | Unit + code review |
+| U-4 | Malformed parameters fall back safely; nothing unvalidated reaches CSS | Unit, hostile corpus |
+| U-5 | Unknown parameters are ignored, and parameters this app does not own are preserved | Unit |
+| U-6 | URL writes use `replaceState`, never `pushState` | Unit, spied |
+| U-7 | A burst of changes writes the URL once | Unit |
+| U-8 | The theme applies before first paint, including for a bare `?theme=…` | Bootstrap test + E2E |
+| U-9 | Total parameter size is bounded, and an oversized theme is ignored in full | Unit |
+| U-10 | An existing localStorage theme migrates once, and only that key is removed | Unit |
+| U-11 | Preferences survive a reload offline | E2E |
+
+### Cron UI
+
+| # | Criterion | Verification |
+|---|---|---|
+| CU-1 | Cron is a selectable mode, never a disabled one | Component |
+| CU-2 | A valid 5-field expression renders fields, explanation and warnings | Component + E2E |
+| CU-3 | Six and seven fields are refused with the message and hint on screen | Unit + E2E |
+| CU-4 | Quartz and Jenkins syntax name the scheduler they come from | Unit |
+| CU-5 | Five rows render whether or not the expression parsed | Component |
+| CU-6 | A failing field says what is wrong in words, not only by colour | Component |
+| CU-7 | The timezone mode is visible, with two options and no more | Component |
+| CU-8 | **No next-run list, calendar, schedule preview or named-zone selector exists** | Component + E2E |
+| CU-9 | Each field links back to its own text in the expression | Component |

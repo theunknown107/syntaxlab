@@ -573,3 +573,60 @@ with a "Show 200 more" control below. The window resets when `result` changes �
 holding position at row 400 of a previous result would be both wrong and slow.
 It is local state rather than store state because nothing outside the table
 cares how far the user has scrolled through it.
+
+
+---
+
+## M15 — the cron tree, and one control shared by three
+
+### The cron feature
+
+```
+<CronWorkspace>                       features/cron/
+  ├── <Panel title="Cron expression">
+  │     ├── <CodeEditor singleLine/>   components/editor/
+  │     ├── field legend (1–5)
+  │     ├── <AnalyzeAction/>           components/primitives/
+  │     ├── timezone radios (two)
+  │     └── example buttons
+  ├── <Splitter/>                      components/primitives/
+  ├── <Panel title="Fields">
+  │     └── <CronFields/>              features/cron/
+  └── <Panel title="Explanation">
+        ├── warnings
+        └── <ExplanationView/>         components/
+```
+
+Two new components, both feature-owned; everything else is reuse. Cron is a
+third mode, not a third application.
+
+### `ExplanationView` moved to `components/`
+
+It lived in `features/regex/` from M3 because regex was its only consumer. It
+was never regex-specific — it renders `Explanation`, which every mode produces
+— and cron made that visible. Moved with its styles into
+`components/explanation.module.css`.
+
+The alternative, importing it across features, is permitted by the boundary
+rules and would have been the smaller diff. It was rejected because
+`features/cron` depending on `features/regex` describes a relationship that
+does not exist.
+
+### `AnalyzeAction`
+
+Shared by all three modes: the button, the disabled rule, the busy label, the
+stale badge, and a separate `AnalyzeStatus` live region.
+
+The live region is separate from the button on purpose. Announcing state by
+changing the button's own label means a screen reader can be reading the label
+at the moment it changes, which is a different experience from being told the
+state moved.
+
+### Two exhaustive switches, both of them a fix
+
+`Workspace` and `captureNow` each chose between modes with
+`mode === 'regex' ? … : …`. That is correct for two modes and silently wrong
+for three: adding cron would have sent it down the JSON branch. Both are now
+`switch` statements over the union, so a fourth mode is a compile error rather
+than a wrong answer. In `captureNow` the old shape would have re-saved whatever
+JSON sat in the other editor every time a cron expression was analysed.

@@ -562,3 +562,33 @@ The two largest historical cuts — cron and share URLs — have already been ma
 **Phase 2 is not authorised.** This plan takes effect only after human review of the revised documentation package and an explicit instruction to begin implementation.
 
 All four Phase 1 blocking questions are now resolved (`22_OPEN_QUESTIONS.md` §1). The remaining M0 items — repository visibility, licence, and product name — are administrative rather than architectural, and none of them blocks M1 from starting.
+
+
+---
+
+### M15 — Cron UI, explicit analysis, URL preferences — ✅ **COMPLETE**
+
+Three deliverables, two of them approved UX changes that reach beyond cron.
+
+| # | Deliverable | Status |
+|---|---|---|
+| 15.1 | Cron mode in the workspace, with editor, field breakdown, explanation, warnings and refusal messaging | ✅ |
+| 15.2 | Timezone mode visible, two options, no named-zone selector | ✅ |
+| 15.3 | Source linking from each field back to its text | ✅ |
+| 15.4 | Explicit Analyze in all three modes; typing analyses nothing | ✅ |
+| 15.5 | Draft and committed input separated; stale state visible | ✅ |
+| 15.6 | Theme preferences moved from localStorage to validated URL parameters | ✅ |
+| 15.7 | One-time localStorage migration, then the key is dropped | ✅ |
+| 15.8 | Tests: 92 new cases across four suites | ✅ |
+| 15.9 | Documentation and diagrams synchronised | ✅ |
+| — | Next-run computation, schedule executor, named zones | ➡️ **M16**, untouched |
+| — | Cron in history | ➡️ Deferred. `HistoryEntry` has no cron type, and half a record on disk is worse than none |
+
+**Found and fixed on the way:** `Workspace` and `captureNow` both chose between
+modes with a two-branch ternary, which is silently wrong for three. Adding cron
+would have rendered JSON for cron mode and re-saved whatever JSON sat in the
+other editor on every cron analysis. Both are exhaustive switches now.
+
+**Measured, not assumed:** code-splitting the cron workspace made the bundle
+*larger* (173.88 KB against 172.19 KB inline), the second time that experiment
+has come out that way in this project.

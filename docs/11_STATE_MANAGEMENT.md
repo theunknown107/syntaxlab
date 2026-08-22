@@ -124,6 +124,45 @@ interface WorkspaceState {
 
 The hot path. `input` changes on every keystroke, so **only the editor subscribes to it**; the analysis pane subscribes to `result` and `status`, which change at most once per debounce interval.
 
+#### Draft and committed input — M15
+
+Every mode holds two versions of its input:
+
+| | |
+|---|---|
+| `pattern` / `jsonInput` / `cronInput` | The draft. Changes on every keystroke. |
+| `committedPattern` / `jsonCommitted` / `cronCommitted` | What the visible result was produced from. Changes only on Analyze. `null` until the first one. |
+
+```mermaid
+flowchart LR
+    A["Editor"] -->|"every keystroke"| B["draft"]
+    B -->|"Analyze, and nothing else"| C["committed"]
+    C --> D["worker request"]
+    D --> E["result"]
+    E --> F["panels"]
+    B -.->|"differs from committed"| G["stale badge"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    classDef warn fill:#2a2414,stroke:#a08040,color:#fff0d9
+    class C,E safe
+    class G warn
+```
+
+**Staleness is derived, not stored.** `submissionOf(draft, committed)` returns
+`{ untouched, stale, submittable }`. A `stale` boolean kept beside the two
+strings would be a third thing that can disagree with them, and the
+disagreement would show as a result presented as current when it is not.
+
+**Responses are matched against the committed input, not the editor.** The user
+is free to keep typing while a worker is busy; that is not a reason to throw
+away a correct answer about the text they actually asked about. It is also the
+staleness guard: a response whose committed input has since been superseded is
+dropped.
+
+Regex is the one mode whose commitment is two values, because flags change what
+an analysis would say without changing a character of the pattern.
+`regexSubmission` treats a flag change as an edit.
+
 ### 4.2 `historyStore`
 
 ```ts
@@ -228,7 +267,7 @@ Every worker request carries a monotonically increasing id. When a response arri
 
 | Data | Store | Write timing |
 |---|---|---|
-| Theme | localStorage | Debounced 300 ms after change |
+| Theme | **URL query string** | Debounced 250 ms after change, via `history.replaceState` |
 | Settings | localStorage | Immediately (rare, small) |
 | Panel split | localStorage | Debounced 500 ms after drag end |
 | History | IndexedDB | Debounced 2 s after a successful analysis; immediately on explicit save/rename/pin |
@@ -269,11 +308,21 @@ Nothing in steps 6–7 blocks first paint. Every one of them can fail without pr
 | Data | Mechanism | Behaviour |
 |---|---|---|
 | History | `BroadcastChannel('syntaxlab')` | Other tabs refetch their page on `history-changed` |
-| Theme | `storage` event | Applied live in all tabs |
+| Theme | **None, deliberately** | Two tabs on two URLs are two documents with two themes — see below |
 | Settings | `storage` event | Applied live |
 | Editor content | None | Independent per tab, by design — two tabs are two workspaces |
 | First-run notice | `storage` event | Acknowledging in one tab suppresses it in the others |
 | DB upgrade | IDB `versionchange` | Old tabs close their connection and prompt a reload |
+
+**Theme lost its cross-tab channel at M15, and that is the correct
+behaviour.** It synchronised through the `storage` event, which the URL has no
+equivalent for. Nothing was added to replace it: a `BroadcastChannel` here
+would be rebuilding the coupling that moving to the URL removed, and it would
+make two tabs showing two different links agree with each other — which is not
+how any other page on the web behaves. What *is* listened for is `popstate`,
+because Back and Forward are the one navigation that can change a theme
+underneath a running document; ordinary theme edits use `replaceState`
+precisely so they do not.
 
 **Implemented at M7, with one deliberate detail:** the `history-changed`
 message carries *no payload*. The receiving tab drops its cached repository

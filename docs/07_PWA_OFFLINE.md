@@ -596,3 +596,42 @@ rather than claimed as universal.
 cannot reload a WebKit page while its context is offline, and it fails
 identically with no service worker registered at all. That is a harness
 limitation, not a statement about the product.
+
+
+---
+
+## M15 — preferences in the URL, offline
+
+A theme now lives in the query string, which raises one question worth
+answering plainly: **does it still work with no network?**
+
+Yes, and for a reason that is structural rather than lucky. The query string is
+part of the document's own address; reading it is `location.search`, which
+involves no request. The service worker's `navigateFallback` serves
+`index.html` for any navigation, query string included, so
+`?theme=crimsonNight&font=1.25` loads the cached shell and the pre-paint
+bootstrap reads the parameters from the URL the browser already has.
+
+```mermaid
+flowchart TD
+    A["Offline reload of<br/>/?theme=crimsonNight"] --> B["Service worker<br/>navigateFallback"]
+    B --> C["Cached index.html"]
+    C --> D["theme-bootstrap.js<br/>from precache"]
+    D --> E["location.search"]
+    E --> F["CSS custom properties<br/>before first paint"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class F safe
+```
+
+**Nothing new is fetched, and nothing new can be.** `connect-src 'none'` is
+unchanged; the URL is read, never requested.
+
+**No server route is involved.** `?theme=…` is not a path — Vercel serves the
+same static `index.html` for it as for `/`, and no rewrite, redirect or
+function was added. A preference that needed the origin to be reachable would
+not be a preference this app could keep.
+
+One consequence worth stating: a theme now survives a browser that clears site
+data, because the link does. It does *not* survive the user editing the URL
+away, which localStorage did — the trade is deliberate.

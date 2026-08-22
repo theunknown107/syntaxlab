@@ -562,3 +562,59 @@ trailers, with commit order, contents and ancestry preserved.
 **Standing mitigation:** the repository's own `user.email` now matches the
 public identity, so the next commit cannot reintroduce the address by default.
 No further rewrite is planned; the public history is now stable by policy.
+
+
+---
+
+## M15 — what the two UX changes introduced
+
+### R-24 — a shared link carries something private 🟡 → mitigated by scope
+
+**Risk.** Preferences in the URL make links shareable, and a feature that
+shares links invites the assumption that it shares *work*. One careless
+extension — "and the pattern too" — turns a preference into a data-exfiltration
+path through chat logs, browser sync and proxy logs.
+
+**Mitigation, structural rather than procedural:** the codec has a closed
+parameter namespace and no access to editor state at all. `urlPreferences.ts`
+imports nothing from the workspace store; it could not encode a pattern if
+asked. The feature is named *URL-backed preferences* in every document, and the
+deferred share-URL work (D-02) keeps its own threat modelling.
+
+**Accepted:** a shared link reveals the sender's theme. That is the feature.
+
+### R-25 — a hostile link reaches a CSS sink 🟠 → closed by the existing validator
+
+**Risk.** A URL is attacker-*authored*: sending someone a link is trivial where
+writing to their localStorage requires already running code on the origin. The
+values end up in `setProperty`.
+
+**Closed by not adding a second validator.** The codec decodes into a plain
+candidate object and hands it to `readTheme`, the total allowlist every
+persisted theme has passed through since M8. A parallel validator would have
+been a second thing to keep in agreement with the first — which is exactly the
+failure mode the pre-paint bootstrap already carries, and the reason that file
+now has a test reading it as text.
+
+### R-26 — the analyse change trains people to distrust the button 🟡 accepted
+
+**Risk.** Explicit submission is a real behaviour change for anyone who used
+the app before. Someone who types and waits will see nothing happen.
+
+**Mitigations:** the empty panel says what to do rather than staying blank; the
+button is the most prominent control in the input panel; the stale badge
+appears the moment the editor diverges from the result; and `Ctrl/⌘ + Enter`
+works from anywhere in the workspace.
+
+**Accepted, with the trade named:** deterministic results and no work nobody
+asked for, in exchange for one keystroke. The previous behaviour replaced
+correct explanations with errors about half-typed input, which is the failure
+this removes.
+
+### R-27 — the bundle is over its target 🟡 accepted, measured
+
+172.19 KB against a 170 KB target, inside the 200 KB hard limit. Code-splitting
+the cron workspace was tried and measured at **173.88 KB** — worse, for the
+same reason the theme drawer experiment was worse. The remaining lever is the
+editor at 60% of the bundle, which is architectural work rather than a
+milestone patch. `12_PERFORMANCE.md` §14.3.

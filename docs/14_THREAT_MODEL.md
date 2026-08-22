@@ -397,3 +397,60 @@ browser, and asserted on what the DOM actually contains.
 **The one claim being made:** these specific classes of payload, on these
 paths, produce no script execution and no injected element. Not that the
 application is immune to everything.
+
+
+---
+
+## M15 — the URL becomes an input surface
+
+Moving theme preferences into the query string adds an attack path that
+`localStorage` did not have, and it is a *worse* one in exactly one respect:
+**anyone can send anyone a link.** Writing to another origin's localStorage
+requires already executing script there; writing to their URL requires a chat
+message.
+
+| | localStorage (M8–M14) | URL (M15) |
+|---|---|---|
+| Who can write it | Script already running on this origin | **Anyone, by sending a link** |
+| Effort to deliver | High — needs a prior compromise | Trivial |
+| What it reaches | `setProperty` on `<html>` | The same |
+| Validation | `readTheme`, total allowlist | **The same validator**, unchanged |
+
+### AC17 — a hostile link sets a hostile CSS value
+
+**Removed by validation, not by trust.** Every parameter is decoded into a
+plain candidate object and handed to `readTheme` — the same total, allowlisting
+validator every persisted theme has passed through since M8. Colours must match
+`/^#[0-9a-fA-F]{6}$/`; numbers must be integers inside their documented range;
+enums must be members of their list; a font scale must be one of four values.
+Nothing else reaches `applyTheme`, which is the only `setProperty` sink.
+
+Tested with the payloads that would matter: `url(...)`, `var(--x)`,
+`expression(...)`, an injected `;`, a closing `}`, a `"] * { display: none }`
+attribute break, path traversal in a preset id, `NaN`, `Infinity`, and values
+longer than the cap.
+
+### AC18 — a hostile link is expensive to parse
+
+**Bounded.** All theme parameters together may occupy 512 characters and any
+single value 32; over either, the theme is ignored in full rather than
+partially. Unknown parameters are never consulted, so they cost a lookup that
+does not happen rather than a filter that could be forgotten.
+
+### AC19 — a URL leaks something private
+
+**Prevented by scope, and it is the reason the scope is narrow.** No editor
+content of any kind is encoded: no pattern, no JSON document, no cron
+expression, no test subject, no history. A URL is copied into chat, written to
+browser history, synced between devices, kept in bookmarks and logged by
+proxies — it is the wrong place for the thing this app promises never to send
+anywhere.
+
+This is recorded as a *product* boundary rather than only a code one: the
+feature is called **URL-backed preferences**, never sharing, and the deferred
+share-URL feature (D-02) keeps its own threat modelling for when it arrives.
+
+| Risk | Disposition |
+|---|---|
+| RR-12 | A user shares a link and reveals their **theme**. Accepted: that is the feature. |
+| RR-13 | A user assumes the link carries their work and is surprised it does not. Accepted; the empty editor is immediately visible. |

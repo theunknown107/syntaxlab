@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M14 complete — cron **domain**. M15 (cron UI) is next and has not started.
+**Current milestone:** M15 complete — cron **UI**, explicit analysis, URL-backed preferences. M16 (the cron schedule executor) is next and has not started.
 **Last updated:** 2026-08-21
 
 > Living document, updated at the end of every milestone. The architecture
@@ -16,7 +16,7 @@
 | Release | Scope | Status |
 |---|---|---|
 | **V1.0** | Regex · JSON · history · theme · PWA · a11y · security · tests · perf | ✅ Built and deployed |
-| V1.1 | Cron — standard 5-field only | 🔨 **Domain complete (M14).** No UI, no schedule executor. |
+| V1.1 | Cron — standard 5-field only | 🔨 **Domain and UI complete (M14, M15).** No schedule executor. |
 | V1.2+ | Share URLs, JSONC/JSON5, other flavours | Deferred, unscheduled |
 
 ---
@@ -41,8 +41,8 @@
 | M13 | V1.0 release | ✅ **Complete** — public on GitHub, deployed on Vercel |
 | — | Post-M12 brand mark; pre-M15 repository and deployment integrity | ✅ **Complete** |
 | M14 | Cron **domain** — V1.1 | ✅ **Complete.** Schedule executor deliberately deferred to M16. |
-| M15 | Cron UI | ⬜ **Next.** Not started. |
-| M16 | Cron schedule executor, next runs, DST anomalies | ⬜ |
+| M15 | Cron UI · explicit analysis · URL preferences | ✅ **Complete** |
+| M16 | Cron schedule executor, next runs, DST anomalies | ⬜ **Next.** Not started. |
 
 ---
 
@@ -2479,3 +2479,176 @@ Kept, both local-only and never pushed:
 | `refs/backup/pre-m15-local-m14` | `71f9c1a` — the verified local M14 state before this session's work |
 
 They are the rollback path. Nothing else needs them.
+
+
+---
+
+## M15 — objective and outcome
+
+**Objective.** The first user-facing cron experience, plus two approved UX
+changes that reach beyond it: explicit Analyze in every mode, and theme
+preferences moved from localStorage into the URL.
+
+**Outcome.** All three, and two latent bugs found by the third.
+
+### A. URL-backed preferences
+
+The chain that mattered is unchanged. Only persistence moved:
+
+    URL params -> readTheme -> in-memory store -> CSS custom properties
+
+`readTheme` is still the single validation choke point. It matters more now:
+localStorage was attacker-*writable* — you had to already be running code on
+the origin — while a URL is attacker-*authored*, and sending someone a link is
+trivial.
+
+**The schema is small because it encodes against a baseline.** `?theme=matrix`
+is the whole of an unmodified Matrix theme; only values that differ from the
+named preset are written. Accessibility settings are compared against the
+documented defaults instead, so choosing a colour scheme cannot silently reset
+someone's text size.
+
+| | |
+|---|---|
+| Parameters | `theme` `gf` `gm1` `gm2` `gt` `ga` `gi` `accent` `al` `fam` `glow` `contrast` `motion` `font` `tv` |
+| Colours | Six hex digits, no `#` — a URL has to carry it as `%23` |
+| Bound | 512 characters for all theme parameters, 32 for any one value |
+| Over the bound | The theme is ignored **in full**. Half of someone's choice is not their choice |
+| Unknown parameters | Never consulted, so ignored by construction rather than by a filter |
+| Writes | `history.replaceState`, debounced 250 ms |
+
+**`replaceState`, never `pushState`** — asserted by spy. Dragging the intensity
+slider changes the theme dozens of times, and each one pushing an entry would
+bury the page the user came from under a hundred near-identical URLs.
+
+**Migration.** localStorage is read once, through `readTheme`, written to the
+URL, and the key removed — **only that key**, because history and settings live
+under their own and a migration that swept storage would destroy data it was
+never asked about. Nothing writes theme storage again, which is asserted with
+spies on both `Storage.prototype.setItem` and the instance method.
+
+**Cross-tab sync is deliberately gone.** Two tabs on two URLs are two documents
+with two themes, exactly as with any other page. A `BroadcastChannel` to
+recreate the old coupling would be rebuilding what the move removed. `popstate`
+is listened for instead — Back is the one navigation that can change a theme
+underneath a running document.
+
+**The bootstrap gained a preset table.** A URL usually names a preset and
+nothing else, so without one `?theme=crimsonNight` would paint green for a
+frame. That is a third copy of the palette, so a new test reads the file as
+text and fails if it disagrees with the domain on any preset, parameter name,
+allowlist, schema version or size cap.
+
+**Nothing the user typed is in the URL** — no pattern, no JSON, no cron
+expression, no test subject, no history. `urlPreferences.ts` imports nothing
+from the workspace store; it could not encode a pattern if asked. The feature
+is called *URL-backed preferences*, never sharing, and the deferred share-URL
+work keeps its own threat modelling.
+
+### B. Explicit analysis
+
+**Typing no longer analyses anything.** Every mode holds a draft and a
+committed input; only Analyze moves the second.
+
+    draft -> Analyze -> committed -> worker -> result
+
+Staleness is *derived* from the two strings rather than stored as a third flag,
+because a boolean that can disagree with what it summarises would show up as a
+result presented as current when it is not. Responses are matched against the
+committed input, so the user may keep typing while a worker is busy without
+throwing away a correct answer.
+
+| Action | Analysis requests before | After |
+|---|---|---|
+| Type three characters, wait 5 s | 1 | **0** |
+| Press Analyze | 1 | 1 |
+| Press Analyze again, unchanged | 1 | **0** — disabled, and the use-case refuses |
+
+**One control for three modes.** `AnalyzeAction`: same label, same disabled
+rule, same `Ctrl/⌘ + Enter`, same "Unanalyzed changes" badge beside the button
+rather than over the result — the result is still correct, it just describes
+the previous input. Plain Enter stays an editing key everywhere; the cron
+editor is single-line and could safely have taken it, but one interaction to
+learn beats three.
+
+"Analyze" rather than "Send": the action asks for an explanation, the app
+already says "analysis" throughout, and "Send" would be the only word in the
+interface implying the text goes somewhere.
+
+**What Analyze does not do:** it does not execute the regex tester, does not
+format JSON, and computes no cron run times. The tester now runs the
+*committed* pattern — testing one the engine has not been asked about would
+report matches for an expression the explanation panel is silent about. A flag
+change re-runs neither panel, because repainting the match list would look
+fresh while describing a flag set the user can no longer see selected.
+
+### C. The cron workspace
+
+Two columns, built from the same Panel, CodeEditor, ExplanationView, Splitter
+and Analyze control. Cron is a third mode, not a third application.
+
+| Built | Deliberately absent |
+|---|---|
+| Single-line expression editor with error and link decorations | Next-run list |
+| A numbered legend of the five positions | Calendar or schedule preview |
+| Field table — five rows, always | Named-zone selector |
+| Explanation with warnings first | Anything computing a run time |
+| Refusal messaging with the hint | Cron history entries |
+| Two timezone radios | |
+| Worked examples | |
+
+**Five rows, always, whether or not the expression parsed.** The commonest cron
+mistake is editing the wrong position, and a table that appeared only on
+success would vanish exactly when that help is needed. A failing row is tinted
+*and* says what is wrong in words. `@reboot` says it has no clock fields rather
+than inventing five.
+
+**A refusal is presented as an answer**, not a crash: the message, the hint,
+and a "Not analysed" badge.
+
+**Radio buttons for the timezone, not a select.** A select implies a list that
+could grow, and this one cannot.
+
+### Two bugs found by adding a third mode
+
+Both were the same shape — a two-branch ternary that is correct for two modes
+and silently wrong for three:
+
+| Where | What would have happened |
+|---|---|
+| `Workspace` | `mode === 'regex' ? <Regex/> : <Json/>` would have rendered the JSON workspace for cron |
+| `captureNow` | `mode === 'regex' ? regexCandidate : jsonCandidate` would have re-saved whatever JSON sat in the other editor **on every cron analysis** |
+
+Both are exhaustive `switch` statements now, so a fourth mode is a compile
+error rather than a wrong answer.
+
+`ExplanationView` moved from `features/regex/` to `components/` with its styles.
+It was never regex-specific; cron being the second consumer made that visible.
+
+### Tests
+
+| Suite | Cases |
+|---|---|
+| `theme/urlPreferences.test.ts` | 39 |
+| `theme/bootstrap.test.ts` | 17 |
+| `cron/cronWorkspace.test.ts` | 18 |
+| `cron/cronUi.test.tsx` | 18 |
+| **New at M15** | **92** |
+
+Several existing tests encoded the *old* contract and were rewritten rather
+than deleted — "debounces rather than sending one request per keystroke" became
+"sends nothing at all while the user is only typing"; "renders no disabled
+controls" was narrowed to "no control disabled because a feature is missing",
+which still fails for anything except Analyze on an empty editor.
+
+### Known limitations at M15
+
+- **No cron history.** `HistoryEntry` has no cron type. Building one without
+  the metadata the drawer renders, the validation an import is checked against
+  and the migration an older build needs would put half a record on disk.
+- **Bundle over target.** 172.19 KB against a 170 KB target, inside the 200 KB
+  hard limit. Code-splitting the cron workspace was measured at 173.88 KB —
+  *worse* — for the same reason the theme drawer experiment was.
+- **A theme no longer follows the user across tabs**, and does not survive
+  editing the URL away. Both are consequences of the move, both deliberate.
+- **No next-run times.** M16.

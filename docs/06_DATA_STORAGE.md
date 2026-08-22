@@ -243,27 +243,139 @@ The dedupe window plus the "successful analyses only" rule are what keep history
 
 ---
 
-## 5. Preferences in localStorage
+## 5. Preferences
 
-| Key | Contents |
+Two homes, chosen by what the preference *is*.
+
+| Where | What | Why there |
+|---|---|---|
+| **URL query string** | Theme: preset, gradient stops, angle, intensity, accent, family, glow, contrast mode, motion mode, font scale | A theme is a description of how the page should look, and a URL is the one piece of state a browser already knows how to copy, bookmark, share and restore |
+| `localStorage` | `syntaxlab.settings.v1` (`AppSettings`), `syntaxlab.meta.v1` (`{ lastVersion, firstSeenAt }`) | Device facts and consent state. Not something to put in a link |
+| IndexedDB | History | Large, structured, and asynchronous — see §2 |
+| **Nowhere** | Editor content | §6.1 |
+
+Versioned key names, so a schema change can be introduced without a
+destructive in-place migration.
+
+### 5.1 Theme in the URL — the parameter namespace
+
+**Moved out of `localStorage` at M15.** The full schema is in
+`src/domain/theme/urlPreferences.ts`; this is the contract.
+
+| Parameter | Value | Example |
+|---|---|---|
+| `theme` | A preset id, or `custom` | `theme=crimsonNight` |
+| `gf` `gm1` `gm2` `gt` | Gradient stops, six hex digits, **no `#`** | `gf=00FF41` |
+| `ga` | Angle, integer 0–359 | `ga=135` |
+| `gi` | Gradient intensity, integer 0–100 | `gi=40` |
+| `accent` `al` | Accent and its AA-safe companion | `accent=DC143C` |
+| `fam` | Neutral ramp family | `fam=crimson` |
+| `glow` | Glow intensity, 0–100 | `glow=25` |
+| `contrast` | `normal` \| `high` | `contrast=high` |
+| `motion` | `system` \| `always` \| `never` | `motion=never` |
+| `font` | One of 0.875, 1, 1.125, 1.25 | `font=1.25` |
+| `tv` | Theme schema version | `tv=2` |
+
+**Encoded against a baseline, not dumped.** `?theme=matrix` is the whole of an
+unmodified Matrix theme; only values that differ from the named preset are
+written. Writing all fourteen every time would produce a URL nobody can read
+that says nothing about what the user actually chose.
+
+The accessibility settings — `contrast`, `motion`, `font` — are compared
+against the documented defaults rather than the preset, because a preset is a
+colour scheme and does not get to decide how large someone needs their text.
+
+The `#` is dropped from colours because a URL has to carry it as `%23`, which
+costs three characters and makes the parameter unreadable.
+
+```mermaid
+flowchart LR
+    A["Theme changed"] --> B["encodeThemeParams<br/>only what differs"]
+    B --> C["withThemeParams<br/>keeps params it does not own"]
+    C --> D["history.replaceState<br/>debounced 250 ms"]
+    D --> E["Address bar"]
+    E -->|"reload, or a shared link"| F["decodeThemeCandidate"]
+    F --> G["readTheme<br/>the one validator"]
+    G --> H["in-memory store"]
+    H --> I["applyTheme -> CSS custom properties"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class G safe
+```
+
+### 5.2 What is never in the URL
+
+**No editor content, ever.** No pattern, no JSON document, no cron expression,
+no test subject, no history entry, no match output.
+
+A URL is copied into chat messages, written to browser history, synced across
+devices, kept in bookmarks and logged by proxies. Source code is exactly the
+thing this application promises never to send anywhere, and putting it in the
+address bar would break that promise in the most casual way possible — by
+someone pasting a link.
+
+It would also ship the deferred share-URL feature (`22_OPEN_QUESTIONS.md`
+D-02) without the compression, size limits, versioning and threat modelling
+that feature needs. **This is URL-backed *preferences*, and it is deliberately
+not called sharing.**
+
+### 5.3 Bounded, so a hostile link cannot be expensive
+
+| Bound | Value |
 |---|---|
-| `syntaxlab.theme.v1` | `ThemePreferences` JSON |
-| `syntaxlab.settings.v1` | `AppSettings` JSON |
-| `syntaxlab.meta.v1` | `{ lastVersion, firstSeenAt }` |
+| All theme parameters together | 512 characters. Over it, the theme is ignored **in full** — half of someone's choice is not their choice |
+| Any single value | 32 characters |
+| Unknown parameters | Not consulted at all, so ignored by construction rather than by a filter that could be forgotten |
 
-Versioned key names, so a schema change can be introduced without a destructive in-place migration: the new version reads the old key, writes the new, and leaves the old for one release as a rollback path.
+### 5.4 Migration from localStorage
 
-### 5.1 Pre-paint theme bootstrap
+```mermaid
+flowchart TD
+    A["Load"] --> B{"Theme params in the URL?"}
+    B -->|yes| C["Use them"]
+    B -->|no| D{"syntaxlab.theme.v1 present?"}
+    D -->|no| E["Defaults"]
+    D -->|yes| F["readTheme it"]
+    F --> G["Write to the URL"]
+    G --> H["removeItem - that key only"]
+    H --> C
 
-A small synchronous script in `index.html`, before the app bundle, reads the theme key and sets CSS custom properties on `<html>`. This eliminates the flash of default theme.
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class C safe
+```
 
-**It must be a same-origin script file, not an inline `<script>`**, because `script-src 'self'` forbids inline scripts and we are not weakening the CSP for a cosmetic fix. The bootstrap is a tiny separate file loaded with a blocking `<script src>` in `<head>`.
+Read once, migrated, forgotten. The stored value still goes through
+`readTheme` on the way, because it was attacker-writable while it existed and
+being on its way out does not make it trustworthy.
 
-Bootstrap rules: wrapped in try/catch (a corrupt value must never prevent the app from loading), validates every value against the allowlist in `03_DOMAIN_MODEL.md` §7.1, and falls back to defaults silently.
+**Only that key is removed.** History lives in IndexedDB and settings under
+their own key; a migration that swept `localStorage` would destroy data it was
+never asked about.
 
-### 5.2 Validation on read
+### 5.5 Pre-paint theme bootstrap
 
-Always. `localStorage` is attacker-writable and its values go into CSS. Detailed in `05_SECURITY.md` §2.2.
+A small synchronous script, before the app bundle, reads the theme and sets CSS
+custom properties on `<html>`. This eliminates the flash of default theme. From
+M15 it reads the **URL** first and the legacy key second.
+
+**It must be a same-origin script file, not an inline `<script>`**, because
+`script-src 'self'` forbids inline scripts and we are not weakening the CSP for
+a cosmetic fix.
+
+It carries a copy of the preset palette, because a URL usually names a preset
+and nothing else — without it, `?theme=crimsonNight` would paint green for one
+frame and then correct itself, which is the flash the file exists to prevent.
+That copy is a third place the palette lives, so `tests/unit/theme/bootstrap.test.ts`
+reads the file as text and fails if it disagrees with the domain on any preset,
+parameter name, allowlist, schema version or size cap.
+
+### 5.6 Validation on read
+
+Always, and now more than before. `localStorage` was attacker-writable; a URL
+is attacker-*authored* — anyone can send anyone a link, which is a far easier
+attack to mount. Every parameter goes through `readTheme`, the same total
+allowlisting validator every persisted theme has passed through since M8, and
+`applyTheme` accepts nothing else. Detailed in `05_SECURITY.md` §2.2 and §20.
 
 ---
 

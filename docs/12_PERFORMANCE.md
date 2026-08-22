@@ -1230,3 +1230,61 @@ The point of recording the numbers is not that they are impressive. It is that a
 Initial JS moved from **165.34 KB** (after M11) to **167.44 KB** — 2.10 KB, against a 170 KB target and a 200 KB hard limit.
 
 That 2 KB is the *validator*, not the parser. `isValidCronAnalysis` and the AST's field specs are imported by `protocol.ts`, which the main thread needs in order to check what the worker sends back; the tokenizer, parser and explainer stay in the worker bundle where they are used. Paying 2 KB on the main thread to avoid trusting a worker result by cast is the trade this project has already made twice, for regex and for JSON.
+
+
+---
+
+## 14. M15 — explicit analysis, measured
+
+### 14.1 What the change was supposed to do
+
+Remove worker traffic that nobody asked for. Before M15, typing a pattern
+started a debounce that sent an `analysis.regex` request a few hundred
+milliseconds after the last keystroke; a large JSON document did the same above
+a size threshold, and below it on every pause.
+
+### 14.2 Worker requests while typing
+
+Measured by counting calls at the seam, with the worker replaced
+(`tests/unit/regex/regexWorkspace.test.ts`, `tests/unit/cron/cronWorkspace.test.ts`):
+
+| Action | Before | After |
+|---|---|---|
+| Type `a`, `ab`, `abc` and wait 5 s | 1 analysis request | **0** |
+| Press Analyze once | 1 | 1 |
+| Type three more characters, wait | 1 more | **0** |
+| Press Analyze on unchanged text | 1 more | **0** — the control is disabled and the use-case refuses |
+
+The saving is not the request itself; it is the parse, the explanation build
+and the structured clone of the result, on every pause, for text the user had
+not finished writing.
+
+### 14.3 Bundle
+
+| | |
+|---|---|
+| After M14 | 167.44 KB |
+| **After M15** | **172.19 KB** — over the 170 KB target, inside the 200 KB hard limit |
+
+The 4.75 KB is the cron workspace, its field table and the shared Analyze
+control.
+
+**Code-splitting the cron workspace was tried and measured, and made it
+worse:** `React.lazy` on `CronWorkspace` produced **173.88 KB**, 1.69 KB
+*larger*, because the lazy-loading machinery and the smaller gzip corpus cost
+more than the extracted chunk saved. This is the second time that experiment
+has been run in this project — the theme drawer was the first (§10.9) — and it
+is recorded here for the same reason: so the next person does not repeat it.
+
+**Accepted, over target, with the reason recorded.** The budget's own wording
+is "over target but within the hard budget — investigate before it grows". It
+was investigated. The remaining lever is the editor, which is 60% of the bundle
+and an architectural change rather than a milestone patch (§12.9).
+
+### 14.4 URL writes
+
+A slider drag changes the theme dozens of times. The URL write is debounced at
+250 ms and uses `replaceState`, so a drag produces **one** history entry
+mutation when it settles rather than one per frame — asserted directly by
+spying on `history.replaceState` and `history.pushState`
+(`tests/unit/theme/themeStore.test.ts`).

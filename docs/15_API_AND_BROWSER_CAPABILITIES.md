@@ -303,3 +303,25 @@ Rules:
 
 **Manifest shortcuts** are the one exception to "no router" (ADR-009), and stay
 one because the value is a three-item enum check rather than a parser.
+
+
+---
+
+## M15 — History API and URLSearchParams
+
+Two platform APIs became load-bearing, and neither needed a library.
+
+| API | Used for | Fallback |
+|---|---|---|
+| `URLSearchParams` | Reading and writing theme parameters, in the app and in the pre-paint bootstrap | None needed — baseline everywhere the app runs, and the bootstrap's use is inside a `try` |
+| `history.replaceState` | Writing the theme into the address bar without a navigation | Wrapped in `try`. Some embedded contexts refuse history writes; the theme still applies for the session and simply does not survive a reload |
+| `popstate` | Re-reading the theme when Back or Forward lands on a different one | None needed |
+
+**`pushState` is deliberately unused.** A theme edit is not a navigation, and
+dragging a slider would otherwise bury the page the user came from under a
+hundred near-identical entries.
+
+**No router, no URL-state library.** The whole codec is `URLSearchParams` and
+two pure functions over strings. A router would add a dependency, a rendering
+concern and a second source of truth for what the address bar means, in a
+single-page app whose mode is state rather than a route (ADR-009).

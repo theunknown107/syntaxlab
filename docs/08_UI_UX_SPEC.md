@@ -741,3 +741,128 @@ Panel titles were `h3` directly under the page's single `h1`, leaving a level-2
 gap in the outline. Panels are never nested and each is a top-level section of
 the workspace, so they are now `h2`. Found by Lighthouse's `heading-order`
 audit; a screen-reader user navigating by heading would have hit the same jump.
+
+
+---
+
+## M15 — explicit analysis, and the cron workspace
+
+### The submit model
+
+**Typing does not analyse.** It did until M15: a debounce fired a worker
+request a moment after the last keystroke, so every half-typed pattern cost a
+round trip and replaced a correct explanation with an error about text the user
+was still in the middle of writing.
+
+```mermaid
+flowchart LR
+    A["Type"] --> B["draft"]
+    B -->|"nothing happens"| B
+    B -->|"Analyze, or Ctrl/Cmd+Enter"| C["committed"]
+    C --> D["worker"]
+    D --> E["explanation, tree, fields"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class E safe
+```
+
+The result on screen always belongs to the last committed input. It is never
+blanked when the editor moves on — the previous answer is still a correct
+answer to a question that was asked — it is **labelled**:
+
+| State | What the user sees |
+|---|---|
+| Nothing analysed yet | Empty panel: "Type an expression and press Analyze. Nothing is analysed as you type." |
+| Analysing | Button reads "Analyzing…", disabled; announced politely |
+| Result matches the editor | Result, no badge, Analyze disabled — there is nothing new to ask |
+| Editor has moved on | Result *and* an "Unanalyzed changes" badge beside the button |
+| Refused or failed | The message and its hint, styled as information rather than as a crash |
+
+### The control
+
+One component — `AnalyzeAction` — shared by all three modes. Three separate
+versions would drift in wording, in disabled rules and in what they announce,
+and a user who learned the interaction in one mode would have to learn it again
+in the next.
+
+| | |
+|---|---|
+| Label | **"Analyze"**, not "Send". The action asks for an explanation; the app already says "analysis" throughout; "Send" would be the only word in the interface implying the text goes somewhere |
+| Accessible name | "Analyze pattern" / "Analyze JSON document" / "Analyze cron expression" — three buttons named "Analyze" are indistinguishable in a list |
+| Disabled | While busy, when the editor is empty, and when the visible result already describes the editor |
+| Keyboard | `Ctrl/⌘ + Enter` anywhere in the workspace. **Plain Enter is left alone in every mode** — it is an editing key in JSON and regex, and giving cron a different rule for the sake of one keystroke would be three interactions to learn instead of one |
+| Announcement | A polite live region, separate from the button, so a screen reader is not read a label changing mid-press |
+
+### What Analyze does *not* do
+
+- **It does not execute the regex tester.** Explaining a pattern and running it
+  against a subject are different questions. The tester keeps its own debounce
+  on the test string and its own "Run now".
+- **It does not format JSON.** Prettify and Minify stay explicit actions.
+- **It does not compute cron run times.** There are none to compute (M16).
+
+### The regex tester, after the change
+
+The tester runs the **committed** pattern. Testing one the engine has not been
+asked about would report matches for an expression the explanation panel is
+silent about. A flag change re-runs neither panel: repainting the match list
+there would look fresh while describing a flag set the user can no longer see
+selected.
+
+### §7.3 The cron workspace
+
+Two columns, the same as regex and JSON, built from the same Panel, CodeEditor,
+ExplanationView, Splitter and Analyze control.
+
+| Left | Right |
+|---|---|
+| The expression editor, single line | **Fields** — five rows, always |
+| A numbered legend of the five positions | **Explanation** — warnings first, then the summary and per-field detail |
+| Analyze, and the timezone toggle | |
+| Worked examples | |
+
+**Five rows, always, whether or not the expression parsed.** The commonest cron
+mistake is editing the wrong position, and a table that appeared only on
+success would vanish exactly when that help is needed. A failing row is tinted
+*and* says what is wrong in words, because colour is never the only signal
+(§12.1).
+
+`@reboot` renders "This expression has no clock fields" rather than five
+placeholder rows, which would imply a clock schedule it does not have.
+
+**A refusal is an answer.** Six or seven fields produce a message naming the
+dialect and a hint that turns the refusal into a next step, presented as
+information rather than as a failure:
+
+```mermaid
+flowchart TD
+    A["Analyze"] --> B["analysis.cron"]
+    B --> C{"Result"}
+    C -->|"5 fields, parsed"| D["Fields + explanation + warnings"]
+    C -->|"6 or 7 fields"| E["Not analysed: the count, the dialects<br/>that use it, and what to try"]
+    C -->|"L W # ? H"| F["Not analysed: names Quartz or Jenkins"]
+    C -->|"a field is wrong"| G["Five rows still, that row marked,<br/>the reason in words"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    classDef warn fill:#2a2414,stroke:#a08040,color:#fff0d9
+    class D,G safe
+    class E,F warn
+```
+
+**Two timezone modes, as radio buttons.** Radios rather than a select, because
+a select implies a list that could grow and this one cannot: named IANA zones
+are not implemented, and offering a picker for them would promise an answer the
+domain cannot give. Browser-local shows the zone the browser reported, so the
+user can see what was assumed.
+
+**What is deliberately absent:** no next-run list, no calendar, no schedule
+preview, no named-zone selector. The domain computes no run times, and an empty
+panel promising future runs would be a promise this build cannot keep.
+
+### Cron does not steal the mode
+
+Detection still suggests; it never switches out from under an edit. Cron is
+selected the same way regex and JSON are — by the mode selector, which now has
+three segments and no disabled ones. A greyed-out segment reads as broken and
+gets filed as a bug (§2.1), which is exactly why cron was not there before it
+had a workspace behind it.

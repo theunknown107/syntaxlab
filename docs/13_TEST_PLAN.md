@@ -1087,3 +1087,67 @@ invalid-pattern wording, the two-second history capture delay, `:focus-visible`
 versus programmatic focus, and assuming `(a+)+$` times out on every engine. In
 each case the app was behaving correctly and better than the test expected. A
 failing assertion is a hypothesis about the product, not a verdict on it.
+
+
+---
+
+## M15 — explicit analysis, URL preferences and the cron UI
+
+### New suites
+
+| Suite | Cases | What it holds |
+|---|---|---|
+| `tests/unit/theme/urlPreferences.test.ts` | 39 | The codec. Round trips for every preset and a fully custom theme; and the hostile half, which is the point |
+| `tests/unit/theme/bootstrap.test.ts` | 17 | Reads `public/theme-bootstrap.js` as text and holds its duplicated tables to the domain |
+| `tests/unit/cron/cronWorkspace.test.ts` | 18 | The cron seam: what is sent, when, and which replies are discarded |
+| `tests/unit/cron/cronUi.test.tsx` | 18 | The field table and the Analyze control, by role and accessible name |
+
+### The three claims worth testing directly
+
+**Typing does not analyse.** Type three times, advance five seconds, assert
+zero worker calls and a status still `idle`. Then press Analyze and assert
+exactly one. Both regex and cron.
+
+**The theme never touches localStorage.** `Storage.prototype.setItem` *and* the
+instance method are both spied — a prototype spy alone does not observe these
+writes under happy-dom, which would make the test pass without measuring
+anything — then four different theme changes are made and flushed.
+
+**The URL never gains a history entry.** `pushState` is spied and asserted
+never called across eleven theme changes; `replaceState` is asserted called,
+and called *once* for a burst of twenty.
+
+### Hostile URL parameters
+
+The group that carries the weight, because a URL is attacker-authored in a way
+localStorage never was — anyone can send anyone a link.
+
+| Payload | Asserted |
+|---|---|
+| `accent=red;background:url(x)` | Every colour reaching CSS still matches `#rrggbb` |
+| `gf=url(...)`, `var(--secret)`, `expression(alert(1))` | Same |
+| `accent=00FF41;`, `accent=}` | Same |
+| `ga=9999`, `ga=-1`, `gi=NaN`, `glow=Infinity` | Every number still inside its documented range |
+| `theme=../../etc/passwd` | Falls back to a real preset |
+| `fam=<script>`, `contrast=none`, `font=99` | Allowlisted value survives |
+| A parameter longer than the 512-character cap | The theme is ignored **in full**, not partially |
+
+### Tests that changed, and why
+
+Several encoded the *old* contract and were rewritten rather than deleted:
+
+| Was | Is |
+|---|---|
+| "debounces rather than sending one request per keystroke" | "sends nothing at all while the user is only typing" |
+| "re-runs both when a flag changes" | "marks both panels stale when a flag changes, and re-runs neither" |
+| "renders no disabled controls" | Same rule, narrowed: no control disabled *because a feature is missing*. Analyze on an empty editor is a state, not an absent feature |
+| "does not offer any cron affordance" | "offers cron as a real mode, not a promise" |
+| "reading back from storage" | "reading the theme back from the URL" |
+
+### Still not covered
+
+- **Cron in history.** `HistoryEntry` has no cron type, so there is nothing to
+  test. What *is* tested is that cron records nothing, and that a draft records
+  nothing.
+- **A second tab following a theme change.** Deliberately removed; the test
+  that asserted it is gone with the behaviour.

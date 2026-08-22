@@ -985,3 +985,37 @@ the same set.
 All same-origin static files. The CSP allows `img-src 'self'` and nothing is
 fetched from anywhere else — no CDN, no icon host, no runtime request, and no
 JavaScript that rewrites the favicon when the theme changes.
+
+
+---
+
+## M15 — the theme's new home, and one duplicated table
+
+### Where a theme lives
+
+Nothing about the token architecture changed: `applyTheme` writes the same ten
+custom properties and three data attributes, and the interface follows because
+every component reads its colours from them. What changed is where the values
+come from between sessions — the URL rather than localStorage
+(`06_DATA_STORAGE.md` §5).
+
+That makes a theme **sendable**, which is the visible benefit, and it makes the
+values **attacker-authored**, which is the cost. Both are handled at the same
+choke point they always were: `readTheme` in, `applyTheme` out.
+
+### §4.6 revisited — the bootstrap's duplicated rules
+
+The pre-paint bootstrap has always duplicated the validation rules, because it
+runs before any module can load. At M15 it also duplicates the **preset
+palette**: a URL usually names a preset and nothing else, so without the table
+`?theme=crimsonNight` would paint Matrix green for one frame and then correct
+itself — the exact flash the file exists to prevent.
+
+Three copies of a palette is two too many to hold by hand, so the duplication
+is now *checked*: `tests/unit/theme/bootstrap.test.ts` reads
+`public/theme-bootstrap.js` as text and fails if it disagrees with the domain
+about any preset's six colours or family, any parameter name, any allowlist,
+the schema version, or the size cap.
+
+That is the standard this file already set for duplication — it is acceptable
+when it is verified, and technical debt when it is remembered.
