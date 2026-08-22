@@ -274,6 +274,48 @@ test.describe('when the clocks change', () => {
   });
 });
 
+test.describe('forced colors', () => {
+  /**
+   * The next-run panel says two things with a badge and a tint: that a run was
+   * skipped, and that one happens twice. Under a forced palette the tint is
+   * gone, so the sentence beside the badge is all that is left — which is why
+   * it is there (`08_UI_UX_SPEC.md` §12.1).
+   *
+   * `emulateMedia` rather than a describe-level option, for the reason
+   * `hardening.spec.ts` records: the describe-level option does not reach the
+   * page, and this one applies the real forced palette.
+   */
+  test.use({ timezoneId: 'Europe/London' });
+
+  test('says what happened in words, not only in colour', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-24T12:00:00Z'));
+    await start(page);
+    await page.emulateMedia({ forcedColors: 'active' });
+    await page.waitForTimeout(150);
+
+    await analyse(page, '30 1 * * *');
+
+    const runs = panel(page, 'Next runs');
+    await expect(runs).toContainText('Next run', { timeout: 15_000 });
+
+    // The badge and its sentence both survive, and so does the offset that
+    // makes the claim checkable.
+    await expect(runs).toContainText('Happens twice');
+    await expect(runs).toContainText(/clocks go back through this time/i);
+    await expect(runs).toContainText('UTC+01:00');
+
+    // And the panel is painting the forced palette rather than its own.
+    const painted = await runs.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { color: style.color, background: style.backgroundColor };
+    });
+    expect(painted.color, 'text colour under forced colors').not.toBe('');
+
+    // The control that recomputes them is still reachable and still named.
+    await expect(runs.getByRole('button', { name: /recalculate/i })).toBeVisible();
+  });
+});
+
 /* ------------------------------------------------------------------ *
  * What M16 must still not have built
  * ------------------------------------------------------------------ */

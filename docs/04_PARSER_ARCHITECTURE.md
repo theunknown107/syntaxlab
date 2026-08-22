@@ -806,7 +806,9 @@ The dialect check is asserted again here even though the type is a one-member
 union: the value crosses a worker boundary, where a type is a hope rather than
 a guarantee.
 
-**Algorithm: field-by-field advance, not brute-force minute iteration.** Iterating minute-by-minute over five years is ~2.6 M iterations per requested run and is exactly what makes a worker look hung.
+#### 4.4.1 The advance — the search itself
+
+**Field-by-field, not brute-force minute iteration.** Iterating minute-by-minute over five years is ~2.6 M iterations per requested run and is exactly what makes a worker look hung.
 
 ```
 candidate = the instant asked about, truncated to the minute, +1 minute
@@ -873,7 +875,7 @@ Note that the resolved value sets M14 produces are exactly the inputs this needs
 
 **What "restricted" means, precisely.** A field restricts when it selects *less than its whole range*. `1-31` in day-of-month restricts nothing, so `0 0 1-31 * 1` is "every Monday" and not "every day or Monday". Reading `*` alone as unrestricted would get that wrong, and the difference is 30 phantom runs a month.
 
-#### 4.4.1 Wall clock first, instant second
+#### 4.4.3 Wall clock first, instant second
 
 Cron fields describe **wall-clock readings**, not elapsed time. "Every day at 01:30" means the clock reads 01:30, whatever the offset happened to do overnight. The search therefore runs entirely on wall-clock arithmetic and converts to an instant only once a reading has matched — which is what makes §4.6 possible at all, because "this reading has no instant" and "this reading has two" are only expressible in that order.
 
@@ -991,7 +993,7 @@ flowchart TD
     class I safe
 ```
 
-**Spring forward — the reading that never happens.**
+##### 4.6.1.1 Spring forward — the reading that never happens
 
 ```mermaid
 flowchart TD
@@ -1011,7 +1013,7 @@ At 01:00 the clocks jump to 02:00, so 01:30 is not a time that day. The run is
 reported and kept in the list — dropping it would leave a gap the reader cannot
 see — but it carries no instant, because there is none.
 
-**Fall back — the reading that happens twice.**
+##### 4.6.1.2 Fall back — the reading that happens twice
 
 ```mermaid
 flowchart TD
