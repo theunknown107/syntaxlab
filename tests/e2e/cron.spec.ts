@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -185,8 +186,62 @@ test('computes no run times, and offers no named timezone', async ({ page }) => 
 });
 
 /* ------------------------------------------------------------------ *
+ * Responsive
+ * ------------------------------------------------------------------ */
+
+test.describe('narrow viewports', () => {
+  // The three the UX spec names. The field table is the part at risk: it is
+  // the one thing in this workspace that cannot simply reflow.
+  for (const width of [360, 390, 414]) {
+    test(`does not scroll horizontally at ${String(width)} px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 740 });
+      await analyse(page, '*/15 9-17 1,15 JAN-JUN MON-FRI');
+      await expect(panel(page, 'Fields')).toContainText('minute', { timeout: 15_000 });
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+
+      // And the control that drives the whole workspace is still reachable.
+      await expect(analyzeButton(page)).toBeVisible();
+    });
+  }
+});
+
+/* ------------------------------------------------------------------ *
  * Accessibility of the new surface
  * ------------------------------------------------------------------ */
+
+test('has no critical or serious accessibility violations', async ({ page }) => {
+  // Analysed *and* refused, in one pass: the refusal notice, the warning list
+  // and the field table with a failing row are all new surfaces.
+  await analyse(page, '0 0 1 * 1');
+  await expect(panel(page, 'Explanation')).toContainText('either, not both', { timeout: 15_000 });
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+
+  const serious = results.violations.filter(
+    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+  );
+  expect(serious).toEqual([]);
+});
+
+test('has no accessibility violations while showing a refusal', async ({ page }) => {
+  await analyse(page, '0 0 12 * * ?');
+  await expect(page.getByText('Not analysed').first()).toBeVisible({ timeout: 15_000 });
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+
+  const serious = results.violations.filter(
+    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+  );
+  expect(serious).toEqual([]);
+});
 
 test('is operable by keyboard alone, and every control is named', async ({ page }) => {
   await analyse(page, '*/15 9-17 * * 1-5');
