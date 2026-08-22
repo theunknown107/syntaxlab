@@ -2646,7 +2646,7 @@ which still fails for anything except Analyze on an empty editor.
 - **No cron history.** `HistoryEntry` has no cron type. Building one without
   the metadata the drawer renders, the validation an import is checked against
   and the migration an older build needs would put half a record on disk.
-- **Bundle over target.** 172.20 KB against a 170 KB target, inside the 200 KB
+- **Bundle over target.** 172.26 KB against a 170 KB target, inside the 200 KB
   hard limit. Code-splitting the cron workspace was measured at 173.88 KB —
   *worse* — for the same reason the theme drawer experiment was.
 - **A theme no longer follows the user across tabs**, and does not survive

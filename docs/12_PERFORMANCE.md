@@ -1264,7 +1264,7 @@ not finished writing.
 | | |
 |---|---|
 | After M14 | 167.44 KB |
-| **After M15** | **172.20 KB** — over the 170 KB target, inside the 200 KB hard limit |
+| **After M15** | **172.26 KB** — over the 170 KB target, inside the 200 KB hard limit |
 
 The 4.75 KB is the cron workspace, its field table and the shared Analyze
 control.
@@ -1288,3 +1288,19 @@ A slider drag changes the theme dozens of times. The URL write is debounced at
 mutation when it settles rather than one per frame — asserted directly by
 spying on `history.replaceState` and `history.pushState`
 (`tests/unit/theme/themeStore.test.ts`).
+
+### 14.5 Cron, re-measured after the macro fix
+
+`npm run measure:cron`, on an unloaded machine:
+
+| Case | p50 | p99 |
+|---|---|---|
+| typical `*/15 9-17 * * 1-5` | 0.014 ms | 0.101 ms |
+| macro `@weekly` | 0.009 ms | 0.055 ms |
+| **wide list**, 200 terms | 0.644 ms | **1.205 ms** |
+| at the input limit | 0.000 ms | 0.000 ms |
+| typical, browser-local | 0.053 ms | 0.187 ms |
+
+Anchoring a macro's field spans to the macro cost nothing measurable, which
+is what a `map` over five fields should cost. The wide-list figure sits inside
+the 1.07–1.85 ms spread already recorded in §13.
