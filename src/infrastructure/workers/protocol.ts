@@ -305,13 +305,18 @@ const PAYLOAD_VALIDATORS: {
 
   // `after` and `count` are numbers that drive a bounded search, so they are
   // checked as numbers that *can* drive one: a NaN start instant would make
-  // every comparison in the search false.
+  // every comparison in the search false. `count` is clamped to the cap in the
+  // domain, so an absurd one costs nothing — asserted in the schedule tests.
   'analysis.cronSchedule': (payload): payload is AnalysisCronSchedulePayload =>
     isRecord(payload) &&
     typeof payload.source === 'string' &&
     (payload.timezoneMode === 'browserLocal' || payload.timezoneMode === 'utc') &&
     typeof payload.after === 'number' &&
+    // Finite is not enough: beyond ±8.64e15 `Date` represents nothing and every
+    // getter returns `NaN`, which poisons a calendar search silently rather
+    // than failing it. The same bound the result validator applies to instants.
     Number.isFinite(payload.after) &&
+    Math.abs(payload.after) <= 8.64e15 &&
     Number.isInteger(payload.count) &&
     (payload.count as number) >= 1,
 

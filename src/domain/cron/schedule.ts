@@ -197,6 +197,20 @@ export type InstantResolution =
 /** A day, in milliseconds. Used to probe either side of a possible transition. */
 const DAY_MS = 86_400_000;
 
+/**
+ * The largest instant `Date` can represent, in either direction.
+ *
+ * Beyond it every `Date` getter returns `NaN`, which does not throw and does
+ * not compare false in the ways a search relies on — it quietly poisons the
+ * arithmetic instead.
+ */
+const MAX_INSTANT = 8.64e15;
+
+/** Whether an epoch value names a moment `Date` can actually represent. */
+function isRepresentableInstant(epochMs: number): boolean {
+  return Number.isFinite(epochMs) && Math.abs(epochMs) <= MAX_INSTANT;
+}
+
 function utcWallClock(epochMs: number): WallClock {
   const date = new Date(epochMs);
   return {
@@ -543,6 +557,24 @@ export function nextOccurrences(
   const mode = options.mode;
   const after = options.after ?? Date.now();
   const wanted = Math.max(1, Math.min(options.count ?? 1, LIMITS.cron.maxOccurrences));
+
+  // A start instant outside the range `Date` can represent has no wall clock to
+  // search from: every getter returns `NaN`, every comparison against it is
+  // false, and the advance below walks a calendar made of `NaN` until the
+  // tripwire stops it — returning "occurrences" whose year is `NaN` and whose
+  // instant is `null` *without* the `skipped` anomaly that is the only thing
+  // allowed to carry a null. That is a fabricated run, which is the one output
+  // this engine must never produce, so it is refused here rather than caught
+  // downstream. The boundary validator rejects it too; this is the fix, that is
+  // the net (found by the M16 final audit).
+  if (!isRepresentableInstant(after)) {
+    return {
+      ok: false,
+      reason: 'NO_OCCURRENCE_IN_HORIZON',
+      horizonYears: LIMITS.cron.searchYears,
+      steps: 0,
+    };
+  }
 
   // Strictly after: a schedule due exactly now has already been due.
   let cursor = plusOneMinute(wallClockOf(after, mode));

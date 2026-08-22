@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { analyzeCron } from '@/domain/cron/analyze';
+import { LIMITS } from '@/domain/shared/limits';
 import {
   buildSchedule,
   dayMatches,
@@ -118,6 +119,65 @@ describe('macros execute as their expansion', () => {
     expect(built.ok).toBe(false);
     if (built.ok) return;
     expect(built.reason).toBe('NOT_SCHEDULABLE');
+  });
+});
+
+describe('hostile arguments', () => {
+  /**
+   * Found by the M16 final audit, not by a user: an `after` outside the range
+   * `Date` can represent used to produce "occurrences" whose year was `NaN` and
+   * whose instant was `null` — without the `skipped` anomaly that is the only
+   * thing allowed to carry a null instant. A run that does not exist, presented
+   * as a run, which is the single output this engine must never produce.
+   *
+   * The worker-result validator rejected those, so nothing ever reached a
+   * screen. That is the net; this is the fix.
+   */
+  it.each([
+    ['beyond the end of representable time', Number.MAX_SAFE_INTEGER],
+    ['before the beginning of it', -Number.MAX_SAFE_INTEGER],
+    ['not a number at all', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+  ])('refuses a start instant that is %s', (_label, after) => {
+    const search = nextOccurrences(schedule('* * * * *'), { mode: 'utc', after, count: 5 });
+
+    expect(search.ok).toBe(false);
+    if (search.ok) return;
+    expect(search.reason).toBe('NO_OCCURRENCE_IN_HORIZON');
+    // Refused before searching, rather than after walking a calendar of NaN.
+    expect(search.steps).toBe(0);
+  });
+
+  it('still answers at the very edge of representable time', () => {
+    // One day inside the boundary, so the search itself is ordinary.
+    const search = nextOccurrences(schedule('* * * * *'), {
+      mode: 'utc',
+      after: 8.64e15 - 86_400_000,
+      count: 2,
+    });
+    expect(search.ok).toBe(true);
+    if (!search.ok) return;
+    for (const occurrence of search.occurrences) {
+      expect(Number.isFinite(occurrence.wall.year)).toBe(true);
+      // Either a real instant, or the one anomaly allowed to have none.
+      if (occurrence.epochMs === null) expect(occurrence.anomaly).toBe('skipped');
+      else expect(Number.isFinite(occurrence.epochMs)).toBe(true);
+    }
+  });
+
+  it('clamps a count no UI would ask for, rather than allocating it', () => {
+    const started = performance.now();
+    const search = nextOccurrences(schedule('* * * * *'), {
+      mode: 'utc',
+      after: Date.parse('2026-03-10T12:00:00Z'),
+      count: Number.MAX_SAFE_INTEGER,
+    });
+    const elapsed = performance.now() - started;
+
+    expect(search.ok).toBe(true);
+    if (!search.ok) return;
+    expect(search.occurrences).toHaveLength(LIMITS.cron.maxOccurrences);
+    expect(elapsed).toBeLessThan(100);
   });
 });
 

@@ -1,11 +1,12 @@
 import fc from 'fast-check';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { analyzeCron } from '@/domain/cron/analyze';
 import {
   buildSchedule,
   nextOccurrence,
   nextOccurrences,
+  wallClockOf,
   type ScheduleModel,
 } from '@/domain/cron/schedule';
 import { LIMITS } from '@/domain/shared/limits';
@@ -271,6 +272,64 @@ describe('the search always stops', () => {
     expect(search.reason).toBe('NO_OCCURRENCE_IN_HORIZON');
     expect(search.horizonYears).toBe(LIMITS.cron.searchYears);
     expect(elapsed).toBeLessThan(250);
+  });
+});
+
+describe('the wall clock and the instant always agree', () => {
+  /**
+   * The invariant the whole DST design rests on: whatever instant an
+   * occurrence carries, reading the clock at that instant in the selected mode
+   * gives back the reading the search matched. If those two can disagree, the
+   * panel shows one time and means another — and every anomaly classification
+   * is built on top of the same correspondence.
+   *
+   * Run in a zone that changes its clocks, because in a zone that does not,
+   * this property is true for uninteresting reasons.
+   */
+  const originalTz = process.env.TZ;
+
+  afterEach(() => {
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  });
+
+  it('in the browser-local mode of a zone that transitions', () => {
+    process.env.TZ = 'Europe/London';
+
+    fc.assert(
+      fc.property(expression, startInstant, (source, after) => {
+        const analysis = analyzeCron(source, { timezoneMode: 'browserLocal' });
+        if (!analysis.ok) return;
+        const built = buildSchedule(analysis.value);
+        if (!built.ok) return;
+
+        const search = nextOccurrences(built.schedule, {
+          mode: 'browserLocal',
+          after,
+          count: 5,
+        });
+        if (!search.ok) return;
+
+        for (const occurrence of search.occurrences) {
+          if (occurrence.epochMs === null) {
+            // The only legal null, and it must not be dressed up as a time.
+            expect(occurrence.anomaly, source).toBe('skipped');
+            expect(occurrence.offsetMinutes, source).toBeNull();
+            continue;
+          }
+
+          expect(Number.isFinite(occurrence.epochMs), source).toBe(true);
+          expect(wallClockOf(occurrence.epochMs, 'browserLocal'), source).toEqual(occurrence.wall);
+
+          // A repeated reading claims two instants; both must read back as it,
+          // or "happens twice" is not what is being shown.
+          for (const instant of occurrence.repeatedInstants ?? []) {
+            expect(wallClockOf(instant.epochMs, 'browserLocal'), source).toEqual(occurrence.wall);
+          }
+        }
+      }),
+      CONFIG,
+    );
   });
 });
 
