@@ -17,7 +17,11 @@ import { expect, type Page } from '@playwright/test';
  * Under parallel load the render lags the keystrokes often enough for that race
  * to fail most runs.
  *
- * So: wait for the control to actually become available, then press it.
+ * So: wait for the control to actually become available, then press it — and
+ * **fail here, saying why, if it never does**. An early version returned
+ * quietly instead, which turned "the editor never received the text" into a
+ * timeout three assertions later against a panel that was never asked to
+ * update. A helper that silently does nothing is worse than one that throws.
  */
 
 const NAMES = {
@@ -28,21 +32,46 @@ const NAMES = {
 
 export type AnalyzeSubject = keyof typeof NAMES;
 
+export interface PressOptions {
+  /**
+   * Tolerate the control never becoming available, and report whether it did.
+   *
+   * For the few callers where "there is nothing to submit" is a legitimate
+   * outcome — an empty editor, or a result that already describes it. Every
+   * other caller wants the loud failure.
+   */
+  readonly optional?: boolean;
+  /**
+   * Long enough for a render under parallel load, short enough that a control
+   * which legitimately stays unavailable does not eat a test's whole budget.
+   */
+  readonly timeout?: number;
+}
+
 /**
- * Presses Analyze for one mode, once there is something to submit.
+ * The text the explanation panel shows when it has nothing to explain.
  *
- * Returns `false` when the control never became available, which is a real
- * state rather than a failure: an empty editor, or a result that already
- * describes what is on screen. Tests that rely on that keep working.
+ * Waiting for the panel itself proves nothing — it is always on screen, and it
+ * holds this placeholder until an analysis lands. Several specs waited for the
+ * region to be *visible* and therefore waited for nothing at all, then opened a
+ * drawer before the analysis they had asked for had arrived.
  */
+const PLACEHOLDER = /will appear here|Reading the pattern/;
+
+/** Waits for an analysis to actually land, rather than for its container. */
+export async function awaitAnalysis(page: Page, timeout = 15_000): Promise<void> {
+  await expect(page.getByRole('region', { name: 'Explanation' }).first()).not.toContainText(
+    PLACEHOLDER,
+    { timeout },
+  );
+}
+
 export async function pressAnalyze(
   page: Page,
   subject: AnalyzeSubject,
-  // Long enough for a render under parallel load, short enough that a control
-  // which legitimately stays unavailable — an empty editor, or a result that
-  // already describes it — does not eat a test's whole budget waiting.
-  timeout = 4_000,
+  options: PressOptions = {},
 ): Promise<boolean> {
+  const { optional = false, timeout = 4_000 } = options;
   const button = page.getByRole('button', { name: NAMES[subject] });
 
   const available = await expect(button)
@@ -52,6 +81,26 @@ export async function pressAnalyze(
       () => false,
     );
 
-  if (available) await button.click();
-  return available;
+  if (available) {
+    await button.click();
+    return true;
+  }
+
+  if (optional) return false;
+
+  // Say which precondition failed, rather than leaving the next assertion to
+  // time out against an untouched panel.
+  const state = await button
+    .evaluate((element) => ({
+      ariaDisabled: element.getAttribute('aria-disabled'),
+      disabled: (element as HTMLButtonElement).disabled,
+      visible: element.checkVisibility(),
+    }))
+    .catch(() => null);
+
+  throw new Error(
+    `"${NAMES[subject]}" never became available within ${String(timeout)} ms, so nothing was ` +
+      `analysed. The usual cause is that the editor never received the text — the control is ` +
+      `unavailable while there is nothing new to submit. Button state: ${JSON.stringify(state)}`,
+  );
 }

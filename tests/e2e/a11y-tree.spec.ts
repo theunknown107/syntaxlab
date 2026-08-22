@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { pressAnalyze } from './analyze';
+import { awaitAnalysis, pressAnalyze } from './analyze';
 
 /**
  * M10 — the accessibility tree.
@@ -164,7 +164,7 @@ test('the explanation and the syntax tree are reachable as structures', async ({
   await start(page);
   await page.getByRole('textbox', { name: 'Regular expression' }).fill('^a(b|c)+$');
   await pressAnalyze(page, 'pattern');
-  await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({ timeout: 15_000 });
+  await awaitAnalysis(page);
 
   // Regions are how a screen-reader user jumps between the panes.
   const regions = await named(page, 'region');

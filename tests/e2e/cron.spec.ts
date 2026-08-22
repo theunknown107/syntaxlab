@@ -26,6 +26,8 @@ async function start(page: Page): Promise<void> {
 
 async function analyse(page: Page, expression: string): Promise<void> {
   await editor(page).click();
+  // `insertText` follows focus, not the click — see the note in regex.spec.ts.
+  await expect(editor(page)).toBeFocused();
   await page.keyboard.press('ControlOrMeta+a');
   if (expression === '') await page.keyboard.press('Backspace');
   else await page.keyboard.insertText(expression);
@@ -318,6 +320,45 @@ test.describe('narrow viewports', () => {
 
       // And the control that drives the whole workspace is still reachable.
       await expect(analyzeButton(page)).toBeVisible();
+
+      // M16's panel is the newest thing that has to survive a narrow column:
+      // a date, a zone label and a daylight-saving sentence, none of which can
+      // be truncated into something misleading.
+      const runs = panel(page, 'Next runs');
+      await expect(runs).toContainText('Next run', { timeout: 15_000 });
+      await expect(runs).toContainText(/\d{1,2} \w+ \d{4}, \d{2}:\d{2}/);
+      await expect(runs.getByRole('button', { name: /recalculate/i })).toBeVisible();
+    });
+  }
+});
+
+test.describe('desktop widths', () => {
+  // The three the UX spec names for desktop. The next-run panel sits in the
+  // same column as Fields and Explanation, so the risk here is the opposite of
+  // the narrow case: a three-panel column that overflows its height budget or
+  // pushes the page sideways at a width nobody tests by hand.
+  for (const width of [1280, 1440, 1920]) {
+    test(`lays out without horizontal overflow at ${String(width)} px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await analyse(page, '*/15 9-17 1,15 JAN-JUN MON-FRI');
+
+      const runs = panel(page, 'Next runs');
+      await expect(runs).toContainText('Next run', { timeout: 15_000 });
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `horizontal overflow at ${String(width)} px`).toBeLessThanOrEqual(0);
+
+      // All three panels of the analysis column are present together, which is
+      // the layout M16 changed.
+      await expect(panel(page, 'Fields')).toBeVisible();
+      await expect(panel(page, 'Explanation')).toBeVisible();
+      await expect(runs).toBeVisible();
+
+      // The upcoming list is readable rather than collapsed to nothing.
+      const upcoming = page.getByRole('list', { name: /upcoming runs/i });
+      await expect(upcoming.getByRole('listitem').first()).toBeVisible();
     });
   }
 });

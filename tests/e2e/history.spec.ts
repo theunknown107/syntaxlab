@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
-import { pressAnalyze } from './analyze';
+import { awaitAnalysis, pressAnalyze } from './analyze';
 
 /**
  * M7 — history end to end.
@@ -34,7 +34,10 @@ async function analysePattern(page: Page, pattern: string): Promise<void> {
   // M15: typing records nothing, because it analyses nothing. History only
   // ever sees a completed analysis, which is the property under test here.
   await pressAnalyze(page, 'pattern');
-  await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({ timeout: 10_000 });
+  // Not `toBeVisible` on the region: it is always visible, so that waited for
+  // nothing and the drawer could open before the analysis — and therefore the
+  // history entry — existed.
+  await awaitAnalysis(page);
 }
 
 async function openDrawer(page: Page): Promise<void> {

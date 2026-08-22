@@ -45,15 +45,29 @@ const panel = (page: Page, name: string) => page.getByRole('region', { name });
 async function type(page: Page, target: 'pattern' | 'subject', value: string): Promise<void> {
   const editor = target === 'pattern' ? pattern(page) : subject(page);
   await editor.click();
+  // `insertText` goes to whatever has focus. If the click lands before the
+  // editor has attached its handlers the text goes to the body instead, the
+  // editor stays empty, and Analyze never becomes available — which is how a
+  // lost keystroke used to surface three assertions later as an idle panel.
+  await expect(editor).toBeFocused();
   await page.keyboard.press('ControlOrMeta+a');
   if (value === '') await page.keyboard.press('Backspace');
   else await page.keyboard.insertText(value);
   if (target === 'pattern') await analyze(page);
 }
 
-/** Presses Analyze when there is something to analyse. */
+/**
+ * Presses Analyze when there is something to analyse.
+ *
+ * `optional`, and this spec is the reason the option exists. Two tests here
+ * type something the editor legitimately does not accept as a new submission:
+ * a paste over the pattern limit, which the editor *refuses* so the document
+ * never changes, and the same catastrophic pattern typed twice in a loop. In
+ * both the control correctly stays unavailable, and demanding a press would
+ * fail the test for doing exactly what it is checking.
+ */
 async function analyze(page: Page): Promise<void> {
-  await pressAnalyze(page, 'pattern');
+  await pressAnalyze(page, 'pattern', { optional: true });
 }
 
 test.beforeEach(async ({ page }) => {

@@ -40,6 +40,8 @@ async function openJson(page: Page): Promise<void> {
  */
 async function type(page: Page, value: string): Promise<void> {
   await editor(page).click();
+  // See the note in regex.spec.ts: `insertText` follows focus, not the click.
+  await expect(editor(page)).toBeFocused();
   await page.keyboard.press('ControlOrMeta+a');
   if (value === '') await page.keyboard.press('Backspace');
   else await page.keyboard.insertText(value);

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { pressAnalyze } from './analyze';
+import { awaitAnalysis, pressAnalyze } from './analyze';
 
 /**
  * M10 — accessibility and security hardening.
@@ -153,9 +153,7 @@ test.describe('forced colors', () => {
     await patternField(page).fill('^a(b|c)+$');
     // M15 made analysis explicit: filling the editor analyses nothing.
     await pressAnalyze(page, 'pattern');
-    await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
-      timeout: 15_000,
-    });
+    await awaitAnalysis(page);
     await expect(page.getByText(/Capture group/).first()).toBeVisible();
 
     await page.getByRole('radio', { name: 'JSON' }).click();
@@ -250,9 +248,8 @@ test.describe('hostile input', () => {
     await patternField(page).fill('<img src=x onerror=alert(1)>');
     // The entry only reaches history once it has been analysed.
     await pressAnalyze(page, 'pattern');
-    await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
-      timeout: 15_000,
-    });
+    // The region is always visible; wait for the analysis itself.
+    await awaitAnalysis(page);
     await page.waitForTimeout(4000);
 
     await page.reload();

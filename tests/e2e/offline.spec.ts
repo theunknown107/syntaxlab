@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { pressAnalyze } from './analyze';
+import { awaitAnalysis, pressAnalyze } from './analyze';
 
 /**
  * M9 — offline, against the real service worker.
@@ -114,9 +114,7 @@ test.describe('offline', () => {
     await patternField(page).fill('^(a|b)+c$');
     // M15 made analysis explicit: filling the editor analyses nothing.
     await pressAnalyze(page, 'pattern');
-    await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
-      timeout: 15_000,
-    });
+    await awaitAnalysis(page);
     await expect(page.getByText(/Capture group/).first()).toBeVisible();
 
     await context.close();
@@ -133,9 +131,7 @@ test.describe('offline', () => {
 
     await patternField(page).fill(String.raw`\d+`);
     await pressAnalyze(page, 'pattern');
-    await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
-      timeout: 15_000,
-    });
+    await awaitAnalysis(page);
 
     // The execution worker is a *separate* chunk, spawned per run.
     await page.getByRole('textbox', { name: 'Test string' }).fill('a1 b22 c333');
@@ -178,9 +174,7 @@ test.describe('offline', () => {
     await patternField(page).fill('online-pattern');
     // History records completed analyses, so one has to be asked for.
     await pressAnalyze(page, 'pattern');
-    await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
-      timeout: 15_000,
-    });
+    await awaitAnalysis(page);
     await page.waitForTimeout(4000);
 
     await context.setOffline(true);
@@ -196,9 +190,7 @@ test.describe('offline', () => {
     await page.keyboard.press('Escape');
     await patternField(page).fill('offline-pattern');
     await pressAnalyze(page, 'pattern');
-    await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
-      timeout: 15_000,
-    });
+    await awaitAnalysis(page);
     await page.waitForTimeout(4000);
 
     await page.getByRole('button', { name: /^History/ }).click();

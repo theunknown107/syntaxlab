@@ -1,3 +1,5 @@
+import { cpus } from 'node:os';
+
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -23,10 +25,29 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  // Spread rather than `: undefined` — `exactOptionalPropertyTypes` treats a
-  // key holding undefined as different from an absent one, and absent is what
-  // gets Playwright's own default.
-  ...(process.env.CI ? { workers: 1 } : {}),
+  /**
+   * Concurrency, chosen from measurement rather than from the core count.
+   *
+   * Playwright's default is half the cores — eight here — and that default
+   * assumes it has the machine. It does not: this config also starts **four
+   * web servers**, three of which run a production build first. At eight
+   * workers the machine saturates and the suite fails in ways that have
+   * nothing to do with the product: `page.goto` timing out after 30 s,
+   * `newPage` and `browserContext.close` timing out, Firefox's software
+   * compositor dying with `RenderCompositorSWGL failed mapping default
+   * framebuffer`, and its driver crashing on context teardown. Between three
+   * and fourteen tests failed per run, a different set each time, across
+   * Firefox *and* Chromium.
+   *
+   * At four workers the same suite passes, and — because the machine is no
+   * longer thrashing — takes the same wall-clock time: 8.4 min either way.
+   *
+   * This is not a retry and not a raised timeout. It is the concurrency the
+   * harness can actually sustain. `cpus / 4` rather than a literal 4 so the
+   * ratio, not this machine, is what is encoded. Investigated at M16; see
+   * `13_TEST_PLAN.md`.
+   */
+  workers: process.env.CI ? 1 : Math.max(1, Math.ceil(cpus().length / 4)),
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
   use: { trace: 'on-first-retry' },
 
