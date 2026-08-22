@@ -2966,12 +2966,58 @@ and then presses it; eight specs use it.
 | M16, before this fix | 781 | **50** (25 of them a Firefox teardown crash) |
 | M16, after | **828** | **3** |
 
-The remaining three are **Firefox only, and a different three each run** — the
-regex-execution and JSON worker paths timing out under parallel load. The
-baseline showed the same family (`regex-firefox`, "times out a catastrophic
-pattern"). They predate M16, they are not deterministic, and they are left for a
-milestone that can give browser flakiness the attention it needs rather than
-being patched here under cover of a cron release.
+The remainder was root-caused during the M16 final cleanup rather than left as
+"flake" — see below.
+
+### The residual failures, root-caused
+
+Three distinct causes, none of them the product, all fixed at the cause.
+
+**1. The harness was over-subscribed.** Playwright's default worker count is
+half the cores — eight here — and that default assumes it owns the machine. This
+config also starts **four web servers**. At eight workers the host saturates, and
+the suite fails in ways no product code participates in:
+
+| Symptom | Meaning |
+|---|---|
+| `page.goto: Test timeout of 30000ms exceeded` | Could not navigate to a *static file server* in 30 s |
+| `browserContext.newPage` / `close` timing out | The driver could not open or close a page |
+| `RenderCompositorSWGL failed mapping default framebuffer` | Firefox's software compositor dying — the page stops painting, so everything reads as "not visible" |
+| `Protocol error (Browser.removeBrowserContext)` | The Firefox driver crashing on teardown |
+
+Three to fourteen tests failed per run, a different set each time, across
+Firefox **and** Chromium. `workers` is now `cores / 4` rather than Playwright's
+`cores / 2`. The suite takes the same wall-clock time either way — 8.4 minutes —
+because the machine was thrashing before. **Not a retry and not a raised
+timeout:** retries remain off outside CI, and no timeout was increased.
+
+**2. A helper that failed silently.** `pressAnalyze` returned `false` when the
+control never became available. That turned "the editor never received the text"
+into a timeout three assertions later against a panel nobody had asked to
+update. It now throws, naming the button's state. Making it loud immediately
+surfaced seven cases across all four engines — and they were *legitimate*: a
+paste over the pattern limit that the editor refuses, so the document never
+changes, and the same catastrophic pattern typed twice in a loop. Both leave
+nothing new to submit. Those call sites now pass `{ optional: true }` with the
+reason written down.
+
+**3. Waiting on a container instead of its content.** Several specs waited for
+`region "Explanation"` to be *visible*. That region is always visible — it holds
+"Your explanation will appear here" until an analysis lands — so they waited for
+nothing, then opened the history drawer before the analysis, and therefore the
+entry, existed. `awaitAnalysis()` waits for the placeholder to go away.
+
+A fourth, found while investigating: **`insertText` follows focus, not the
+click.** If the click lands before the editor attaches its handlers the text
+goes to the body. The typing helpers now assert `toBeFocused()` in between.
+
+**What remains.** Around 0.7% of tests still fail on some runs — a different set
+each time, every one an infrastructure error (`page.goto` timeout, Firefox
+driver teardown crash, `Execution context was destroyed`), and **every one
+passes in isolation**. Three of the six in the final run sat in the first 36
+tests, when four browsers are cold-launching at once. This is the host, and it
+is documented rather than papered over: no retry, no timeout increase, and no
+assertion weakened to accommodate it.
 
 ### Two more fixes that were not M16 work
 
@@ -2986,18 +3032,67 @@ being patched here under cover of a cron release.
 |---|---|---|
 | Types | `npm run typecheck` | ✅ clean, both projects |
 | Lint | `npm run lint` | ✅ 0 errors, 0 warnings |
-| Unit | `npx vitest run` | ✅ **2 576 passed**, 47 files |
+| Unit | `npx vitest run` | ✅ **2 585 passed**, 47 files, exit 0 |
 | Cron E2E | 4 projects | ✅ **104 passed**, sampled four times |
-| Full E2E | `npx playwright test` | ⚠️ **828 passed, 3 failed** — Firefox-only flakes that predate M16 (see above). Baseline before M16: 774 / **25** |
-| Search cost | `npm run measure:cron` | ✅ worst p99 **0.207 ms**; worst 326 steps of 100 000 |
+| Full E2E | `npx playwright test` | ⚠️ **837 passed, 6 failed** of 843; all six pass in isolation (exit 0). Baseline before M16: 774 / **25** |
+| Typecheck probe | planted error → removed | ✅ exit **2** with the error located, then exit **0** |
+| Search cost | `npm run measure:cron` | ✅ worst search p99 **0.204 ms**; worst 326 steps of 100 000; browser-local DST-adjacent **0.095 ms** |
+| Dependencies | `npm audit --audit-level=low` | ✅ **0 vulnerabilities**; no dependency added |
 | Bundle | `npm run size` | ⚠️ **174.69 KB** initial JS — over the 170 KB target, inside the 200 KB hard limit |
+
+### The final audit — what it found
+
+M16 was code-complete before this pass. The audit ran the checks anyway, and
+two of them found something.
+
+#### A fabricated occurrence, from an unrepresentable start instant
+
+`nextOccurrences` was given a start instant beyond ±8.64e15, the range `Date`
+can represent. Every getter on such a date returns `NaN`; nothing throws, and
+no comparison against `NaN` is true, so the search walked a calendar made of
+`NaN` and returned **occurrences whose year was `NaN` and whose instant was
+`null` — without the `skipped` anomaly that is the only thing allowed to carry
+a null instant.** A run that does not exist, presented as a run: the one output
+this engine must never produce.
+
+Nothing reached a screen. The UI always passes `Date.now()`, and the
+worker-result validator rejected the shape outright — the net worked. But a net
+is not a fix, so:
+
+| | |
+|---|---|
+| Domain | `nextOccurrences` refuses an unrepresentable `after` before searching, in 0 steps |
+| Boundary | The payload validator bounds `after` to ±8.64e15, the same range the result validator already applied to instants |
+| Tests | Four hostile start instants, the edge case one day inside the boundary, and an absurd `count` clamped to the cap |
+
+Found by probing the engine's hostile edges rather than by reading it. The
+`count` probe was the reassuring half of the same experiment:
+`Number.MAX_SAFE_INTEGER` occurrences requested, ten returned, ten steps taken.
+
+#### A property the suite was missing
+
+§7 of the audit brief asks that "local representation corresponds to the
+returned instant". Nothing asserted it across generated schedules — the DST
+corpus checked it only for the repeated case. It is now a property: in
+`Europe/London`, for 300 generated schedules, every occurrence's `wall` equals
+`wallClockOf(epochMs)`, both instants of a repeated reading read back as it,
+and a null instant appears only under `skipped`. It passes.
+
+That is the invariant the whole DST design rests on: if the reading and the
+instant can disagree, the panel shows one time and means another.
 
 ### Known limitations at M16
 
-- **Bundle still over target.** 174.69 KB against 170 KB, up 2.43 KB from
-  M15's 172.26 KB — the whole schedule engine, its validator, the protocol
-  additions and the panel. Inside the 200 KB hard limit. Code-splitting cron
-  has now been measured as *worse* twice and was not attempted a third time.
+- **Bundle still over target — a measured exception, not an oversight.**
+  174.69 KB against a 170 KB target, up 2.43 KB from M15's 172.26 KB, for the
+  whole schedule engine, its validator, the protocol additions and the panel.
+  Comfortably inside the 200 KB hard limit. No speculative optimisation was
+  attempted: code-splitting cron has been measured as *worse* twice, and
+  nothing was going to be removed from accessibility, security or
+  functionality to recover four kilobytes.
+- **The E2E suite is not deterministic on this host** at roughly 0.7% of tests
+  per run, all infrastructure-level and all passing in isolation. Root-caused
+  above rather than retried away.
 - **No named timezones.** Unchanged, and unchanged deliberately (Q-09).
 - **No cron history.** `HistoryEntry` still has no cron type.
 - **No relative times, and nothing refreshes on a timer.** §G.

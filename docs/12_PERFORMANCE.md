@@ -1313,17 +1313,51 @@ the 1.07–1.85 ms spread already recorded in §13.
 `npm run measure:cron`. 2 000 runs each after 200 warmup runs, asking for ten
 occurrences from a fixed instant, on the development machine.
 
+**UTC search**
+
 | Case | p50 | p95 | p99 | max | steps |
 |---|---|---|---|---|---|
-| every minute `* * * * *` | 0.005 ms | 0.009 ms | 0.025 ms | 0.162 ms | 10 |
-| typical `*/15 9-17 * * 1-5` | 0.004 ms | 0.010 ms | 0.012 ms | 0.326 ms | 12 |
-| daily `0 0 * * *` | 0.009 ms | 0.019 ms | 0.040 ms | 0.348 ms | 29 |
-| weekly `0 9 * * 1` | 0.019 ms | 0.060 ms | 0.108 ms | 0.590 ms | 100 |
-| monthly `0 0 1 * *` | 0.066 ms | 0.130 ms | 0.207 ms | 0.850 ms | 326 |
-| yearly `0 0 1 1 *` | 0.030 ms | 0.067 ms | 0.125 ms | 0.619 ms | 177 |
-| leap day `0 0 29 2 *` | 0.034 ms | 0.058 ms | 0.098 ms | 0.513 ms | 160 |
-| **never occurs** `0 0 30 2 *` | 0.032 ms | 0.053 ms | 0.092 ms | 0.493 ms | 158 |
-| sparse pair `0 0 31 2 *` | 0.034 ms | 0.057 ms | 0.097 ms | 0.478 ms | 158 |
+| every minute `* * * * *` | 0.004 ms | 0.007 ms | 0.011 ms | 0.253 ms | 10 |
+| typical `*/15 9-17 * * 1-5` | 0.004 ms | 0.005 ms | 0.009 ms | 0.341 ms | 12 |
+| daily `0 0 * * *` | 0.006 ms | 0.010 ms | 0.012 ms | 0.255 ms | 29 |
+| weekly `0 9 * * 1` | 0.019 ms | 0.030 ms | 0.043 ms | 0.322 ms | 100 |
+| monthly `0 0 1 * *` | 0.054 ms | 0.096 ms | 0.204 ms | 0.544 ms | 326 |
+| yearly `0 0 1 1 *` | 0.040 ms | 0.074 ms | 0.142 ms | 0.501 ms | 177 |
+| leap day `0 0 29 2 *` | 0.029 ms | 0.048 ms | 0.156 ms | 0.657 ms | 160 |
+| **never occurs** `0 0 30 2 *` | 0.033 ms | 0.057 ms | 0.090 ms | 0.602 ms | 158 |
+| sparse pair `0 0 31 2 *` | 0.033 ms | 0.061 ms | 0.106 ms | 0.415 ms | 158 |
+
+**Browser-local search, `TZ=Europe/London`** — the mode that probes offsets
+
+| Case | p50 | p95 | p99 | max | steps |
+|---|---|---|---|---|---|
+| ordinary, nowhere near a transition | 0.021 ms | 0.044 ms | 0.096 ms | 0.674 ms | 39 |
+| **spring gap** — 29 March, the run does not exist | 0.021 ms | 0.035 ms | 0.089 ms | 0.744 ms | 40 |
+| **autumn overlap** — 25 October, the run happens twice | 0.023 ms | 0.040 ms | 0.095 ms | 1.116 ms | 40 |
+| every minute, straight through the overlap | 0.022 ms | 0.029 ms | 0.083 ms | 0.503 ms | 10 |
+
+**A transition costs nothing extra.** The spring gap and the autumn overlap
+measure the same as an ordinary local search, because the probe is two
+`getTimezoneOffset` calls per matched reading whatever the answer turns out to
+be. There is no slow path for the interesting cases — the branch is in what is
+*reported*, not in what is *computed*.
+
+Browser-local is roughly four times the cost of UTC (0.096 ms against 0.011 ms
+at p99 for a comparable schedule), which is the price of resolving each reading
+through a real zone instead of arithmetic. Still two orders of magnitude inside
+a frame.
+
+**The worker round trip — only the parts M16 adds**
+
+| Stage | p50 | p99 | |
+|---|---|---|---|
+| parse + search, in the worker | 0.007 ms | 0.025 ms | what one request costs |
+| structured clone, each way | 0.024 ms | 0.073 ms | 1 138 bytes of JSON |
+| validate on arrival | 0.001 ms | 0.006 ms | exhaustive, by value |
+
+The copy costs three times the search. That is the right shape for a payload
+this small and is why the cap is ten occurrences rather than a thousand: the
+expensive part of asking a worker anything is the asking.
 
 **The worst case is not the impossible one.** `0 0 30 2 *` walks the entire
 five-year horizon and answers in 158 steps, because a month whose days cannot
@@ -1334,9 +1368,14 @@ calendar, not the size of the window.
 
 | | |
 |---|---|
-| Slowest p99 | **0.207 ms** — 77× inside a 16 ms frame |
+| Slowest search p99 | **0.204 ms** — 78× inside a 16 ms frame |
+| Slowest of *any* cron work | 1.111 ms — a 200-term list, the per-field limit |
 | Most steps | **326** of 100 000 allowed — **307× headroom** on the tripwire |
 | Minute-by-minute equivalent | ~2.6 M iterations for the same window |
+
+Re-measured on the final M16 tree, on an otherwise idle machine. Figures taken
+while the E2E suite was running were discarded — they were two to four times
+slower and would have documented the load, not the code.
 
 **Why the step count is reported at all.** The bound is a tripwire for a bug —
 an advance that stops advancing — rather than a budget the search spends. A

@@ -431,9 +431,52 @@ happens and nothing errors**, and the test times out somewhere else. Under
 parallel load the render lags the keystrokes often enough to fail most runs.
 
 **Never press Analyze directly in a spec.** `pressAnalyze(page, subject)` waits
-for the control to become available and then presses it, and returns `false`
-rather than throwing when it never does — an empty editor and an already-current
-result are real states, not failures.
+for the control to become available and then presses it, and **throws, saying
+which precondition failed, when it never does**. Pass `{ optional: true }` for
+the few callers where "nothing to submit" is the correct outcome — `regex.spec`
+types a paste the editor refuses, and the same pattern twice in a loop.
+
+An early version returned quietly instead. That is worse than throwing: it turns
+"the editor never received the text" into a timeout three assertions later,
+against a panel nobody asked to update. Making it loud immediately surfaced
+seven such cases across all four engines.
+
+**Never wait for a container as a proxy for its content.** The Explanation panel
+is *always* on screen — it holds "Your explanation will appear here" until an
+analysis lands — so `expect(region).toBeVisible()` waits for nothing. Several
+specs did exactly that and then opened the history drawer before the analysis,
+and therefore the entry, existed. `awaitAnalysis(page)` waits for the
+placeholder to go away, which is the real signal.
+
+**`insertText` follows focus, not the click.** If a click lands before the
+editor has attached its handlers, the text goes to the body, the editor stays
+empty, and Analyze never becomes available. The typing helpers assert
+`toBeFocused()` between the click and the insert.
+
+#### Concurrency is part of the harness, not a detail of it — *M16*
+
+Playwright's default worker count is half the cores, and that default assumes it
+has the machine. This config also starts **four web servers**, three of which
+run a production build first. On a 16-core machine the default of eight workers
+saturates it, and the suite then fails in ways that have nothing to do with the
+product:
+
+| Symptom | What it is |
+|---|---|
+| `page.goto: Test timeout of 30000ms exceeded` | The browser could not navigate to a static file server in 30 s |
+| `browserContext.newPage` / `close` timing out | The driver could not open or close a page |
+| `RenderCompositorSWGL failed mapping default framebuffer` | Firefox's software compositor dying — the page stops painting, so everything is "not visible" |
+| `Protocol error (Browser.removeBrowserContext)` | The Firefox driver crashing on teardown |
+
+Between three and fourteen tests failed per run, a different set each time,
+across Firefox **and** Chromium. Every one of them passed in isolation and in a
+single-project run.
+
+`workers` is therefore set from the core count divided by four rather than two.
+The suite passes at that concurrency and — because the machine is no longer
+thrashing — takes the same wall-clock time either way. **This is not a retry and
+not a raised timeout**; retries stay off outside CI, and no timeout was
+increased. It is the concurrency the harness can actually sustain.
 
 ### 3.3.1 Differential and reference testing for cron — *why there is no oracle*
 

@@ -778,6 +778,34 @@ flowchart LR
     class C,E safe
 ```
 
+#### 4.4.0 Normalisation — what `buildSchedule` actually does
+
+It copies, tests and rejects. It does not interpret: every value set already
+exists on the analysis, sorted, deduplicated and range-checked by the parser.
+
+```mermaid
+flowchart TD
+    A["CronAnalysis"] --> B{"dialect is standard5?"}
+    B -->|no| R1["UNSUPPORTED_DIALECT"]
+    B -->|yes| C{"exactly 5 fields?"}
+    C -->|"0 fields — @reboot"| R2["NOT_SCHEDULABLE"]
+    C -->|"some other count"| R1
+    C -->|yes| D{"any field in error,<br/>or resolving to nothing?"}
+    D -->|yes| R3["FIELD_ERROR"]
+    D -->|no| E["copy the five resolved sets<br/><i>day-of-week already has 7 folded to 0</i>"]
+    E --> F["test each day field:<br/>fewer values than the whole range?"]
+    F --> G["ScheduleModel<br/><i>5 sets + 2 restriction flags</i>"]
+
+    classDef refuse fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class R1,R2,R3 refuse
+    class G safe
+```
+
+The dialect check is asserted again here even though the type is a one-member
+union: the value crosses a worker boundary, where a type is a hope rather than
+a guarantee.
+
 **Algorithm: field-by-field advance, not brute-force minute iteration.** Iterating minute-by-minute over five years is ~2.6 M iterations per requested run and is exactly what makes a worker look hung.
 
 ```
@@ -815,6 +843,29 @@ flowchart TD
 Each step jumps to the next plausible boundary, so a match is found in tens of iterations — **measured: 12 steps for `*/15 9-17 * * 1-5`, 326 for ten monthly runs, 158 to prove `0 0 30 2 *` never fires**. The 5-year bound guarantees termination and yields the correct answer for genuinely unsatisfiable schedules: `0 0 30 2 *` reports that it has **no run in the next five years**, because February never has a 30th.
 
 **Bounded twice over.** The calendar horizon (`LIMITS.cron.searchYears` = 5) is the semantic bound; a step count (`LIMITS.cron.maxSearchSteps` = 100 000) is a tripwire underneath it. The second exists because the first only terminates if the advance logic actually advances — a bug that failed to move the cursor would otherwise spin inside the horizon forever. It is a tripwire and not a budget: the worst measured search uses **326 steps, 307× under it**, and the search reports its own step count so that margin is measured rather than asserted.
+
+#### 4.4.2 The two bounds, and the three ways a search ends
+
+```mermaid
+flowchart TD
+    A["nextWallClock"] --> B{"steps < 100 000?"}
+    B -->|no| T["tripwire: return no match<br/><i>the advance stopped advancing — a bug</i>"]
+    B -->|yes| C{"cursor year > horizon?"}
+    C -->|yes| H["horizon: return no match<br/><i>0 0 30 2 * — never occurs</i>"]
+    C -->|no| D["advanceOnce"]
+    D -->|"matched"| M["return the reading"]
+    D -->|"not yet"| B
+
+    classDef refuse fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class T refuse
+    class M safe
+```
+
+The horizon is the semantic bound and answers a real question. The step count
+is a tripwire for a defect and should never be reached: the worst measured
+search uses 326 steps. Both are unconditional `while` guards — there is no
+`while (true)` anywhere in the engine.
 
 **Five years, not one.** Four years covers the leap cycle; the fifth is slack for the 100/400 rules, so a schedule like `0 0 29 2 *` evaluated near a century boundary still finds its next occurrence rather than reporting that it never runs.
 
@@ -892,6 +943,31 @@ It shipped for an afternoon as an unconditional browser-local warning, and the e
 | Spring forward — 02:30 does not exist | Report the run as `skipped`, with **no instant at all**, and explain that schedulers differ (most skip; some run at 03:00) | **built** (M16) |
 | Fall back — 01:30 occurs twice | Report `repeated`, carrying **both instants with their offsets** | **built** (M16) |
 
+#### 4.6.0 The two execution modes
+
+The search is identical in both. Only the conversion at the end differs, and
+that is the whole reason the search works on wall clocks.
+
+```mermaid
+flowchart TD
+    A["matched wall clock"] --> B{"mode"}
+    B -->|"utc"| C["Date.UTC(y, m-1, d, h, min)"]
+    C --> D["exactly one instant<br/>offset 0, never an anomaly"]
+    B -->|"browserLocal"| E["probe the zone either side"]
+    E --> F["0, 1 or 2 instants"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class D safe
+```
+
+**UTC is deterministic and machine-independent.** `Date.UTC` is a pure
+calculation over the five numbers; it consults no zone, so the same expression
+and the same start instant give the same answer on every machine. A test asserts
+exactly that across six zones including `Pacific/Kiritimati`.
+
+**Browser-local resolves through the zone the browser reported**, which is the
+only mode where a reading can fail to exist or exist twice.
+
 #### 4.6.1 How an anomaly is detected — offset probing, no timezone library
 
 A wall-clock reading is turned into instants by probing the zone's offset **a day either side** of the reading, correcting by each, and keeping only the candidates that read back as the reading asked for.
@@ -914,6 +990,47 @@ flowchart TD
     class H,J warn
     class I safe
 ```
+
+**Spring forward — the reading that never happens.**
+
+```mermaid
+flowchart TD
+    A["Europe/London<br/>29 March 2026, 01:30"] --> B["offset a day before: GMT, +0"]
+    A --> C["offset a day after: BST, +60"]
+    B --> D["candidate 01:30Z<br/>reads back as 02:30 local"]
+    C --> E["candidate 00:30Z<br/>reads back as 00:30 local"]
+    D --> F{"either equal to 01:30?"}
+    E --> F
+    F -->|"neither"| G["skipped<br/><i>epochMs null, no time invented</i>"]
+
+    classDef warn fill:#2a2414,stroke:#bfa05f,color:#f5ecd4
+    class G warn
+```
+
+At 01:00 the clocks jump to 02:00, so 01:30 is not a time that day. The run is
+reported and kept in the list — dropping it would leave a gap the reader cannot
+see — but it carries no instant, because there is none.
+
+**Fall back — the reading that happens twice.**
+
+```mermaid
+flowchart TD
+    A["Europe/London<br/>25 October 2026, 01:30"] --> B["offset a day before: BST, +60"]
+    A --> C["offset a day after: GMT, +0"]
+    B --> D["candidate 00:30Z<br/>reads back as 01:30 BST"]
+    C --> E["candidate 01:30Z<br/>reads back as 01:30 GMT"]
+    D --> F{"either equal to 01:30?"}
+    E --> F
+    F -->|"both"| G["repeated<br/><i>both instants, both offsets, an hour apart</i>"]
+
+    classDef warn fill:#2a2414,stroke:#bfa05f,color:#f5ecd4
+    class G warn
+```
+
+The earlier instant is reported as *the* occurrence, because it is the one a
+scheduler firing once would use — with the other carried alongside rather than
+silently discarded, since schedulers differ on whether the run happens once or
+twice.
 
 **Why a day either side, and not the corrected instant.** The first implementation probed forward — the offset at the guess, then the offset at the instant that guess corrected to. That walk never steps *back* over a transition it has already passed: for London's 01:30 on 25 October both probes land after the change, agree on GMT, and report a single instant while the earlier BST one goes unmentioned. A day is wider than any transition and narrower than the gap between two, so the pair straddles the change. **This was caught by the DST test corpus, not by review.**
 

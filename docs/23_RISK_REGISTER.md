@@ -99,7 +99,7 @@ caught by review rather than by a test.
 **Mitigations**
 - Two timezone modes only, both fully testable
 - Every displayed time carries a zone label (invariant C-I1)
-- DST anomalies explicitly detected and labelled (`SKIPPED` / `REPEATED`) — *M16; at M14 the mode-level caveat is emitted instead*
+- DST anomalies explicitly detected and labelled (`skipped` / `repeated`) — ✅ *built at M16, per reading, by offset probing*
 - We document that schedulers differ and do not claim parity with any
 - **Refusal to parse unsupported dialects** removes an entire class of wrong answers
 - Bounded 5-year search guarantees termination
@@ -111,14 +111,35 @@ What actually reduced it:
 
 - The **timezone representation shipped and is provably two-valued.** The mode is a two-member union, re-validated on the wire rather than merely typed, and two tests assert no analysis in either mode can produce a third. Named-zone leakage — the largest part of this risk — is now structurally blocked rather than planned against.
 - The **refusal paths are built and tested**, so the class of wrong answers that comes from parsing another dialect's expression is closed, not pending.
-- The **hardest remaining part is unbuilt and therefore unshipped.** Next-run computation and per-schedule DST anomalies are M16. This does not reduce the risk of *that* work; it does mean no wrong time can be displayed today, because no time is displayed.
+- At M14 the **hardest remaining part was unbuilt and therefore unshipped.** Next-run computation and per-schedule DST anomalies were M16, and no wrong time could be displayed because no time was displayed. That is no longer the situation — see the M16 checkpoint below.
 - One real correctness defect was found and fixed during M14 — `5/10` expanding to a set no scheduler produces — which is evidence the corpus is doing its job.
 
 What has **not** changed: schedulers still differ on DST, and we still do not claim parity. The contingency below stands.
 
+**M16 checkpoint — passed. The score stays at 8 rather than dropping further.**
+Likelihood is unchanged at 2 and impact unchanged at 4: the executor now exists,
+so a wrong time *can* be displayed where before none could be. What holds the
+likelihood down is the evidence rather than the absence of the feature:
+
+- **The expected answers came from the calendar, not the code.** 48 golden cases
+  reasoned by hand, each carrying its reasoning.
+- **A differential oracle exists after all.** A minute-by-minute scan is the
+  definition of a cron schedule; the fast search is checked against it across
+  300 generated schedules, and the scan stops at the search's answer, so
+  agreeing also proves nothing was skipped on the way.
+- **DST is tested against real zone rules** in four zones, both hemispheres,
+  and a zone with no transitions — and one real defect was found that way: the
+  first offset probe missed the fall-back overlap entirely.
+- **Neither anomaly is resolved on the user's behalf.** A skipped run carries no
+  instant; a repeated one carries both. We still do not claim parity with any
+  scheduler's DST policy, and the UI says so in words.
+- **An audit found and fixed a fabrication path**: an out-of-range start instant
+  produced occurrences with a null instant and no `skipped` marker. Refused now
+  at the domain and at the payload boundary.
+
 **Detection:** golden-file mismatches; user reports.
 **Contingency:** restrict V1.1 to UTC only and document it.
-**Checkpoint:** M14 ✅ passed; next at M16 with the executor. **Owner:** developer.
+**Checkpoint:** M14 ✅ passed; M16 ✅ passed. **Owner:** developer.
 
 ---
 

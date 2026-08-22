@@ -1,6 +1,7 @@
 import { analyzeCron } from '@/domain/cron/analyze';
 import { parseCron } from '@/domain/cron/parser';
-import { buildSchedule, nextOccurrences } from '@/domain/cron/schedule';
+import { buildSchedule, nextOccurrences, previewSchedule } from '@/domain/cron/schedule';
+import { isValidSchedulePreview } from '@/domain/cron/validate';
 import { tokenize } from '@/domain/cron/tokenizer';
 import { LIMITS } from '@/domain/shared/limits';
 
@@ -234,6 +235,110 @@ for (const row of searchRows) {
     `  ${pad(row.label, 16)}${pad(ms(row.p50), 11)}${pad(ms(row.p95), 11)}${pad(ms(row.p99), 11)}${pad(ms(row.max), 11)}${pad(String(row.steps), 8)}${row.note}`,
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * Browser-local, and the transition itself
+ *
+ * The local mode does strictly more work than UTC: every matched reading is
+ * resolved by probing the zone's offset a day either side, so each occurrence
+ * costs two extra `Date` constructions even when nothing interesting happens.
+ * The DST-adjacent rows are the ones where something does.
+ * ------------------------------------------------------------------ */
+
+const LOCAL_CASES: readonly { label: string; source: string; after: number; note: string }[] = [
+  {
+    label: 'local, ordinary',
+    source: '30 1 * * *',
+    after: Date.parse('2026-06-01T12:00:00Z'),
+    note: 'nowhere near a transition',
+  },
+  {
+    label: 'local, spring gap',
+    source: '30 1 * * *',
+    after: Date.parse('2026-03-28T12:00:00Z'),
+    note: 'the run on 29 March does not exist',
+  },
+  {
+    label: 'local, autumn overlap',
+    source: '30 1 * * *',
+    after: Date.parse('2026-10-24T12:00:00Z'),
+    note: 'the run on 25 October happens twice',
+  },
+  {
+    label: 'local, every minute',
+    source: '* * * * *',
+    after: Date.parse('2026-10-25T00:30:00Z'),
+    note: 'ten resolutions straight through the overlap',
+  },
+];
+
+console.log(`\nBrowser-local search — TZ=${process.env.TZ ?? '(machine default)'}\n`);
+console.log(
+  `  ${pad('case', 22)}${pad('p50', 11)}${pad('p95', 11)}${pad('p99', 11)}${pad('max', 11)}${pad('steps', 8)}note`,
+);
+
+for (const testCase of LOCAL_CASES) {
+  const analysis = analyzeCron(testCase.source, { timezoneMode: 'browserLocal' });
+  if (!analysis.ok) throw new Error(`${testCase.source} did not analyse`);
+  const built = buildSchedule(analysis.value);
+  if (!built.ok) throw new Error(`${testCase.source} did not build`);
+
+  const options = {
+    mode: 'browserLocal',
+    after: testCase.after,
+    count: LIMITS.cron.maxOccurrences,
+  } as const;
+  const stats = time(() => void nextOccurrences(built.schedule, options));
+  const { steps } = nextOccurrences(built.schedule, options);
+
+  console.log(
+    `  ${pad(testCase.label, 22)}${pad(ms(stats.p50), 11)}${pad(ms(stats.p95), 11)}${pad(ms(stats.p99), 11)}${pad(ms(stats.max), 11)}${pad(String(steps), 8)}${testCase.note}`,
+  );
+  searchRows.push({ label: testCase.label, note: testCase.note, ...stats, steps });
+}
+
+/* ------------------------------------------------------------------ *
+ * The worker round trip
+ *
+ * Only the part M16 adds: building the preview and copying it across the
+ * boundary. The postMessage machinery itself is unchanged infrastructure and
+ * is characterised in 12_PERFORMANCE.md §4.1; what is new is the size and
+ * shape of this payload, and a structured clone is exactly what the boundary
+ * does to it in each direction.
+ * ------------------------------------------------------------------ */
+
+const ROUND_TRIP_SOURCE = '*/15 9-17 * * 1-5';
+const roundTripAnalysis = analyzeCron(ROUND_TRIP_SOURCE, { timezoneMode: 'utc' });
+if (!roundTripAnalysis.ok) throw new Error('round-trip setup failed');
+
+const previewStats = time(() => {
+  void previewSchedule(roundTripAnalysis.value, {
+    mode: 'utc',
+    after: SEARCH_FROM,
+    count: LIMITS.cron.maxOccurrences,
+  });
+});
+
+const preview = previewSchedule(roundTripAnalysis.value, {
+  mode: 'utc',
+  after: SEARCH_FROM,
+  count: LIMITS.cron.maxOccurrences,
+});
+const cloneStats = time(() => void structuredClone(preview));
+const validateStats = time(() => void isValidSchedulePreview(preview));
+const previewBytes = JSON.stringify(preview).length;
+
+console.log(`\nWorker round trip — the parts M16 adds\n`);
+console.log(`  ${pad('stage', 34)}${pad('p50', 12)}${pad('p99', 12)}note`);
+console.log(
+  `  ${pad('parse + search (in the worker)', 34)}${pad(ms(previewStats.p50), 12)}${pad(ms(previewStats.p99), 12)}what the worker does per request`,
+);
+console.log(
+  `  ${pad('structured clone (each way)', 34)}${pad(ms(cloneStats.p50), 12)}${pad(ms(cloneStats.p99), 12)}${String(previewBytes)} bytes of JSON`,
+);
+console.log(
+  `  ${pad('validate on arrival', 34)}${pad(ms(validateStats.p50), 12)}${pad(ms(validateStats.p99), 12)}exhaustive, by value`,
+);
 
 const worstSteps = searchRows.reduce((most, row) => (row.steps > most.steps ? row : most));
 const headroom = LIMITS.cron.maxSearchSteps / worstSteps.steps;

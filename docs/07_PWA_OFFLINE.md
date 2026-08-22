@@ -15,7 +15,7 @@ SyntaxLab must be **fully functional with no network** after the first load, for
 | Load the app | ✅ | Precached app shell |
 | Regex parse, explain, test | ✅ | Runs in a worker, locally |
 | JSON parse, tree, format | ✅ | Local |
-| Cron parse, explain, next runs *(V1.1)* | ✅ | Local — `Intl` timezone data ships with the browser |
+| Cron parse, explain, next runs *(V1.1)* | ✅ | Local — `Intl` and `Date` only; the zone data ships with the browser, and M16 added no dependency and no request |
 | History read/write | ✅ | IndexedDB |
 | Theme customisation | ✅ | localStorage + CSS |
 | Import / export | ✅ | File APIs |

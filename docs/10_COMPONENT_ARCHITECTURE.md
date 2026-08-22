@@ -301,28 +301,40 @@ The hover-link between `<TokenTable>` and the editor is coordinated by a single 
   └── <JsonFindings/>            duplicate keys · unsafe numbers
 ```
 
-### 4.3 Cron — **still not built. M15.**
+### 4.3 Cron — **built at M15 and M16**
 
-> **M14 changed nothing in this file's subject matter.** The cron domain runs in the analysis worker and is reachable only through `analysis.cron`. There is no `features/cron/` directory, no `<CronInput>`, no cron entry in the mode selector, and no cron detection result the UI can act on — `ModeSuggestion` filters detection down to the two modes that exist before it can reach `setMode`.
->
-> The sketch below remains the M15 target.
+> The sketch below was the target. What shipped is narrower, and the
+> differences are decisions rather than omissions.
+
+**As built** (`src/features/cron/`):
 
 ```
-<CronInput>
-  ├── <CodeEditor language="plain"/>   field-coloured decorations
-  ├── <CronDialectSelect/>
-  ├── <CronTimezoneSelect/>
-  └── <CronPresetPicker/>
-
-<CronAnalysis>
-  ├── <CronSummary/>             the large plain-English statement
-  ├── <Panel title="Fields"><CronFieldTable/></Panel>
-  ├── <Panel title="Next runs"><NextRunsList/></Panel>
-  ├── <CronWarnings/>            DOM/DOW OR-rule, DST
-  └── <Panel title="Builder" collapsible><CronBuilder/></Panel>
+<CronWorkspace>                       M15
+  ├── <CodeEditor singleLine/>        no field-coloured decorations yet
+  ├── <FieldLegend/>                  the five positions, numbered
+  ├── <AnalyzeAction/>                shared with regex and JSON
+  ├── <TimezoneToggle/>               two radios, not a select
+  ├── <Panel title="Fields"><CronFields/></Panel>
+  ├── <Panel title="Next runs"><CronSchedule/></Panel>      M16
+  └── <Panel title="Explanation"><ExplanationView/></Panel>
 ```
 
-`<CronBuilder>` is the most stateful component in the app: it must stay bidirectionally synchronised with the text expression. Rule — **the expression string is the single source of truth**. The builder derives its control values from the parsed expression and, on change, writes a new expression string. It never holds independent state. This eliminates the entire class of "the builder and the text box disagree" bugs.
+| Sketched | Built | Why |
+|---|---|---|
+| `<CronDialectSelect/>` | a static label | There is one dialect. A select implies a choice that does not exist |
+| `<CronTimezoneSelect/>` | `<TimezoneToggle/>`, two radios | A select implies a list that could grow; named zones are not implemented |
+| `<CronPresetPicker/>` | worked-example buttons | Same job, one fewer component |
+| `<CronSummary/>` | the explanation's own summary | `ExplanationView` already renders it; a second component would have been a second style for the same text |
+| `<NextRunsList/>` | `<CronSchedule/>` | It renders three states — occurrences, none in the horizon, no clock time at all — so it is not only a list |
+| `<CronBuilder/>` | **not built** | Deferred, see below |
+
+`<CronBuilder>` is **not built**, and the rule it would follow is recorded here for whenever it is. It would be the most stateful component in the app: bidirectionally synchronised with the text expression. Rule — **the expression string is the single source of truth**. The builder derives its control values from the parsed expression and, on change, writes a new expression string. It never holds independent state. This eliminates the entire class of "the builder and the text box disagree" bugs.
+
+**`<CronSchedule/>` holds no state at all.** It takes the preview, the status
+and the failure as props and renders them; the times come from the worker and
+the only control it owns asks for them again. Formatting is local to the
+component and deliberately does not use `toLocaleString` — see
+`08_UI_UX_SPEC.md` §7.3.1.
 
 ### 4.4 History and theme
 
