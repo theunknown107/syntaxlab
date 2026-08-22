@@ -6,7 +6,7 @@
 
 ---
 
-> **Scope note.** V1.0 implements `RegexAnalysis`, `JsonAnalysis`, `HistoryEntry`, `ThemePreferences`, and `AppSettings`. **`CronAnalysis` (§5) is V1.1, and M14 built the parts of it that do not require a schedule executor** — the fields, the terms, the timezone context, the warnings and the explanation. `schedule` and `nextRuns` are M16. The `SHARE_URL_VERSION` in §8 applies only if share URLs ship in V1.1+.
+> **Scope note.** V1.0 implements `RegexAnalysis`, `JsonAnalysis`, `HistoryEntry`, `ThemePreferences`, and `AppSettings`. **`CronAnalysis` (§5) is V1.1: M14 built the fields, the terms, the timezone context, the warnings and the explanation; M16 added the schedule engine** (`ScheduleModel`, `CronOccurrence`, `CronSchedulePreview` — §5.1.1) as a *separate* type rather than fields on `CronAnalysis`. The `SHARE_URL_VERSION` in §8 applies only if share URLs ship in V1.1+.
 
 ## 1. Purpose and rules
 
@@ -105,9 +105,10 @@ Defined once, in `domain/shared/limits.ts`, imported by editor, application, and
 const LIMITS = {
   regex:      { pattern: 10_000,    testSubject: 1_000_000, execMs: 2_000, maxMatches: 10_000 },
   json:       { input: 5_000_000,   maxDepth: 500,          maxNodes: 500_000 },
-  // As built at M14. `previewCount` and `searchYears` arrive with the executor
-  // in M16; there is nothing to preview or search until then.
-  cron:       { input: 1_000,       fields: 5,              maxTokens: 2_000, maxTermsPerField: 200 },
+  // As built at M16. `maxOccurrences` is the planned `previewCount`, renamed
+  // for what it counts; `maxSearchSteps` is a tripwire under the horizon.
+  cron:       { input: 1_000,       fields: 5,              maxTokens: 2_000, maxTermsPerField: 200,
+                searchYears: 5,     maxSearchSteps: 100_000, maxOccurrences: 10 },
   share:      { encoded: 8_192 },                                                                  // V1.1+ only
   importFile: { bytes: 20_000_000,  entries: 10_000 },
   history:    { maxEntries: 500,    maxInputChars: 100_000, softQuotaBytes: 50_000_000 },
@@ -380,11 +381,11 @@ interface CronAnalysis {
   readonly timezone: CronTimezoneContext;
   readonly errors: readonly DomainError[];  // per-field errors, collected
   readonly macro?: string;                  // the macro written, if any
-  // no `schedule`, and no `nextRuns` — M16
+  // still no `schedule` and no `nextRuns` — M16 kept them out, see below
 }
 ```
 
-**No `schedule`, no `nextRuns`.** M14 was scoped to the representation those need. Adding an empty array or a null would have been worse than omitting the field: a consumer would have to distinguish "no runs" from "not computed", and only one of those is a fact about the schedule.
+**Still no `schedule`, no `nextRuns` — and that is the M16 decision, not an omission.** M14 left them out because there was nothing to put in them. M16 built the engine and *kept them out*, because the two answers age differently: what `0 9 * * 1` means is true for as long as it is on screen, while when it next runs stops being true the moment it happens. Fusing them would mean re-deriving an explanation to refresh a countdown, and would put a value with a shelf life inside a structure the UI caches. The schedule is its own type, produced by its own worker operation, from the same validated analysis — see §5.1.1.
 
 **`tokens` was added.** The target interface had no token list. Source linking needs one, and it needs to be gapless — see `04_PARSER_ARCHITECTURE.md` §4.8.
 
@@ -433,28 +434,57 @@ interface CronTimezoneContext {
   readonly observesDst: boolean;         // probed, not assumed
 }
 
-// M16. Not declared at M14 — see 5.0.
-interface NextRun {
-  readonly instant: string;              // ISO 8601 with offset — never a bare Date
-  readonly localDisplay: string;
-  readonly zoneDisplay: string;
-  readonly dstAnomaly?: 'SKIPPED' | 'REPEATED' | 'OFFSET_CHANGE';
-}
 ```
 
 **Invariant C-I1:** no execution time is ever displayed without an accompanying timezone label. A cron time without a zone is worse than no answer — it is a confidently wrong answer, and this is the single most common way cron tools mislead people.
 
-`instant` is an ISO string, not a `Date`, because `Date` loses zone identity and because the value crosses a worker boundary where only wall-clock-plus-offset is unambiguous.
+### 5.1.1 The schedule engine — *built at M16*
+
+`src/domain/cron/schedule.ts`. Three types, in the order the data moves.
+
+```ts
+// What the engine runs on. Built from a validated CronAnalysis, never from text.
+interface ScheduleModel {
+  readonly dialect: 'standard5';
+  readonly minutes: readonly number[];
+  readonly hours: readonly number[];
+  readonly daysOfMonth: readonly number[];
+  readonly months: readonly number[];
+  readonly daysOfWeek: readonly number[];   // 0–6; 7 already folded to 0
+  readonly dayOfMonthRestricted: boolean;   // selects less than the whole range
+  readonly dayOfWeekRestricted: boolean;
+}
+
+// One run. The reading and the instant are separate, deliberately.
+interface CronOccurrence {
+  readonly wall: WallClock;                 // year, month, day, hour, minute
+  readonly epochMs: number | null;          // null only when anomaly === 'skipped'
+  readonly offsetMinutes: number | null;    // minutes ahead of UTC; +330 is +05:30
+  readonly anomaly?: 'skipped' | 'repeated';
+  readonly repeatedInstants?: readonly { epochMs: number; offsetMinutes: number }[];
+}
+
+// What crosses the worker boundary. Discriminated, because "none in five years",
+// "none ever" and "none yet" are three different answers.
+type CronSchedulePreview =
+  | { status: 'occurrences';    mode; computedAt; occurrences: readonly CronOccurrence[] }
+  | { status: 'noOccurrence';   mode; computedAt; horizonYears: number }
+  | { status: 'notSchedulable'; mode; computedAt; reason: ScheduleRejection };
+```
+
+**Deviation from the planned `NextRun`.** The Phase-1 sketch was a single flat record with an ISO `instant` string and a `dstAnomaly` tag. What shipped separates the **wall-clock reading** from the **instant it names**, and that separation is the whole feature: a skipped reading has *no* instant (`epochMs: null`), and a repeated one has *two*. A single ISO string cannot express either without lying — it would have to invent a time for the skipped case and silently pick one for the repeated case, which is precisely the confidently-wrong output C-I1 exists to prevent. `OFFSET_CHANGE` was dropped: a run whose offset differs from the previous run's is not an anomaly, it is a correctly-scheduled run in a zone that changed, and flagging it would train people to ignore the two flags that matter.
+
+Epoch milliseconds rather than an ISO string, because the value is arithmetic — sorted, differenced, compared — and the offset travels beside it as a number, so nothing about the reading is left implicit. The UI formats from `wall`, never from the instant: handing a UTC-mode reading to `toLocaleString` would convert it into the reader's own zone, which is the opposite of what the mode is for.
 
 ### 5.2 Cron invariants
 
-| # | Invariant | Status at M14 |
+| # | Invariant | Status at M16 |
 |---|---|---|
 | C-I2 | Every field value is within its dialect's legal range; `60` in minutes is an error. | **Held.** Enforced in the parser and again in the worker-result validator, which checks each resolved value against that field's own spec. |
 | C-I3 | `dayOfWeek` accepts both `0` and `7` for Sunday, and the explanation states which convention was applied. | **Held.** `0,7` collapses to one Sunday; the explanation says so whenever `7` appears. |
-| C-I4 | **The DOM/DOW OR-rule is implemented per Vixie cron:** when both `dayOfMonth` and `dayOfWeek` are restricted (neither is `*`), a day matches if *either* matches. A warning is always emitted, because approximately everyone reads it as AND. | **Held** for the warning and the explanation. The matching itself has no executor to run in until M16. |
-| C-I5 | Next-run search is bounded by `LIMITS.cron.searchYears`; an impossible schedule (`0 0 30 2 *` — 30 February) terminates and reports "this schedule will never run" instead of spinning. | **M16.** There is no search yet. `0 0 30 2 *` parses without error at M14, which is correct: it is valid syntax that never fires, and saying so needs the executor. |
-| C-I6 | DST transitions are detected and labelled, never silently skipped or duplicated. | **Partly.** The mode-level caveat is emitted; per-schedule anomalies are M16. |
+| C-I4 | **The DOM/DOW OR-rule is implemented per Vixie cron:** when both `dayOfMonth` and `dayOfWeek` are restricted (neither is `*`), a day matches if *either* matches. A warning is always emitted, because approximately everyone reads it as AND. | **Held in full at M16.** The warning and explanation are M14; `dayMatches` now implements the rule, tested in all four restriction combinations and against an independently written reference. "Restricted" means *selects less than the whole range*, so `1-31` restricts nothing. |
+| C-I5 | Next-run search is bounded by `LIMITS.cron.searchYears`; an impossible schedule (`0 0 30 2 *` — 30 February) terminates and reports "this schedule will never run" instead of spinning. | **Held at M16.** Bounded twice: the 5-year horizon, and a 100 000-step tripwire beneath it. `0 0 30 2 *` answers in 158 steps and 0.09 ms. |
+| C-I6 | DST transitions are detected and labelled, never silently skipped or duplicated. | **Held at M16.** Per reading, by offset probing: zero surviving candidates is `skipped` (no instant invented), two is `repeated` (both instants carried). Tested against real zone rules in four zones. |
 | C-I7 | Field count determines dialect; ambiguous counts prompt the user rather than guessing. | **Held.** 6 and 7 fields are refused with the scheduler names; three separate 6-field expressions are pinned as never reinterpreted. |
 
 ### 5.3 Documented dialect support

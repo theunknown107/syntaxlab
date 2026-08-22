@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LIMITS } from '@/domain/shared/limits';
 import { err, ok } from '@/domain/shared/result';
 import { workerError } from '@/infrastructure/workers/protocol';
 
@@ -51,6 +52,37 @@ function analysisFor(source: string, mode: 'browserLocal' | 'utc' = 'browserLoca
   });
 }
 
+/** A minimal successful schedule preview, shaped like the worker's real reply. */
+function previewFor(mode: 'browserLocal' | 'utc' = 'browserLocal') {
+  return ok({
+    status: 'occurrences',
+    mode,
+    computedAt: Date.parse('2026-03-10T12:00:00Z'),
+    occurrences: [
+      {
+        wall: { year: 2026, month: 3, day: 10, hour: 12, minute: 15 },
+        epochMs: Date.parse('2026-03-10T12:15:00Z'),
+        offsetMinutes: 0,
+      },
+    ],
+  });
+}
+
+/**
+ * The worker, answering each operation with its own kind of reply.
+ *
+ * One Analyze now produces two requests — the explanation and the times — so a
+ * mock that answered both with an analysis would let a wiring mistake pass.
+ */
+function respondByOp(analysis = analysisFor('')) {
+  return (op: string) => Promise.resolve(op === 'analysis.cronSchedule' ? previewFor() : analysis);
+}
+
+/** The calls for one operation, so counting one is not confused by the other. */
+function callsFor(op: string): unknown[][] {
+  return analysisRequest.mock.calls.filter((call) => call[0] === op);
+}
+
 const submission = () => {
   const state = workspaceStore.getState();
   return submissionOf(state.cronInput, state.cronCommitted);
@@ -61,7 +93,7 @@ describe('cron workspace use-cases', () => {
     vi.useFakeTimers();
     workspaceStore.reset();
     analysisRequest.mockReset();
-    analysisRequest.mockResolvedValue(analysisFor(''));
+    analysisRequest.mockImplementation(respondByOp());
   });
 
   afterEach(() => {
@@ -79,16 +111,74 @@ describe('cron workspace use-cases', () => {
       expect(workspaceStore.getState().cronStatus).toBe('idle');
     });
 
-    it('sends exactly one request per Analyze', async () => {
+    it('sends exactly one analysis per Analyze', async () => {
       setCronInput('*/15 9-17 * * 1-5');
       analyzeCronNow();
       await vi.advanceTimersByTimeAsync(100);
 
-      expect(analysisRequest).toHaveBeenCalledTimes(1);
+      expect(callsFor('analysis.cron')).toHaveLength(1);
       const [op, payload, options] = analysisRequest.mock.calls[0] ?? [];
       expect(op).toBe('analysis.cron');
       expect(payload).toEqual({ source: '*/15 9-17 * * 1-5', timezoneMode: 'browserLocal' });
       expect(typeof options?.supersedeKey).toBe('string');
+    });
+
+    it('asks for the times once the expression has been explained — M16', async () => {
+      setCronInput('*/15 9-17 * * 1-5');
+      analyzeCronNow();
+      await vi.advanceTimersByTimeAsync(100);
+
+      const scheduleCalls = callsFor('analysis.cronSchedule');
+      expect(scheduleCalls).toHaveLength(1);
+
+      const [, payload] = scheduleCalls[0] ?? [];
+      expect(payload).toMatchObject({
+        source: '*/15 9-17 * * 1-5',
+        timezoneMode: 'browserLocal',
+        count: LIMITS.cron.maxOccurrences,
+      });
+      // The clock is read on this thread and travels with the request, so the
+      // answer is about the "now" the user is looking at.
+      expect(typeof (payload as { after: unknown }).after).toBe('number');
+      // Its own supersede key: a newer set of times must not cancel the
+      // explanation request, nor be cancelled by it.
+      const keyOf = (call: unknown[] | undefined) =>
+        (call?.[2] as { supersedeKey?: string } | undefined)?.supersedeKey;
+      expect(keyOf(scheduleCalls[0])).not.toBe(keyOf(analysisRequest.mock.calls[0]));
+      expect(workspaceStore.getState().cronScheduleStatus).toBe('ready');
+      expect(workspaceStore.getState().cronSchedule).not.toBeNull();
+    });
+
+    it('does not ask for times when the expression could not be analysed', async () => {
+      // Nothing to schedule, and asking anyway would be a second refusal for
+      // the same mistake.
+      analysisRequest.mockResolvedValue(
+        err(workerError('DOMAIN', 'Six fields belong to another scheduler.')),
+      );
+      setCronInput('0 0 12 * * ?');
+      analyzeCronNow();
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(callsFor('analysis.cronSchedule')).toHaveLength(0);
+      expect(workspaceStore.getState().cronSchedule).toBeNull();
+    });
+
+    it('drops the previous times the moment a new expression is submitted', async () => {
+      setCronInput('0 0 * * *');
+      analyzeCronNow();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(workspaceStore.getState().cronSchedule).not.toBeNull();
+
+      // Times held over from the previous expression would be the worst kind
+      // of wrong: plausible, and about something else.
+      // A request that never answers, so what is observed is the state the
+      // submission itself leaves behind.
+      analysisRequest.mockImplementation(() => new Promise(() => undefined));
+      setCronInput('0 0 1 * *');
+      analyzeCronNow();
+
+      expect(workspaceStore.getState().cronSchedule).toBeNull();
+      expect(workspaceStore.getState().cronScheduleStatus).toBe('idle');
     });
 
     it('trims the expression it submits but keeps what the user typed', async () => {
@@ -233,15 +323,18 @@ describe('cron workspace use-cases', () => {
       setCronInput('0 3 * * *');
       analyzeCronNow();
       await vi.advanceTimersByTimeAsync(100);
-      expect(analysisRequest.mock.calls[0]?.[1]).toMatchObject({ timezoneMode: 'browserLocal' });
+      expect(callsFor('analysis.cron')[0]?.[1]).toMatchObject({ timezoneMode: 'browserLocal' });
 
       setCronTimezoneMode('utc');
       await vi.advanceTimersByTimeAsync(100);
-      expect(analysisRequest.mock.calls[1]?.[1]).toMatchObject({ timezoneMode: 'utc' });
+      expect(callsFor('analysis.cron')[1]?.[1]).toMatchObject({ timezoneMode: 'utc' });
+      // The times are recomputed in the new mode too — the same instant read
+      // in a different zone is a different wall clock, which is the point.
+      expect(callsFor('analysis.cronSchedule')[1]?.[1]).toMatchObject({ timezoneMode: 'utc' });
     });
 
     it('re-analyses on a timezone change without making the result stale', async () => {
-      analysisRequest.mockResolvedValue(analysisFor('0 3 * * *'));
+      analysisRequest.mockImplementation(respondByOp(analysisFor('0 3 * * *')));
       setCronInput('0 3 * * *');
       analyzeCronNow();
       await vi.advanceTimersByTimeAsync(100);
@@ -252,7 +345,7 @@ describe('cron workspace use-cases', () => {
       // The timezone is a question about the expression already on screen, not
       // an edit to it, so the committed input has not moved.
       expect(submission().stale).toBe(false);
-      expect(analysisRequest).toHaveBeenCalledTimes(2);
+      expect(callsFor('analysis.cron')).toHaveLength(2);
     });
 
     it('does not analyse a timezone change before anything was submitted', async () => {
@@ -276,12 +369,12 @@ describe('cron workspace use-cases', () => {
 
   describe('commands', () => {
     it('loads an example and explains it, because choosing one is the request', async () => {
-      analysisRequest.mockResolvedValue(analysisFor('@weekly'));
+      analysisRequest.mockImplementation(respondByOp(analysisFor('@weekly')));
       loadCronExample('@weekly');
       await vi.advanceTimersByTimeAsync(100);
 
       expect(workspaceStore.getState().cronInput).toBe('@weekly');
-      expect(analysisRequest).toHaveBeenCalledTimes(1);
+      expect(callsFor('analysis.cron')).toHaveLength(1);
     });
 
     it('clears the editor and everything derived from it', async () => {

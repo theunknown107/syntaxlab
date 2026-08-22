@@ -30,7 +30,7 @@
 | `idb` | ~~Required~~ **Not adopted** | IndexedDB promise wrapper | M7 — see §2.3 |
 | `vite-plugin-pwa` | **Required** | Service worker generation | M9 |
 | `@codemirror/search` | **Optional** | Editor find UI. We already build a CST we can search. **Adopt only if the hand-rolled path proves worse**, and it is the first thing dropped if the bundle is over target. | M6 |
-| `@js-temporal/polyfill` | **Deferred** | Only if V1.1 named-timezone support is approved (Q-09). V1.1 as specified needs `Intl` only. | — |
+| `@js-temporal/polyfill` | **Deferred** | Only if V1.1 named-timezone support is approved (Q-09). V1.1 as specified needs `Intl` and `Date` only — confirmed at M16, which built the schedule engine without it. | — |
 | `zod` | **Avoid unless justified** | Hand-written validators cover ~6 shapes. Revisit if the count roughly doubles or a validation bug reaches production (Q-13). | — |
 
 **Total required runtime dependencies for V1.0: 3 packages** (React pair, CodeMirror set, `vite-plugin-pwa`). `idb` was planned and, at M7, **not adopted** — §2.3 records the reversal and its reasoning.
@@ -289,7 +289,7 @@ This section is the most important one in the document. Each row is a decision t
 | A UI kit (MUI/Chakra/Radix) | ~15 hand-built primitives on native elements | 50–300 KB |
 | An icon library (lucide/heroicons) | ~20 inline SVGs | 5–50 KB |
 | An animation library (framer-motion) | CSS transitions | ~35 KB |
-| A date library (date-fns/dayjs/luxon) | `Intl.DateTimeFormat`; V1.1 needs only browser-local and UTC | 7–70 KB |
+| A date library (date-fns/dayjs/luxon) | `Intl.DateTimeFormat` and `Date`. **Held at M16, the milestone that computes times** — the schedule engine does wall-clock arithmetic on plain integers and detects DST by probing `getTimezoneOffset` either side of a reading, which never assumes the size of a shift and is therefore exact for half-hour and 45-minute zones and for Lord Howe's 30-minute step | 7–70 KB |
 | A cron library (cron-parser/cronstrue) | **Not installed, and M14 shipped without it.** A custom parser was needed anyway for field-by-field explanation with source positions, and we support one dialect where libraries support many — a library that accepts 6-field Quartz input would undo the scope lock rather than help with it. `13_TEST_PLAN.md` §3.3.1 explains why one is not used as a test oracle either. | ~15 KB avoided |
 | A regex parser (regexpp/regjsparser) | Custom parser — needed for positions + explanation-shaped AST | ~30 KB |
 | A JSON parser (jsonc-parser) | Custom CST parser — needed for positions, duplicates, and raw number text | ~12 KB |

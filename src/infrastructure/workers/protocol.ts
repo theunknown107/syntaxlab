@@ -10,7 +10,8 @@ import { isValidRegexAnalysis, isValidRegexExecResult } from '@/domain/regex/val
 import type { JsonAnalysis } from '@/domain/json/ast';
 import { isValidJsonAnalysis } from '@/domain/json/validate';
 import type { CronAnalysis } from '@/domain/cron/ast';
-import { isValidCronAnalysis } from '@/domain/cron/validate';
+import type { CronSchedulePreview } from '@/domain/cron/schedule';
+import { isValidCronAnalysis, isValidSchedulePreview } from '@/domain/cron/validate';
 
 /**
  * Worker wire protocol — 15_API_AND_BROWSER_CAPABILITIES.md §2
@@ -43,6 +44,7 @@ export const ANALYSIS_OPS = [
   'analysis.regex',
   'analysis.json',
   'analysis.cron',
+  'analysis.cronSchedule',
 ] as const;
 export type AnalysisOp = (typeof ANALYSIS_OPS)[number];
 
@@ -111,6 +113,27 @@ export interface AnalysisCronPayload {
 }
 
 /**
+ * Next-run calculation — M16.
+ *
+ * A separate operation from `analysis.cron`, rather than more fields on its
+ * result, because the two answer different questions and go stale at different
+ * rates: the explanation of `0 9 * * 1` is true forever, while its next run is
+ * true until it happens. Asking again for a fresh countdown must not mean
+ * re-explaining the expression.
+ *
+ * `after` travels with the request for the same reason the timezone mode does:
+ * a worker reading its own clock is a worker whose answers cannot be tested.
+ */
+export interface AnalysisCronSchedulePayload {
+  readonly source: string;
+  readonly timezoneMode: 'browserLocal' | 'utc';
+  /** The instant to search from, as epoch milliseconds. */
+  readonly after: number;
+  /** How many occurrences to return. Clamped in the domain to the cap. */
+  readonly count: number;
+}
+
+/**
  * The only operation that runs foreign code. It lives on the disposable
  * worker so its deadline can be enforced by destroying the thread, which is
  * the only reliable stop for an uninterruptible regex.
@@ -138,6 +161,10 @@ export interface OpTypes {
   'analysis.regex': { payload: AnalysisRegexPayload; result: RegexAnalysis };
   'analysis.json': { payload: AnalysisJsonPayload; result: JsonAnalysis };
   'analysis.cron': { payload: AnalysisCronPayload; result: CronAnalysis };
+  'analysis.cronSchedule': {
+    payload: AnalysisCronSchedulePayload;
+    result: CronSchedulePreview;
+  };
   'exec.spin': { payload: ExecSpinPayload; result: ExecSpinResult };
   'exec.regex': { payload: ExecRegexPayload; result: RegexExecResult };
 }
@@ -276,6 +303,18 @@ const PAYLOAD_VALIDATORS: {
     typeof payload.source === 'string' &&
     (payload.timezoneMode === 'browserLocal' || payload.timezoneMode === 'utc'),
 
+  // `after` and `count` are numbers that drive a bounded search, so they are
+  // checked as numbers that *can* drive one: a NaN start instant would make
+  // every comparison in the search false.
+  'analysis.cronSchedule': (payload): payload is AnalysisCronSchedulePayload =>
+    isRecord(payload) &&
+    typeof payload.source === 'string' &&
+    (payload.timezoneMode === 'browserLocal' || payload.timezoneMode === 'utc') &&
+    typeof payload.after === 'number' &&
+    Number.isFinite(payload.after) &&
+    Number.isInteger(payload.count) &&
+    (payload.count as number) >= 1,
+
   'exec.regex': (payload): payload is ExecRegexPayload =>
     isRecord(payload) &&
     typeof payload.source === 'string' &&
@@ -305,6 +344,12 @@ const PAYLOAD_RECONSTRUCTORS: {
   'analysis.regex': (p) => ({ source: p.source, flags: p.flags }),
   'analysis.json': (p) => ({ source: p.source }),
   'analysis.cron': (p) => ({ source: p.source, timezoneMode: p.timezoneMode }),
+  'analysis.cronSchedule': (p) => ({
+    source: p.source,
+    timezoneMode: p.timezoneMode,
+    after: p.after,
+    count: p.count,
+  }),
   'exec.regex': (p) => ({ source: p.source, flags: p.flags, subject: p.subject }),
   'exec.spin': (p) => ({ durationMs: p.durationMs }),
 };
@@ -376,6 +421,9 @@ const RESULT_VALIDATORS: {
 
   'analysis.cron': (result): result is CronAnalysis => isValidCronAnalysis(result),
 
+  'analysis.cronSchedule': (result): result is CronSchedulePreview =>
+    isValidSchedulePreview(result),
+
   'exec.regex': (result): result is RegexExecResult => isValidRegexExecResult(result),
 };
 
@@ -414,6 +462,44 @@ function reconstructCapture(capture: MatchCapture): MatchCapture {
   return rebuilt;
 }
 
+function reconstructInstant(entry: { epochMs: number; offsetMinutes: number }): {
+  epochMs: number;
+  offsetMinutes: number;
+} {
+  return { epochMs: entry.epochMs, offsetMinutes: entry.offsetMinutes };
+}
+
+function reconstructPreview(preview: CronSchedulePreview): CronSchedulePreview {
+  const head = { mode: preview.mode, computedAt: preview.computedAt } as const;
+
+  switch (preview.status) {
+    case 'notSchedulable':
+      return { status: 'notSchedulable', ...head, reason: preview.reason };
+    case 'noOccurrence':
+      return { status: 'noOccurrence', ...head, horizonYears: preview.horizonYears };
+    case 'occurrences':
+      return {
+        status: 'occurrences',
+        ...head,
+        occurrences: preview.occurrences.map((occurrence) => ({
+          wall: {
+            year: occurrence.wall.year,
+            month: occurrence.wall.month,
+            day: occurrence.wall.day,
+            hour: occurrence.wall.hour,
+            minute: occurrence.wall.minute,
+          },
+          epochMs: occurrence.epochMs,
+          offsetMinutes: occurrence.offsetMinutes,
+          ...(occurrence.anomaly === undefined ? {} : { anomaly: occurrence.anomaly }),
+          ...(occurrence.repeatedInstants === undefined
+            ? {}
+            : { repeatedInstants: occurrence.repeatedInstants.map(reconstructInstant) }),
+        })),
+      };
+  }
+}
+
 /** Rebuilds a validated result field-by-field so no unknown key survives. */
 const RESULT_RECONSTRUCTORS: {
   [TOp in WorkerOp]: (result: ResultFor<TOp>) => ResultFor<TOp>;
@@ -436,6 +522,10 @@ const RESULT_RECONSTRUCTORS: {
   // checks it exhaustively rather than to a budget, and there is nothing left
   // for a reconstruction pass to add.
   'analysis.cron': (r) => r,
+  // Rebuilt in full, unlike the analyses above. It is at most ten occurrences,
+  // and every number in it is either formatted as a time or used to compute
+  // one, so nothing unexamined should reach that code.
+  'analysis.cronSchedule': (r) => reconstructPreview(r),
   'exec.regex': (r) => ({
     kind: 'regexExec',
     matches: r.matches.map(reconstructMatch),

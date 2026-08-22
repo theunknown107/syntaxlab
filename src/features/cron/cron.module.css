@@ -166,7 +166,7 @@
 .fieldRaw:hover,
 .fieldRaw:focus-visible {
   color: var(--color-text);
-  background-color: var(--color-surface-2);
+  background-color: var(--color-surface-raised);
 }
 
 .fieldResolved {
@@ -234,6 +234,133 @@
 
 .warningHint {
   color: var(--color-text-muted);
+}
+
+/* ---- Next runs (M16) ---- */
+
+.schedule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/*
+ * The next run is the answer to the question people came with, so it is the
+ * one thing here that is larger than body text. Everything after it is a list.
+ */
+.nextRun {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.nextRunLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nextRunTime {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  /* Long dates wrap rather than widening the panel past the splitter. */
+  word-break: break-word;
+}
+
+.nextRunZone {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.upcomingHeading {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.upcoming {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.upcomingItem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  align-items: baseline;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+
+.upcomingItem:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.upcomingTime {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+.upcomingZone {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+/*
+ * A daylight-saving note. The badge names the anomaly and the sentence
+ * explains it: the tint is never the only thing carrying the meaning
+ * (08_UI_UX_SPEC.md §12.1).
+ */
+.anomaly {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  width: 100%;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.anomaly span {
+  flex: 1 1 12rem;
+}
+
+.anomaly code {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+.scheduleFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.computedAt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .srOnly {

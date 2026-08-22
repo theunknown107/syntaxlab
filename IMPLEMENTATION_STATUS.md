@@ -2,8 +2,8 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M15 complete — cron **UI**, explicit analysis, URL-backed preferences. M16 (the cron schedule executor) is next and has not started.
-**Last updated:** 2026-08-21
+**Current milestone:** M16 complete — the cron **schedule engine**: next runs, the 5-year bound, and DST anomalies. M17 (the V1.1 release) is next and has not started.
+**Last updated:** 2026-08-22
 
 > Living document, updated at the end of every milestone. The architecture
 > package in [`docs/`](docs/) remains the source of truth; this file records
@@ -16,7 +16,7 @@
 | Release | Scope | Status |
 |---|---|---|
 | **V1.0** | Regex · JSON · history · theme · PWA · a11y · security · tests · perf | ✅ Built and deployed |
-| V1.1 | Cron — standard 5-field only | 🔨 **Domain and UI complete (M14, M15).** No schedule executor. |
+| V1.1 | Cron — standard 5-field only | 🔨 **Domain, UI and schedule engine complete (M14, M15, M16).** Awaiting the M17 release. |
 | V1.2+ | Share URLs, JSONC/JSON5, other flavours | Deferred, unscheduled |
 
 ---
@@ -42,7 +42,8 @@
 | — | Post-M12 brand mark; pre-M15 repository and deployment integrity | ✅ **Complete** |
 | M14 | Cron **domain** — V1.1 | ✅ **Complete.** Schedule executor deliberately deferred to M16. |
 | M15 | Cron UI · explicit analysis · URL preferences | ✅ **Complete** |
-| M16 | Cron schedule executor, next runs, DST anomalies | ⬜ **Next.** Not started. |
+| M16 | Cron schedule executor, next runs, DST anomalies | ✅ **Complete** |
+| M17 | V1.1 release | ⬜ **Next.** Not started. |
 
 ---
 
@@ -2652,3 +2653,354 @@ which still fails for anything except Analyze on an empty editor.
 - **A theme no longer follows the user across tabs**, and does not survive
   editing the URL away. Both are consequences of the move, both deliberate.
 - **No next-run times.** M16.
+
+---
+
+## M16 — objective and outcome
+
+**Objective.** Compute when a cron expression actually runs: the next
+occurrences, the anomalies daylight saving creates, and a bound that makes both
+answerable in finite time.
+
+**Outcome.** Met. One new domain module, one new worker operation, one new
+panel — and one real bug found by the tests that were written to look for it.
+
+### A. The schedule engine
+
+`src/domain/cron/schedule.ts`. It consumes a validated `CronAnalysis` and
+**never reads cron text**. The parser stays the sole authority on syntax,
+because a second reader of cron syntax is a second set of rules to disagree
+with the first — and the disagreement would surface as a *time*, which is the
+one output a user cannot check by eye.
+
+```mermaid
+flowchart LR
+    A["cron text"] --> B["parser"]
+    B --> C["CronAnalysis"]
+    C --> D["buildSchedule"]
+    D --> E["ScheduleModel"]
+    E --> F["nextOccurrences"]
+    F --> G["CronOccurrence[]"]
+    A -.->|"never"| D
+    A -.->|"never"| F
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class C,E safe
+```
+
+**Wall clock first, instant second.** Cron fields describe wall-clock readings,
+not elapsed time: "every day at 01:30" means the clock reads 01:30, whatever
+the offset did overnight. The search runs entirely on wall-clock arithmetic and
+converts to an instant only after a reading matches. That order is what makes
+the DST work expressible at all — "this reading has no instant" and "this
+reading has two" cannot be said in the other order.
+
+**Bounded twice.** A five-year calendar horizon is the semantic bound; a
+100 000-step tripwire sits underneath it, because the horizon only terminates
+if the advance actually advances. A bug that failed to move the cursor would
+otherwise spin inside the horizon forever.
+
+| | |
+|---|---|
+| Horizon | 5 years — four for the leap cycle, one for slack on the 100/400 rules |
+| Tripwire | 100 000 steps. **Worst measured: 326 — 307× under it** |
+| Cap | 10 occurrences. A preview, not a scheduler simulation |
+| Worst p99 | **0.207 ms**, 77× inside a frame |
+
+The search returns its own step count so the margin is *measured* rather than
+asserted. A bound nobody measures is a bound nobody knows the margin on.
+
+### B. Daylight saving, detected rather than assumed
+
+The documented policy (`04_PARSER_ARCHITECTURE.md` §4.6) was followed, not
+chosen: report both anomalies, and **never pick a behaviour on the user's
+behalf**, because schedulers genuinely differ.
+
+```mermaid
+flowchart TD
+    A["matched wall clock"] --> B["probe offset 24h before"]
+    A --> C["probe offset 24h after"]
+    B --> D["candidate instants"]
+    C --> D
+    D --> E{"which read back as<br/>the requested clock?"}
+    E -->|"none"| F["skipped<br/>epochMs: null — no time invented"]
+    E -->|"one"| G["unique"]
+    E -->|"two"| H["repeated<br/>both instants + offsets kept"]
+
+    classDef warn fill:#2a2414,stroke:#bfa05f,color:#f5ecd4
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class F,H warn
+    class G safe
+```
+
+**A real bug, found by the corpus and not by review.** The first implementation
+probed *forward* — the offset at the guess, then the offset at the instant that
+guess corrected to. That walk never steps back over a transition it has already
+passed: for London's 01:30 on 25 October, both probes land after the change,
+agree on GMT, and report a single instant while the earlier BST one goes
+unmentioned. Probing a day either side straddles the transition instead. The
+DST corpus was written from the documented policy before the fix, and it failed
+— which is the only reason the bug is not in this release.
+
+**No date library, and no timezone database.** Probing `getTimezoneOffset`
+never assumes the *size* of a shift, so it is exact for whole-minute schedules
+in every real zone — including half-hour and 45-minute offsets and Lord Howe's
+30-minute saving step. A zone database would have cost tens of kilobytes of a
+200 KB budget to answer a question `Date` already answers correctly.
+
+**`observesDst` is not used for detection.** It answers a coarser question —
+does this zone transition *at all this year* — and cannot say whether a
+particular February morning is affected. Detection is per reading, always.
+
+### C. The worker operation
+
+`analysis.cronSchedule`, the fourth operation on the long-lived analysis
+worker. **Separate from `analysis.cron`, not fields added to it.**
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as cronWorkspace
+    participant W as Analysis worker
+    participant D as domain/cron
+
+    U->>A: Analyze
+    A->>W: analysis.cron { source, timezoneMode }
+    W->>D: analyzeCron
+    D-->>W: CronAnalysis
+    W-->>A: validated analysis
+    Note over A: explanation on screen
+    A->>W: analysis.cronSchedule { source, timezoneMode, after, count }
+    W->>D: analyzeCron + previewSchedule
+    D-->>W: CronSchedulePreview
+    W-->>A: validated, rebuilt preview
+    Note over A: times on screen
+```
+
+The two answers age differently — what `0 9 * * 1` *means* stays true; when it
+next runs stops being true the moment it happens. Keeping them apart lets the
+times be recomputed without re-deriving an explanation, and gives the panel its
+own loading and failure states.
+
+**`after` travels with the request.** A worker that reads its own clock is a
+worker whose answers cannot be tested.
+
+**The worker re-parses rather than accepting an analysis.** Sending a parse
+tree *into* the worker would mean trusting caller-supplied structure to drive a
+search. Sending text costs one extra parse — microseconds — and keeps the
+parser the only thing in the system that reads cron syntax.
+
+### D. The boundary
+
+```mermaid
+flowchart TD
+    A["payload from the main thread"] --> B{"after finite?<br/>count a positive integer?<br/>mode one of two?"}
+    B -->|no| C["discarded — no reply"]
+    B -->|yes| D["rebuilt field by field"]
+    D --> E["search"]
+    E --> F["CronSchedulePreview"]
+    F --> G{"isValidSchedulePreview"}
+    G -->|no| H["PROTOCOL error.<br/>Nothing reaches the UI."]
+    G -->|yes| I["rebuilt in full — at most 10 occurrences"]
+    I --> J["application state"]
+
+    classDef refuse fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class C,H refuse
+    class J safe
+```
+
+Unlike the analysis trees, this result is **rebuilt in full**: it is at most ten
+occurrences, and every number in it is either formatted as a time or used to
+compute one. The forgeries the validator refuses are the ones that would
+produce a plausible screen:
+
+| Forgery | Why it is refused |
+|---|---|
+| `epochMs: null` without `anomaly: 'skipped'` | A blank where a date belongs, on a run that happens |
+| `anomaly: 'repeated'` with one instant | The ambiguity reported as if it had been resolved |
+| An 11th occurrence | The UI is built around the cap |
+| An empty occurrence list | That is what `noOccurrence` is for |
+| `horizonYears: 500` | Not a horizon this build uses, so not from this build |
+| An offset of 5 000 minutes | No place on earth |
+| A wall clock with month 13 | Would render as a date that does not exist |
+
+### E. Three answers, not one flag
+
+```mermaid
+flowchart TD
+    A["previewSchedule"] --> B{"buildSchedule"}
+    B -->|"@reboot"| C["notSchedulable<br/><i>no clock time at all</i>"]
+    B -->|"field error"| C
+    B -->|"ok"| D{"search"}
+    D -->|"found"| E["occurrences<br/><i>1–10 runs</i>"]
+    D -->|"nothing in 5 years"| F["noOccurrence<br/><i>0 0 30 2 *</i>"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    classDef warn fill:#2a2414,stroke:#bfa05f,color:#f5ecd4
+    class E safe
+    class C,F warn
+```
+
+"No run in five years", "no clock time ever" and "none computed yet" are three
+different answers. A caller reading `occurrences.length === 0` for all three
+will eventually render the wrong one, so the type does not let it.
+
+### F. The day rule, now actually matching
+
+M14 shipped the OR-rule as a *warning*. M16 had to implement it.
+
+```mermaid
+flowchart TD
+    A["day-of-month restricted?"] --> C{"both?"}
+    B["day-of-week restricted?"] --> C
+    C -->|"both"| D["match if EITHER matches"]
+    C -->|"only one"| E["that one decides"]
+    C -->|"neither"| F["every day"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class D safe
+```
+
+**"Restricted" means selects less than the whole range**, not "is not `*`". So
+`0 0 1-31 * 1` is "every Monday", not "every day or Monday" — a difference of
+about thirty phantom runs a month. There is a test for exactly that expression.
+
+### G. The panel
+
+```mermaid
+flowchart TD
+    A["Next runs panel"] --> B{"analysed?"}
+    B -->|no| C["Analyze an expression…"]
+    B -->|yes| D{"status"}
+    D -->|analyzing| E["Calculating…"]
+    D -->|error| F["the failure, as an answer"]
+    D -->|ready| G{"preview status"}
+    G -->|notSchedulable| H["why there is no time"]
+    G -->|noOccurrence| I["no run in 5 years"]
+    G -->|occurrences| J["Next run, then up to 9 more"]
+    J --> K{"anomaly?"}
+    K -->|skipped| L["badge + no time shown"]
+    K -->|repeated| M["badge + both offsets"]
+    K -->|none| N["time + zone label"]
+```
+
+**Times are rendered from the wall clock the domain matched, never from
+`toLocaleString` on the instant.** The two disagree exactly when it matters: in
+UTC mode the browser would helpfully convert every time back into the reader's
+own zone, which is the opposite of what the mode is for. One unit test exists
+solely to fail if someone reaches for the convenient formatter.
+
+**No relative time, which is a deliberate deviation from the V1.1 sketch.**
+"in 4 hours" is wrong a minute after it is painted; keeping it honest needs
+either a timer — work the user did not ask for, which is the principle the
+explicit Analyze button establishes — or a caveat nobody reads. Absolute time
+plus "Calculated at 14:32" and a Recalculate control is honest at every moment.
+
+### H. Tests
+
+```mermaid
+flowchart TD
+    A["golden corpus<br/><i>48 cases, hand-reasoned</i>"] --> E["schedule engine"]
+    B["DST corpus<br/><i>16 cases, real zone rules</i>"] --> E
+    C["minute-by-minute scan<br/><i>the definition, not an implementation</i>"] --> D["differential<br/>300 generated schedules"]
+    D --> E
+    F["boundary corpus<br/><i>24 forgeries</i>"] --> G["worker protocol"]
+    H["panel tests + E2E<br/><i>4 browser projects</i>"] --> I["UI"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class E,G,I safe
+```
+
+| Suite | Cases |
+|---|---|
+| `cron/schedule.test.ts` — the golden corpus | 48 |
+| `cron/dst.test.ts` — real zone rules via `process.env.TZ` | 16 |
+| `cron/scheduleProperty.test.ts` — differential, ordering, bounds | 9 |
+| `protocol.test.ts` — `analysis.cronSchedule` | 24 |
+| `cron/cronUi.test.tsx` — the panel | 12 |
+| `cron/cronWorkspace.test.ts` — two requests, cleared times | 4 |
+| `e2e/cron.spec.ts` — including DST with a pinned clock and zone | 9 × 4 projects |
+| **New at M16** | **~149** |
+
+**Every expected time was worked out by hand from the calendar.** A test whose
+expectation came from the implementation proves the implementation has not
+changed, not that it is right — so each row of the corpus carries its reasoning
+("2026-03-10 is a Tuesday, so the next Monday is the 16th").
+
+**The property suite has a real oracle.** Cron has no external reference
+implementation to differ against, but it has an internal one: a minute-by-minute
+scan that asks "does this instant match?" *is* the definition of a cron
+schedule. Too slow to ship, exactly right to test against. The scan stops at the
+engine's answer, so reaching it without a match also proves no run was skipped
+on the way, and its copy of the day rule is written out separately — if both
+copies read the OR rule from the same helper, agreeing would prove nothing.
+
+### The E2E suite was not green before this milestone
+
+Running the **whole** suite — rather than the cron projects — surfaced 50
+failures. A baseline run with M16 stashed showed **25 of them already failing at
+`ea4f83a`**, so they were M15 debt rather than M16 regressions, and the other 25
+were almost entirely one Firefox teardown crash multiplied across a project.
+
+**The cause was the same in every case: M15 made analysis explicit, and eight
+specs were never migrated.** They fill an editor and wait for a result that,
+since M15, only arrives when Analyze is pressed.
+
+Underneath that sat a second defect, which is the more interesting one. The
+button signals unavailability with **`aria-disabled`, not `disabled`** —
+deliberate, so focus survives the press that made it unavailable. Playwright's
+`isEnabled()` and its actionability checks both read the `disabled` attribute,
+so they see a perfectly clickable element: the click lands, the handler refuses
+it, **nothing happens and no error is raised**, and the test times out somewhere
+else entirely. Under parallel load the render lags the keystrokes often enough
+that most runs failed. The guard the specs used — `if (await
+button.isEnabled())` — could never have worked.
+
+`tests/e2e/analyze.ts` now waits for the control to actually become available
+and then presses it; eight specs use it.
+
+| | Passed | Failed |
+|---|---|---|
+| Baseline at `ea4f83a`, M16 stashed | 774 | **25** |
+| M16, before this fix | 781 | **50** (25 of them a Firefox teardown crash) |
+| M16, after | **828** | **3** |
+
+The remaining three are **Firefox only, and a different three each run** — the
+regex-execution and JSON worker paths timing out under parallel load. The
+baseline showed the same family (`regex-firefox`, "times out a catastrophic
+pattern"). They predate M16, they are not deterministic, and they are left for a
+milestone that can give browser flakiness the attention it needs rather than
+being patched here under cover of a cron release.
+
+### Two more fixes that were not M16 work
+
+| | |
+|---|---|
+| `--color-surface-2` | Referenced by `.fieldRaw:hover` since M15 and **never defined**, so that hover background had silently been doing nothing. Now `--color-surface-raised` |
+| `measure-cron.ts` | Gained p95 and the schedule-search section, so the new bound is measured rather than asserted |
+
+### Verification
+
+| Check | Command | Result |
+|---|---|---|
+| Types | `npm run typecheck` | ✅ clean, both projects |
+| Lint | `npm run lint` | ✅ 0 errors, 0 warnings |
+| Unit | `npx vitest run` | ✅ **2 576 passed**, 47 files |
+| Cron E2E | 4 projects | ✅ **104 passed**, sampled four times |
+| Full E2E | `npx playwright test` | ⚠️ **828 passed, 3 failed** — Firefox-only flakes that predate M16 (see above). Baseline before M16: 774 / **25** |
+| Search cost | `npm run measure:cron` | ✅ worst p99 **0.207 ms**; worst 326 steps of 100 000 |
+| Bundle | `npm run size` | ⚠️ **174.69 KB** initial JS — over the 170 KB target, inside the 200 KB hard limit |
+
+### Known limitations at M16
+
+- **Bundle still over target.** 174.69 KB against 170 KB, up 2.43 KB from
+  M15's 172.26 KB — the whole schedule engine, its validator, the protocol
+  additions and the panel. Inside the 200 KB hard limit. Code-splitting cron
+  has now been measured as *worse* twice and was not attempted a third time.
+- **No named timezones.** Unchanged, and unchanged deliberately (Q-09).
+- **No cron history.** `HistoryEntry` still has no cron type.
+- **No relative times, and nothing refreshes on a timer.** §G.
+- **The preview is a preview.** Ten occurrences, five years. It is not a
+  scheduler simulation and does not claim to replicate any scheduler's DST
+  policy — it reports what the clock does and says that schedulers differ.

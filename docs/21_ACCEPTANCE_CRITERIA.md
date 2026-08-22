@@ -264,15 +264,15 @@
 
 > None of these criteria gates the V1.0 release. They gate V1.1.
 
-> **M14 status.** The criteria below are marked with what M14 verified. **Twelve are met, six are M15 (UI), five are M16 (the schedule executor), and one is added.** A criterion about a displayed time cannot be met by a milestone that displays nothing, and is marked M15/M16 rather than quietly reinterpreted as met.
+> **M16 status.** The criteria below are marked with what has been verified. M14 met twelve, M15 met the UI ones, and **M16 meets the five that needed the schedule executor** — C-3, C-5, C-13, C-14, C-15 and C-16. A criterion about a displayed time could not be met by a milestone that displayed nothing, and was marked rather than quietly reinterpreted as met.
 
 | # | Criterion | Verification | M14 |
 |---|---|---|---|
 | C-1 | A valid 5-field expression produces a correct plain-English summary | Golden corpus | ✅ 27 valid expressions, each read by hand |
 | C-2 | The field table shows raw value, resolved values, and meaning per field | Unit | ✅ the data; **M15** for the table |
-| C-3 | The next 10 execution times are correct in the selected mode | Unit | **M16** |
+| C-3 | The next 10 execution times are correct in the selected mode | Unit | ✅ **M16.** 48 golden cases reasoned from the calendar, plus differential agreement with a minute-by-minute scan across 300 generated schedules |
 | C-4 | **Every displayed time carries a timezone label** (invariant C-I1) | E4 + code review | ✅ at the level M14 can hold it: every analysis carries a `cron-timezone` section. **M15** for display. |
-| C-5 | Switching between browser-local and UTC recomputes all times | I9 | **M16** |
+| C-5 | Switching between browser-local and UTC recomputes all times | I9 | ✅ **M16.** The toggle re-runs both the analysis and the schedule; asserted in the workspace suite and end to end |
 | C-6 | **The active timezone is always visible, and browser-local shows the resolved zone name** | Manual | ✅ the zone name is resolved and carried; **M15** for visibility |
 | C-7 | **A 6-field expression is refused with the educational message and is never parsed** | Unit + E4 | ✅ |
 | C-8 | **A 7-field expression is refused with the educational message** | Unit | ✅ |
@@ -280,10 +280,10 @@
 | C-10 | **Jenkins `H` is refused with a message naming Jenkins** | Unit | ✅ and `SMARCH` is not |
 | C-11 | Field counts other than 5 produce "expected 5 fields, got N" | Unit | ✅ |
 | C-12 | **The DOM/DOW OR-rule warning appears whenever both fields are restricted** | Unit + E4 | ✅ |
-| C-13 | Spring-forward skipped times are detected and labelled | Unit | **M16** |
-| C-14 | Fall-back repeated times are detected and both instants shown | Unit | **M16** |
-| C-15 | Unsatisfiable schedules report "will never run" with the reason | Unit | **M16** |
-| C-16 | Next-run search terminates within the 5-year bound for every input | Property | **M16.** The *parser* terminating is tested at M14: 1 200 fuzz runs, no hang, no throw. |
+| C-13 | Spring-forward skipped times are detected and labelled | Unit | ✅ **M16.** Reported as `skipped` with **no instant invented**, against real rules for `Europe/London` and `Australia/Sydney`, and end to end in a pinned zone |
+| C-14 | Fall-back repeated times are detected and both instants shown | Unit | ✅ **M16.** Both instants and both offsets, carried through the worker boundary and rendered. The first probe implementation missed this and the corpus caught it |
+| C-15 | Unsatisfiable schedules report "will never run" with the reason | Unit | ✅ **M16.** `noOccurrence` is a distinct status from "none yet" and from `@reboot`'s "none ever", so the UI cannot confuse the three |
+| C-16 | Next-run search terminates within the 5-year bound for every input | Property | ✅ **M16.** Bounded twice — horizon and a 100 000-step tripwire. Worst measured: 326 steps, 307× under it, and a property asserts the margin across 300 generated schedules |
 | C-17 | Both `0` and `7` mean Sunday, and the explanation says which was applied | Unit | ✅ |
 | C-18 | Macros are expanded and explained; `@reboot` is explained as non-schedulable | Unit | ✅ |
 | C-19 | Presets load valid expressions | E4 | **M15** |

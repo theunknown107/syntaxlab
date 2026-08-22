@@ -26,6 +26,7 @@ import { Panel } from '@/components/primitives/Panel';
 import { Splitter } from '@/components/primitives/Splitter';
 
 import { CronFields } from './CronFields';
+import { CronSchedule } from './CronSchedule';
 import styles from './cron.module.css';
 
 /**
@@ -35,9 +36,9 @@ import styles from './cron.module.css';
  * ExplanationView, Splitter and Analyze control. Cron is a third mode, not a
  * third application.
  *
- * **There is no next-run list, no calendar and no timezone picker**, because
- * the domain computes no run times and supports no named zones (M16). An
- * empty panel promising future runs would be a promise this build cannot keep.
+ * M16 adds the next-run panel. There is still **no calendar and no timezone
+ * picker**: the domain resolves two modes and no named zones, and a picker for
+ * zones it cannot compute would promise an answer this build cannot give.
  */
 
 /** Worked examples. Enough to show the shape, short enough to read. */
@@ -55,6 +56,9 @@ export function CronWorkspace(): React.JSX.Element {
   const status = useStore(workspaceStore, (state) => state.cronStatus);
   const failure = useStore(workspaceStore, (state) => state.cronError);
   const timezoneMode = useStore(workspaceStore, (state) => state.cronTimezoneMode);
+  const schedule = useStore(workspaceStore, (state) => state.cronSchedule);
+  const scheduleStatus = useStore(workspaceStore, (state) => state.cronScheduleStatus);
+  const scheduleError = useStore(workspaceStore, (state) => state.cronScheduleError);
 
   const [hoveredSpan, setHoveredSpan] = useState<SourceSpan | null>(null);
   const [selection, setSelection] = useState<EditorSelection | null>(null);
@@ -187,6 +191,15 @@ export function CronWorkspace(): React.JSX.Element {
             ) : (
               <CronFields analysis={analysis} links={links} />
             )}
+          </Panel>
+
+          <Panel title="Next runs">
+            <CronSchedule
+              preview={schedule}
+              status={scheduleStatus}
+              failure={scheduleError}
+              hasAnalysis={analysis !== null}
+            />
           </Panel>
 
           <Panel title="Explanation">

@@ -241,6 +241,8 @@ graph TB
 
 `analysis.cron` is the third operation on the long-lived worker. It never touches the execution worker, because it runs no foreign code — a cron expression is data our own parser reads, not a program handed to an engine.
 
+**M16 adds a fourth: `analysis.cronSchedule`.** A separate operation rather than more fields on the analysis result, because the two answer different questions and age at different rates — what an expression *means* stays true, when it next *runs* does not. Keeping them apart lets the times be recomputed without re-explaining the expression, and gives the next-run panel its own loading and failure states. It re-parses the expression inside the worker rather than accepting a caller's parse tree: the parser is the sole authority on cron syntax, and a caller supplying an analysis would make the caller a second one.
+
 ```mermaid
 sequenceDiagram
     participant M as Main thread
@@ -368,7 +370,7 @@ flowchart TD
 
 | Worker | Lifetime | Purpose | Rationale |
 |---|---|---|---|
-| **Analysis worker** | Long-lived, one instance | Tokenise/parse regex, parse JSON→CST, parse cron, generate explanations. Schedule computation joins this list at M16. | All of this is *our* code, provably terminating, bounded by input limits. Killing and respawning it on every call would waste startup cost. |
+| **Analysis worker** | Long-lived, one instance | Tokenise/parse regex, parse JSON→CST, parse cron, generate explanations, **compute cron schedules** (M16). | All of this is *our* code, provably terminating, bounded by input limits. Killing and respawning it on every call would waste startup cost. |
 | **Execution worker** | Disposable, replaced on timeout | Runs `RegExp.exec` against user test strings — the only place foreign, uninterruptible code runs | Must be destroyable without losing parser state or a warm module cache. Mixing it with the analysis worker would mean a ReDoS timeout also destroys unrelated parse state and forces a cold re-import. |
 
 > **ponytail note:** the obvious lazy version is one worker. It does not survive the first ReDoS test, because terminating it also kills the parse cache and any in-flight unrelated request. Two is the minimum that is actually correct. We do not add a third or a pool — concurrency is one user typing, and a pool solves a problem we do not have.
@@ -551,7 +553,8 @@ syntaxlab/
 │   │   ├── regex/    { tokenizer.ts, parser.ts, ast.ts, explain.ts }
 │   │   ├── json/     { scanner.ts, parser.ts, cst.ts, explain.ts, format.ts }
 │   │   ├── cron/     { tokenizer.ts, parser.ts, ast.ts, warnings.ts,      # built M14
-│   │   │                explain.ts, analyze.ts, validate.ts }        # schedule.ts is M16
+│   │   │                explain.ts, analyze.ts, validate.ts,        #
+│   │   │                schedule.ts }                                # M16
 │   │   ├── detect/   { detectType.ts }
 │   │   └── shared/   { result.ts, limits.ts, errors.ts, explanation.ts }
 │   │

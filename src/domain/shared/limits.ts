@@ -61,6 +61,31 @@ export const LIMITS = {
     maxTokens: 2_000,
     /** Terms in a single field, i.e. commas + 1. Guards a pathological list. */
     maxTermsPerField: 200,
+    /**
+     * How far ahead a schedule search looks — M16.
+     *
+     * Five years covers every schedule this dialect can express: the sparsest
+     * possible is a single minute on a single day of a single month, which
+     * recurs annually, and 29 February needs four. The extra year is slack for
+     * the 100/400 leap rules, so `0 0 29 2 *` starting in 2096 still finds
+     * 2104 rather than reporting a schedule that does run as one that never
+     * does.
+     */
+    searchYears: 5,
+    /**
+     * Iterations one search may take before giving up.
+     *
+     * The field-advance algorithm needs tens, not thousands — this is not a
+     * budget, it is a tripwire. If it ever fires, the advance logic has a bug
+     * that would otherwise present as a frozen worker.
+     */
+    maxSearchSteps: 100_000,
+    /**
+     * Occurrences the UI may ask for at once.
+     *
+     * A preview, not a scheduler simulation (21_ACCEPTANCE_CRITERIA.md C-3).
+     */
+    maxOccurrences: 10,
   },
   history: {
     maxEntries: 500,

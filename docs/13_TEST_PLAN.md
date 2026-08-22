@@ -337,7 +337,7 @@ Coverage is a floor, not a goal. A 95%-covered parser with no fuzz testing is le
 
 ### 3.3 Cron domain — **V1.1; 146 cases built at M14**
 
-> **Built at M14: 146 unit cases.** Not part of the V1.0 suite. The three groups below marked *M16* need the schedule executor and have no tests yet, because there is nothing to test.
+> **Built at M14: 146 unit cases; M16 added the schedule suites.** Not part of the V1.0 suite. The groups previously marked *M16* are now built — see §3.3.2.
 
 | Suite | Cases | Status |
 |---|---|---|
@@ -366,16 +366,74 @@ Coverage is not the interesting number here; the corpus is. Every corpus case wa
 
 Assertion for every row: the message is specific, no schedule is produced, and **no next-run time is displayed**.
 
-**Schedule computation — *M16*.** Next run for every preset; month and year rollover; leap years across 4/100/400 boundaries; unsatisfiable schedules terminating with the correct message; the 5-year search bound. None of this is tested at M14 because none of it is built (`04_PARSER_ARCHITECTURE.md` §4.4).
+**Schedule computation — built at M16, see §3.3.2.** Next run for every preset; month and year rollover; leap years; unsatisfiable schedules terminating with the correct message; the 5-year search bound.
 
 **The DOM/DOW OR-rule *is* tested at M14**, as a warning and an explanation rather than as matching: both fields restricted warns and says "either, not both" in words; one field restricted does not; neither does not; and a full-range list such as `1-31` counts as unrestricted, which is its own regression test.
 
 **Timezone — reduced scope (browser-local and UTC only).** At M14 the tests are about *representation*, not about times, because no times are computed. UTC resolves to a zero offset and `userSelection`; browser-local reports `browserResolvedOptions` and a non-empty zone name; the DST caveat appears when — and only when — the browser's zone actually transitions, checked against six real zones by setting `process.env.TZ`, which `Date` honours at runtime in Node; and every analysis carries a `cron-timezone` section, which is invariant C-I1 at the only level M14 can hold it.
 
-**Named-zone selection is not implemented, so it is not tested for correctness — it is tested for absence.** Two separate tests assert that no analysis, in either mode, can produce a third timezone mode. If someone widens the union, those fail. The transition matrix across zone types (spring-forward skip, fall-back repeat, southern hemisphere, `Asia/Kolkata`'s half-hour offset, a no-DST zone) belongs to M16 with the executor.
+**Named-zone selection is not implemented, so it is not tested for correctness — it is tested for absence.** Two separate tests assert that no analysis, in either mode, can produce a third timezone mode. If someone widens the union, those fail. The transition matrix across zone types (spring-forward skip, fall-back repeat, southern hemisphere, `Asia/Kolkata`'s half-hour offset, a no-DST zone) is built at M16 — §3.3.2.
 
 **Golden corpus** — 100+ expressions with reviewed English output.
 
+
+### 3.3.2 The schedule engine — *built at M16*
+
+| Suite | Cases | What it establishes |
+|---|---|---|
+| `tests/unit/cron/schedule.test.ts` | 48 | The golden corpus: every expected time worked out **by hand from the calendar**, never read off the implementation |
+| `tests/unit/cron/dst.test.ts` | 16 | Spring-forward gaps, fall-back overlaps, a no-DST zone, and UTC — against real zone rules |
+| `tests/unit/cron/scheduleProperty.test.ts` | 9 | Differential agreement with a minute-by-minute scan, ordering, the cap, the bound |
+| `tests/unit/protocol.test.ts` (cronSchedule) | 24 | Forged results and payloads refused at the boundary |
+| `tests/unit/cron/cronUi.test.tsx` (next runs) | 12 | The panel, including both anomalies rendered |
+| `tests/unit/cron/cronWorkspace.test.ts` | +4 | Two requests per Analyze; times dropped when the expression changes |
+| `tests/e2e/cron.spec.ts` | +9 per project | The whole path in four browser projects, including DST with a pinned clock and zone |
+
+**The expectations come from the calendar, not from the code.** A test whose
+expected value was produced by the implementation proves the implementation has
+not changed, not that it is right. Every row of the golden corpus was reasoned
+from the schedule and the calendar and carries the reasoning in a comment —
+"2026-03-10 is a Tuesday, so the next Monday is the 16th".
+
+**The property suite has a real oracle after all.** §3.3.1 explains why cron has
+no external reference implementation to differ against. The schedule engine has
+an *internal* one: a minute-by-minute scan that asks "does this instant match?"
+is the **definition** of a cron schedule rather than an implementation of one —
+far too slow to ship, and exactly right. The fast field-advance search is
+checked against it across 300 generated schedules, and the scan stops at the
+engine's answer, so reaching that answer without a match also proves no run was
+skipped on the way. Its day rule is written out separately on purpose: if both
+copies read the OR rule from the same helper, agreeing would prove nothing.
+
+**DST is tested against the platform's own zone database.** `process.env.TZ` is
+honoured by `Date` at runtime in Node, so these run against real rules for
+`Europe/London`, `Australia/Sydney`, `Asia/Kolkata` and `America/New_York`
+rather than against a stub of them. In the browser, Playwright's `timezoneId`
+and a pinned page clock reach the same transitions — otherwise they are
+testable twice a year.
+
+**A real bug came out of this suite.** The first offset probe walked forward
+only, and reported London's 01:30 on 25 October as a single GMT instant while
+the earlier BST one went unmentioned. The corpus caught it; review had not.
+
+#### Pressing Analyze in an E2E test — `tests/e2e/analyze.ts`
+
+Since M15 nothing is analysed until Analyze is pressed, so **a spec that fills
+an editor and waits for a result waits forever**. Eight specs had never been
+migrated, which a full-suite run at M16 surfaced as 25 failures.
+
+The second half of the problem is the one worth remembering. The button signals
+unavailability with **`aria-disabled`, not `disabled`** (`08_UI_UX_SPEC.md`
+§7.2 — focus must survive the press that made it unavailable). Playwright's
+`isEnabled()` and its actionability checks read the `disabled` attribute, so
+they see a clickable element: the press lands, the handler refuses it, **nothing
+happens and nothing errors**, and the test times out somewhere else. Under
+parallel load the render lags the keystrokes often enough to fail most runs.
+
+**Never press Analyze directly in a spec.** `pressAnalyze(page, subject)` waits
+for the control to become available and then presses it, and returns `false`
+rather than throwing when it never does — an empty editor and an already-current
+result are real states, not failures.
 
 ### 3.3.1 Differential and reference testing for cron — *why there is no oracle*
 

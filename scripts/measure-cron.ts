@@ -1,5 +1,6 @@
 import { analyzeCron } from '@/domain/cron/analyze';
 import { parseCron } from '@/domain/cron/parser';
+import { buildSchedule, nextOccurrences } from '@/domain/cron/schedule';
 import { tokenize } from '@/domain/cron/tokenizer';
 import { LIMITS } from '@/domain/shared/limits';
 
@@ -21,6 +22,12 @@ import { LIMITS } from '@/domain/shared/limits';
  * expected to be far below 16 ms. It is written as a floor to beat rather than
  * a target to approach, because a cron expression is two orders of magnitude
  * smaller than the regex and JSON inputs the same pipeline already handles.
+ *
+ * M16 adds the schedule search, which is the first thing here that *searches*
+ * rather than parses — so it is the first thing whose cost depends on the
+ * calendar rather than on the input length. It is measured with its iteration
+ * count beside its timings, because the number that matters for the bound is
+ * the step count and the number that matters for the user is the clock.
  */
 
 const FRAME_MS = 16;
@@ -77,7 +84,7 @@ function percentile(sorted: readonly number[], fraction: number): number {
   return sorted[index] ?? 0;
 }
 
-function time(run: () => void): { p50: number; p99: number; max: number } {
+function time(run: () => void): { p50: number; p95: number; p99: number; max: number } {
   for (let i = 0; i < WARMUP; i += 1) run();
 
   const samples: number[] = [];
@@ -89,6 +96,7 @@ function time(run: () => void): { p50: number; p99: number; max: number } {
   samples.sort((a, b) => a - b);
   return {
     p50: percentile(samples, 0.5),
+    p95: percentile(samples, 0.95),
     p99: percentile(samples, 0.99),
     max: samples[samples.length - 1] ?? 0,
   };
@@ -143,6 +151,107 @@ console.log(`\nStages of "${TYPICAL}"\n`);
 for (const [label, run] of stages) {
   const stats = time(run);
   console.log(`  ${pad(label, 26)}${pad(ms(stats.p50), 12)}${ms(stats.p99)}`);
+}
+
+/* ------------------------------------------------------------------ *
+ * The schedule search — M16
+ * ------------------------------------------------------------------ */
+
+interface SearchCase {
+  readonly label: string;
+  readonly source: string;
+  readonly note: string;
+}
+
+const SEARCH_CASES: readonly SearchCase[] = [
+  { label: 'every minute', source: '* * * * *', note: 'the next run is one minute away' },
+  { label: 'typical', source: '*/15 9-17 * * 1-5', note: 'the shape most schedules take' },
+  { label: 'daily', source: '0 0 * * *', note: 'ten days of runs' },
+  { label: 'weekly', source: '0 9 * * 1', note: 'ten Mondays' },
+  { label: 'monthly', source: '0 0 1 * *', note: 'ten months' },
+  { label: 'yearly', source: '0 0 1 1 *', note: 'ten years — beyond the horizon after five' },
+  {
+    label: 'leap day',
+    source: '0 0 29 2 *',
+    note: 'skips three years of February at a time',
+  },
+  {
+    label: 'never occurs',
+    source: '0 0 30 2 *',
+    note: 'walks the whole horizon before answering — the worst case',
+  },
+  {
+    label: 'sparse pair',
+    source: '0 0 31 2 *',
+    note: '31 February: same, via a different impossibility',
+  },
+];
+
+/** The instant every search starts from, so the numbers are comparable. */
+const SEARCH_FROM = Date.parse('2026-03-10T12:00:00Z');
+
+const searchRows: {
+  label: string;
+  note: string;
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+  steps: number;
+}[] = [];
+
+for (const testCase of SEARCH_CASES) {
+  const analysis = analyzeCron(testCase.source, { timezoneMode: 'utc' });
+  if (!analysis.ok) throw new Error(`${testCase.source} did not analyse`);
+  const built = buildSchedule(analysis.value);
+  if (!built.ok) throw new Error(`${testCase.source} did not build: ${built.reason}`);
+
+  const run = () =>
+    void nextOccurrences(built.schedule, {
+      mode: 'utc',
+      after: SEARCH_FROM,
+      count: LIMITS.cron.maxOccurrences,
+    });
+
+  const stats = time(run);
+  const steps = nextOccurrences(built.schedule, {
+    mode: 'utc',
+    after: SEARCH_FROM,
+    count: LIMITS.cron.maxOccurrences,
+  }).steps;
+
+  searchRows.push({ label: testCase.label, note: testCase.note, ...stats, steps });
+}
+
+console.log(
+  `\nSchedule search — ${String(LIMITS.cron.maxOccurrences)} occurrences, ${String(RUNS)} runs each\n`,
+);
+console.log(
+  `  ${pad('case', 16)}${pad('p50', 11)}${pad('p95', 11)}${pad('p99', 11)}${pad('max', 11)}${pad('steps', 8)}note`,
+);
+for (const row of searchRows) {
+  console.log(
+    `  ${pad(row.label, 16)}${pad(ms(row.p50), 11)}${pad(ms(row.p95), 11)}${pad(ms(row.p99), 11)}${pad(ms(row.max), 11)}${pad(String(row.steps), 8)}${row.note}`,
+  );
+}
+
+const worstSteps = searchRows.reduce((most, row) => (row.steps > most.steps ? row : most));
+const headroom = LIMITS.cron.maxSearchSteps / worstSteps.steps;
+console.log(
+  `\n  Most steps: ${worstSteps.label} at ${String(worstSteps.steps)} of ${String(LIMITS.cron.maxSearchSteps)} allowed — ${headroom.toFixed(0)}x headroom.`,
+);
+if (worstSteps.steps >= LIMITS.cron.maxSearchSteps) {
+  console.log('  TRIPWIRE REACHED — the advance logic has stopped advancing.');
+  process.exitCode = 1;
+}
+
+const worstSearch = searchRows.reduce((slowest, row) => (row.p99 > slowest.p99 ? row : slowest));
+console.log(
+  `  Slowest search p99: ${worstSearch.label} at ${ms(worstSearch.p99)} (one frame is ${String(FRAME_MS)} ms).`,
+);
+if (worstSearch.p99 >= FRAME_MS) {
+  console.log('  OVER BUDGET — the search would drop a frame.');
+  process.exitCode = 1;
 }
 
 const worst = rows.reduce((slowest, row) => (row.p99 > slowest.p99 ? row : slowest));

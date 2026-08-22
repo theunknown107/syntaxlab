@@ -314,7 +314,7 @@ control does both), and expand-to-depth as a user control.
 **Analysis pane**
 - **Summary** — the plain-English reading, prominent and large. This is the answer the user came for; it gets the most visual weight on the page.
 - **Field table** — name, raw value, resolved values (abbreviated when long: `0,15,30,45` vs `every 5 minutes`), and plain meaning
-- **Next runs** — the next 10 with relative time ("in 4 hours"), absolute time, and **a zone label on every row without exception** (invariant C-I1). DST anomalies carry a badge. A standing note states that times are shown in the selected mode only, and will not match a scheduler running in a different timezone.
+- **Next runs** — the next 10 with absolute time and **a zone label on every row without exception** (invariant C-I1). DST anomalies carry a badge. A standing note states that times are shown in the selected mode only, and will not match a scheduler running in a different timezone. *(Built at M16 — see §7.3.1. Relative time was specified here and deliberately not built; the reason is there.)*
 - **Warnings** — the DOM/DOW OR-rule warning is always shown when both fields are restricted, with the OR reading spelled out
 - **Builder** — a disclosure panel with per-field controls that writes back to the expression, keeping the two representations synchronised in both directions
 
@@ -800,7 +800,10 @@ in the next.
   against a subject are different questions. The tester keeps its own debounce
   on the test string and its own "Run now".
 - **It does not format JSON.** Prettify and Minify stay explicit actions.
-- **It does not compute cron run times.** There are none to compute (M16).
+- **It does not compute cron run times *as you type*.** Analyze computes
+  them once, alongside the explanation; they carry the instant they were
+  computed at, and a Recalculate control computes them again. Nothing refreshes
+  on a timer — see §7.3.1.
 
 ### The regex tester, after the change
 
@@ -856,9 +859,50 @@ are not implemented, and offering a picker for them would promise an answer the
 domain cannot give. Browser-local shows the zone the browser reported, so the
 user can see what was assumed.
 
-**What is deliberately absent:** no next-run list, no calendar, no schedule
-preview, no named-zone selector. The domain computes no run times, and an empty
-panel promising future runs would be a promise this build cannot keep.
+**What is deliberately absent:** no calendar, no named-zone selector. The
+next-run panel arrived at M16 — §7.3.1.
+
+### §7.3.1 The next-run panel — *built at M16*
+
+A third panel in the right column, below Fields and above Explanation, because
+"when does it run next" is the question people arrive with and the explanation
+is what they read once the answer surprises them.
+
+| Element | Behaviour |
+|---|---|
+| **Next run** | One reading, larger than body text — the answer, given the most weight |
+| **Then** | Up to nine more, a list with an accessible name, capped at ten runs in total |
+| **Zone label** | On the next run and on every row. Invariant C-I1, on the surface that makes it matter |
+| **Anomaly** | A badge *and* a sentence. `Clock skipped` shows no time at all; `Happens twice` shows both offsets |
+| **Calculated at** | The clock time the answer was worked out at, beside a **Recalculate** control |
+| **@reboot** | "runs when the machine starts, so it has no clock time to predict" — not "invalid" |
+| **Never runs** | "no run in the next 5 years", with why such a schedule exists |
+
+**Times are rendered from the wall clock the domain matched, never from
+`toLocaleString` on the instant.** The two disagree exactly when it matters: in
+UTC mode the browser would helpfully convert every time back into the reader's
+own zone, which is the opposite of what the mode is for. There is a unit test
+whose only job is to fail if someone reaches for the convenient formatter.
+
+**Nothing refreshes on a timer, and this is the deviation from §7.3's spec.**
+The V1.1 sketch called for relative time — "in 4 hours". A relative time is a
+value that is wrong a minute after it is painted, and the only ways to keep it
+honest are a timer that recomputes it or a caveat nobody reads. A timer is work
+the user did not ask for, which is the whole principle the explicit Analyze
+button establishes; and "in 4 hours" quietly staying "in 4 hours" an hour later
+is the confidently-wrong output this feature exists to avoid. So the panel
+shows absolute times, states when it computed them, and offers a control to
+compute them again. **Absolute time plus a timestamp is honest at every moment;
+relative time is honest only at the moment it is painted.**
+
+**A skipped run keeps its row.** It has no instant — the field is `null` and
+the UI shows no time — but it is still what the schedule says, and dropping the
+row would leave a gap the user cannot see. Both anomaly notes describe what
+schedulers do rather than picking one, because they genuinely differ.
+
+**Still deliberately absent:** the builder, the preset dropdown, per-field
+colour coding in the editor, and the calendar. None of them are next-run work,
+and none were added under cover of a milestone that was about times.
 
 ### Cron does not steal the mode
 

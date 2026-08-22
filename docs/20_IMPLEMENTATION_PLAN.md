@@ -423,9 +423,9 @@ The milestone was re-scoped at its start: **M14 is the domain representation, no
 | 14.1 | `cron/tokenizer.ts` + `cron/parser.ts` + `cron/ast.ts` — **standard 5-field only**, per-field range tables, names, macros | ✅ |
 | 14.2 | **Field-count refusal path** — 6/7 fields produce the educational message, never a guess | ✅ 3 six-field expressions pinned as never reinterpreted |
 | 14.3 | Foreign-syntax recognition (`L W # ? H`) mapped to the scheduler it comes from | ✅ including `LW`, `15W`, `6#3`; `SMARCH` correctly *not* matched |
-| 14.4 | `cron/model.ts` + `cron/schedule.ts` — field-advance algorithm, 5-year bound | ➡️ **M16** |
-| 14.5 | Browser-local and UTC — *representation* | ✅ two-member union, enforced on the wire. Computation is M16. |
-| 14.6 | DST anomaly detection | ➡️ **M16** for per-schedule anomalies. A *zone-level* caveat ships at M14, and it probes the zone rather than assuming every browser-local zone transitions. |
+| 14.4 | `cron/model.ts` + `cron/schedule.ts` — field-advance algorithm, 5-year bound | ✅ **Built at M16** as `cron/schedule.ts` alone; no separate `model.ts` — the model is the schedule's own input type |
+| 14.5 | Browser-local and UTC — *representation* | ✅ two-member union, enforced on the wire. Computation ✅ **M16**, still two modes |
+| 14.6 | DST anomaly detection | ✅ **M16** for per-schedule anomalies, by offset probing a day either side of each reading. The *zone-level* caveat shipped at M14. |
 | 14.7 | DOM/DOW OR-rule + always-on warning | ✅ |
 | 14.8 | `cron/explain.ts` | ✅ plus `warnings.ts`, `analyze.ts`, `validate.ts` |
 | 14.9 | Golden corpus: 100+ expressions | ⚠️ **59 hand-written expressions — 27 valid, 24 invalid, 8 foreign — producing 78 test cases. Not 100+.** Padding a corpus whose whole value is that a person read every entry would have made the number true and the corpus worse. |

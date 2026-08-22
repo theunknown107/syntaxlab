@@ -1,3 +1,4 @@
+import { LIMITS } from '../shared/limits';
 import { CRON_FIELD_ORDER, CRON_FIELD_SPECS, type CronFieldName } from './ast';
 
 /**
@@ -246,4 +247,103 @@ export function isValidCronAnalysis(value: unknown): boolean {
   if (!isOptionalString(value.macro)) return false;
   if (!Array.isArray(value.errors)) return false;
   return (value.errors as unknown[]).every((error) => isRecord(error));
+}
+
+/* ------------------------------------------------------------------ *
+ * The schedule preview — M16
+ * ------------------------------------------------------------------ */
+
+const PREVIEW_STATUSES = new Set(['occurrences', 'noOccurrence', 'notSchedulable']);
+const REJECTIONS = new Set(['FIELD_ERROR', 'NOT_SCHEDULABLE', 'UNSUPPORTED_DIALECT']);
+const ANOMALIES = new Set(['skipped', 'repeated']);
+
+/** A whole minute inside the range the search can actually reach. */
+function isInstant(value: unknown): boolean {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+  // `Date` itself stops here; a value beyond it renders as "Invalid Date".
+  return Math.abs(value) <= 8.64e15;
+}
+
+function isWallClock(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const { year, month, day, hour, minute } = value;
+  if (![year, month, day, hour, minute].every((part) => Number.isInteger(part))) return false;
+  return (
+    (month as number) >= 1 &&
+    (month as number) <= 12 &&
+    (day as number) >= 1 &&
+    (day as number) <= 31 &&
+    (hour as number) >= 0 &&
+    (hour as number) <= 23 &&
+    (minute as number) >= 0 &&
+    (minute as number) <= 59
+  );
+}
+
+function isInstantEntry(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return isInstant(value.epochMs) && isRealOffset(value.offsetMinutes);
+}
+
+function isAnomaly(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && ANOMALIES.has(value));
+}
+
+/**
+ * The instant, which is null for a `skipped` reading and for nothing else.
+ *
+ * This is the check worth having rather than waving through: anywhere else, a
+ * null would render as a missing time on a run that does happen.
+ */
+function hasConsistentInstant(value: Record<string, unknown>): boolean {
+  if (value.epochMs === null) return value.anomaly === 'skipped' && value.offsetMinutes === null;
+  return isInstant(value.epochMs) && isRealOffset(value.offsetMinutes);
+}
+
+/**
+ * Both instants, or neither.
+ *
+ * Two is what "the clock fell back through this reading" means; a longer list
+ * would be a different phenomenon from the one the UI describes, and a
+ * `repeated` reading carrying one instant would be the ambiguity reported as
+ * if it had been resolved.
+ */
+function hasConsistentRepeats(value: Record<string, unknown>): boolean {
+  const repeated = value.repeatedInstants;
+  if (repeated === undefined) return value.anomaly !== 'repeated';
+  if (!Array.isArray(repeated) || repeated.length !== 2) return false;
+  return value.anomaly === 'repeated' && (repeated as unknown[]).every(isInstantEntry);
+}
+
+function isOccurrence(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (!isWallClock(value.wall)) return false;
+  if (!isAnomaly(value.anomaly)) return false;
+  return hasConsistentInstant(value) && hasConsistentRepeats(value);
+}
+
+function areOccurrencesValid(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  // The cap is a promise to the UI, which sizes a list around it; and an empty
+  // list is what `noOccurrence` is for, so it is not a valid way to say this.
+  if (value.length === 0 || value.length > LIMITS.cron.maxOccurrences) return false;
+  return (value as unknown[]).every(isOccurrence);
+}
+
+export function isValidSchedulePreview(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (typeof value.status !== 'string' || !PREVIEW_STATUSES.has(value.status)) return false;
+  if (typeof value.mode !== 'string' || !TIMEZONE_MODES.has(value.mode)) return false;
+  if (!isInstant(value.computedAt)) return false;
+
+  switch (value.status) {
+    case 'notSchedulable':
+      return typeof value.reason === 'string' && REJECTIONS.has(value.reason);
+    case 'noOccurrence':
+      // The horizon is this build's, not the sender's: a result claiming a
+      // different one did not come from this build.
+      return value.horizonYears === LIMITS.cron.searchYears;
+    default:
+      return areOccurrencesValid(value.occurrences);
+  }
 }

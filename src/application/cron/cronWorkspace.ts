@@ -13,13 +13,19 @@ import { workspaceStore, type WorkspaceFailure } from '../stores/workspaceStore'
  * one committed expression, one explicit action. A third way of doing this
  * would be a third thing to learn.
  *
- * **Nothing here computes a run time.** The domain has no schedule executor
- * (M16), so there is no next-run list to render and this file does not pretend
- * otherwise. What it produces is the analysis: fields, explanation, warnings,
- * errors and the timezone the reading is in.
+ * Two requests, not one. The analysis explains the expression; the schedule
+ * says when it runs next. They are separate operations because they go stale
+ * at different rates — a meaning stays true, a countdown does not — and
+ * because the times can then be recomputed without re-explaining anything.
+ *
+ * **No timer recomputes them.** The times carry the instant they were computed
+ * at and there is a control to compute them again. A page that quietly
+ * refreshed itself would be an app that runs work the user did not ask for,
+ * which is the whole thing the explicit Analyze action exists to avoid.
  */
 
 const ANALYSIS_KEY = 'cron-analysis';
+const SCHEDULE_KEY = 'cron-schedule';
 
 function fromDomainError(error: DomainError): WorkspaceFailure {
   return {
@@ -55,6 +61,68 @@ function clearAnalysis(): void {
     cronAnalysis: null,
     cronStatus: 'idle',
     cronError: null,
+    ...EMPTY_SCHEDULE,
+  }));
+}
+
+const EMPTY_SCHEDULE = {
+  cronSchedule: null,
+  cronScheduleStatus: 'idle',
+  cronScheduleError: null,
+} as const;
+
+/**
+ * Asks when the committed expression runs next.
+ *
+ * Runs after the analysis rather than instead of it: an expression that cannot
+ * be explained cannot be scheduled either, and the explanation is the part
+ * that says *why*. A failure here leaves the analysis on screen — the meaning
+ * of the expression is still worth reading when the times are not available.
+ */
+async function runSchedule(committed: string, timezoneMode: CronTimezoneMode): Promise<void> {
+  const source = committed.trim();
+  if (source === '') return;
+
+  workspaceStore.setState((previous) => ({
+    ...previous,
+    cronScheduleStatus: 'analyzing',
+    cronScheduleError: null,
+  }));
+
+  const response = await getAnalysisClient().request(
+    'analysis.cronSchedule',
+    {
+      source,
+      timezoneMode,
+      // The clock is read here, on the thread that knows what "now" the user
+      // is looking at, and travels with the request. A worker reading its own
+      // clock would be a worker whose answers cannot be tested.
+      after: Date.now(),
+      count: LIMITS.cron.maxOccurrences,
+    },
+    { supersedeKey: SCHEDULE_KEY },
+  );
+
+  const now = workspaceStore.getState();
+  if (now.cronCommitted !== committed || now.cronTimezoneMode !== timezoneMode) return;
+
+  if (response.ok) {
+    workspaceStore.setState((previous) => ({
+      ...previous,
+      cronSchedule: response.value,
+      cronScheduleStatus: 'ready',
+      cronScheduleError: null,
+    }));
+    return;
+  }
+
+  if (response.error.code === 'SUPERSEDED') return;
+
+  workspaceStore.setState((previous) => ({
+    ...previous,
+    cronSchedule: null,
+    cronScheduleStatus: 'error',
+    cronScheduleError: fromWorkerError(response.error),
   }));
 }
 
@@ -78,6 +146,9 @@ async function runAnalysis(): Promise<void> {
     ...previous,
     cronCommitted: cronInput,
     cronStatus: 'analyzing',
+    // The previous times describe the previous expression. Holding them under
+    // a new one would be the worst kind of wrong: plausible and unrelated.
+    ...EMPTY_SCHEDULE,
   }));
 
   const response = await getAnalysisClient().request(
@@ -96,6 +167,7 @@ async function runAnalysis(): Promise<void> {
       cronStatus: 'ready',
       cronError: null,
     }));
+    void runSchedule(cronInput, cronTimezoneMode);
     // No history capture. `HistoryEntry` has no cron type yet, and the drawer
     // has nothing to render for one — see `capture.ts`.
     return;
@@ -111,7 +183,21 @@ async function runAnalysis(): Promise<void> {
     cronAnalysis: null,
     cronStatus: 'error',
     cronError: fromWorkerError(response.error),
+    ...EMPTY_SCHEDULE,
   }));
+}
+
+/**
+ * Recomputes the times for the expression already on screen.
+ *
+ * The times are computed once and then say when they were computed, so this is
+ * how they stop being stale. It re-runs the search only — the explanation has
+ * not changed, and re-deriving it would be work nobody asked for.
+ */
+export function refreshCronSchedule(): void {
+  const { cronCommitted, cronTimezoneMode } = workspaceStore.getState();
+  if (cronCommitted === null) return;
+  void runSchedule(cronCommitted, cronTimezoneMode);
 }
 
 /* ------------------------------------------------------------------ *
@@ -154,6 +240,7 @@ export function clearCron(): void {
     cronAnalysis: null,
     cronStatus: 'idle',
     cronError: null,
+    ...EMPTY_SCHEDULE,
   }));
 }
 

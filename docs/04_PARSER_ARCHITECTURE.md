@@ -603,7 +603,7 @@ If the verdicts disagree, we are wrong. That is the rule (J-I1).
 
 ## 4. Cron parser — **V1.1**, standard 5-field only
 
-> **Built at M14, in part.** The dialect lock, the refusal path, field parsing, the timezone representation and the explanation engine are code (`src/domain/cron/`). Next-run computation (§4.4) and per-schedule DST anomaly detection (§4.6) are **not built** — M14 was scoped to the domain representation those need, and they belong to M16. Every subsection below is marked with which it is.
+> **Built.** The dialect lock, the refusal path, field parsing, the timezone representation and the explanation engine are M14 (`src/domain/cron/`). Next-run computation (§4.4) and per-schedule DST anomaly detection (§4.6) are **M16** (`src/domain/cron/schedule.ts`). Every subsection below is marked with which milestone built it.
 
 ### 4.1 Dialect lock *(decided in Phase 1.5)*
 
@@ -759,15 +759,30 @@ Expanding it to the base value alone — which is what the parser did until the 
 | `cron.maxTokens` | 2 000 | Bounds the token list independently of the input check. |
 | `cron.maxTermsPerField` | 200 | The slowest valid input in the performance table is a list at this limit, at 1.07–1.85 ms p99 across runs (`12_PERFORMANCE.md` §13). |
 
-### 4.4 Next-run computation — **NOT BUILT.** M16
+### 4.4 Next-run computation — *built at M16*
 
-> M14 built the domain representation this needs and stopped there, by instruction: no future-occurrence generator, no recurrence engine. `CronAnalysis` carries no `nextRuns` field, and adding one is M16's work. The algorithm below is the design it will implement.
+> **Built as designed.** `src/domain/cron/schedule.ts`. The algorithm below is the one that shipped; the measured cost is in `12_PERFORMANCE.md` §14.
+
+**The engine never reads cron text.** It consumes a validated `CronAnalysis` and nothing else. The parser stays the sole authority on syntax, because a second reader of cron syntax is a second set of rules to disagree with the first — and the disagreement would surface as a time, which is the one output a user cannot check by eye.
+
+```mermaid
+flowchart LR
+    A["cron text"] --> B["parser<br/><i>sole syntax authority</i>"]
+    B --> C["CronAnalysis<br/><i>resolved value sets</i>"]
+    C --> D["buildSchedule<br/><i>rejects, never re-parses</i>"]
+    D --> E["ScheduleModel<br/><i>five number sets + two restriction flags</i>"]
+    E --> F["search"]
+    A -.->|"never"| D
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class C,E safe
+```
 
 **Algorithm: field-by-field advance, not brute-force minute iteration.** Iterating minute-by-minute over five years is ~2.6 M iterations per requested run and is exactly what makes a worker look hung.
 
 ```
-candidate = now truncated to the minute, +1 minute
-loop (bounded by 5 years of candidates):
+candidate = the instant asked about, truncated to the minute, +1 minute
+loop (bounded by 5 years of candidates AND by a step count):
     if month  not in set -> advance to first day of next valid month, reset lower fields; continue
     if day    not matched (per DOM/DOW rule) -> advance one day, reset lower fields; continue
     if hour   not in set -> advance to next valid hour, reset lower; continue
@@ -775,9 +790,54 @@ loop (bounded by 5 years of candidates):
     -> candidate is a match
 ```
 
-Each step jumps to the next plausible boundary, so a match is found in tens of iterations. The 5-year bound guarantees termination and yields the correct answer for genuinely unsatisfiable schedules: `0 0 30 2 *` reports **"This schedule will never run — February never has a 30th."**
+```mermaid
+flowchart TD
+    A["cursor = after + 1 minute"] --> B{"year > horizon?"}
+    B -->|yes| Z["no occurrence<br/><i>NO_OCCURRENCE_IN_HORIZON</i>"]
+    B -->|no| C{"month in set?"}
+    C -->|no| C1["next valid month<br/>reset day, hour, minute"] --> B
+    C -->|yes| D{"day exists in month?"}
+    D -->|no| D1["roll to next month"] --> B
+    D -->|yes| E{"day matches<br/>DOM/DOW rule?"}
+    E -->|no| E1["+1 day, reset hour, minute"] --> B
+    E -->|yes| F{"hour in set?"}
+    F -->|no| F1["next valid hour, reset minute"] --> B
+    F -->|yes| G{"minute in set?"}
+    G -->|no| G1["+1 hour, reset minute"] --> B
+    G -->|yes| H["match"]
+
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    classDef danger fill:#2a1414,stroke:#a04040,color:#ffd9d9
+    class H safe
+    class Z danger
+```
+
+Each step jumps to the next plausible boundary, so a match is found in tens of iterations — **measured: 12 steps for `*/15 9-17 * * 1-5`, 326 for ten monthly runs, 158 to prove `0 0 30 2 *` never fires**. The 5-year bound guarantees termination and yields the correct answer for genuinely unsatisfiable schedules: `0 0 30 2 *` reports that it has **no run in the next five years**, because February never has a 30th.
+
+**Bounded twice over.** The calendar horizon (`LIMITS.cron.searchYears` = 5) is the semantic bound; a step count (`LIMITS.cron.maxSearchSteps` = 100 000) is a tripwire underneath it. The second exists because the first only terminates if the advance logic actually advances — a bug that failed to move the cursor would otherwise spin inside the horizon forever. It is a tripwire and not a budget: the worst measured search uses **326 steps, 307× under it**, and the search reports its own step count so that margin is measured rather than asserted.
+
+**Five years, not one.** Four years covers the leap cycle; the fifth is slack for the 100/400 rules, so a schedule like `0 0 29 2 *` evaluated near a century boundary still finds its next occurrence rather than reporting that it never runs.
 
 Note that the resolved value sets M14 produces are exactly the inputs this needs: sorted, deduplicated, and validated in range on both sides of the worker boundary.
+
+**What "restricted" means, precisely.** A field restricts when it selects *less than its whole range*. `1-31` in day-of-month restricts nothing, so `0 0 1-31 * 1` is "every Monday" and not "every day or Monday". Reading `*` alone as unrestricted would get that wrong, and the difference is 30 phantom runs a month.
+
+#### 4.4.1 Wall clock first, instant second
+
+Cron fields describe **wall-clock readings**, not elapsed time. "Every day at 01:30" means the clock reads 01:30, whatever the offset happened to do overnight. The search therefore runs entirely on wall-clock arithmetic and converts to an instant only once a reading has matched — which is what makes §4.6 possible at all, because "this reading has no instant" and "this reading has two" are only expressible in that order.
+
+```mermaid
+flowchart LR
+    A["schedule + start"] --> B["wall-clock search<br/><i>year, month, day, hour, minute</i>"]
+    B --> C["matched reading"]
+    C --> D["resolveInstant"]
+    D -->|"one"| E["occurrence"]
+    D -->|"none"| F["skipped<br/><i>epochMs: null</i>"]
+    D -->|"two"| G["repeated<br/><i>both instants kept</i>"]
+
+    classDef warn fill:#2a2414,stroke:#bfa05f,color:#f5ecd4
+    class F,G warn
+```
 
 ### 4.5 Timezone scope — reduced, deliberately — *represented at M14*
 
@@ -822,15 +882,44 @@ Even with only browser-local and UTC, DST is real: the browser's local zone has 
 
 It shipped for an afternoon as an unconditional browser-local warning, and the explanation review caught it: a reader in `Asia/Kolkata` was told their zone observes daylight-saving changes. It does not. `observesDst` now probes twelve monthly offsets and compares them — monthly resolution is enough because no real zone has run a saving period shorter than a month, and the question being asked is "caveat this zone at all", not "when exactly does it change". A false statement dressed as a caution is worse than no caution, because it teaches people to skip the warnings that are true.
 
-**Not built — M16:** per-schedule anomaly detection, which needs the next-run computation of §4.4 before it has anything to detect.
+**Built at M16:** per-schedule anomaly detection, which needed the next-run computation of §4.4 before it had anything to detect.
 
 | Case | Behaviour | Status |
 |---|---|---|
-| Browser-local mode selected, zone transitions | Warn that this zone observes DST changes | **built** |
-| Browser-local mode selected, zone does not transition | Say so, and emit no warning | **built** |
-| UTC mode selected | Note that UTC has no transitions | **built** |
-| Spring forward — 02:30 does not exist | Report the run as `SKIPPED`, explain that schedulers differ (most skip; some run at 03:00) | M16 |
-| Fall back — 01:30 occurs twice | Report `REPEATED`, list both instants with their offsets | M16 |
+| Browser-local mode selected, zone transitions | Warn that this zone observes DST changes | **built** (M14) |
+| Browser-local mode selected, zone does not transition | Say so, and emit no warning | **built** (M14) |
+| UTC mode selected | Note that UTC has no transitions | **built** (M14) |
+| Spring forward — 02:30 does not exist | Report the run as `skipped`, with **no instant at all**, and explain that schedulers differ (most skip; some run at 03:00) | **built** (M16) |
+| Fall back — 01:30 occurs twice | Report `repeated`, carrying **both instants with their offsets** | **built** (M16) |
+
+#### 4.6.1 How an anomaly is detected — offset probing, no timezone library
+
+A wall-clock reading is turned into instants by probing the zone's offset **a day either side** of the reading, correcting by each, and keeping only the candidates that read back as the reading asked for.
+
+```mermaid
+flowchart TD
+    A["wall clock<br/><i>2026-10-25 01:30</i>"] --> B["treat as UTC — a fixed reference"]
+    B --> C["offset 24h before"]
+    B --> D["offset 24h after"]
+    C --> E["candidate 1"]
+    D --> F["candidate 2"]
+    E --> G{"reads back as<br/>the requested clock?"}
+    F --> G
+    G -->|"0 survive"| H["skipped — the clock jumped over it"]
+    G -->|"1 survives"| I["unique"]
+    G -->|"2 survive"| J["repeated — both kept, with offsets"]
+
+    classDef warn fill:#2a2414,stroke:#bfa05f,color:#f5ecd4
+    classDef safe fill:#0a1f14,stroke:#5fbf85,color:#d4f5e2
+    class H,J warn
+    class I safe
+```
+
+**Why a day either side, and not the corrected instant.** The first implementation probed forward — the offset at the guess, then the offset at the instant that guess corrected to. That walk never steps *back* over a transition it has already passed: for London's 01:30 on 25 October both probes land after the change, agree on GMT, and report a single instant while the earlier BST one goes unmentioned. A day is wider than any transition and narrower than the gap between two, so the pair straddles the change. **This was caught by the DST test corpus, not by review.**
+
+**Why probing rather than a library.** The technique never assumes the *size* of a shift, so it is exact for whole-minute schedules in every real zone — including the half-hour and 45-minute offsets and Lord Howe's 30-minute saving step — and it needs nothing but `Date`. A timezone database would add tens of kilobytes to a 200 KB budget to answer a question the platform already answers correctly.
+
+**The zone-level `observesDst` flag is not used for this.** It answers a coarser question — whether the zone transitions *at all this year* — and cannot say whether a particular February morning is affected. Detection is per reading, always.
 
 We document plainly that **different schedulers resolve DST differently**. We show what happens in wall-clock terms and warn; we do not claim to replicate any particular scheduler's DST policy. This warning is not removed by the reduced timezone scope — it is precisely why the scope was reduced.
 

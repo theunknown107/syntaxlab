@@ -6,7 +6,7 @@
 
 ---
 
-> **Scope note.** V1.0 state covers regex and JSON. **M14 added no state.** The cron domain is pure and stateless; `workspaceStore` has no cron fields, `AnalysisMode` is still `'regex' | 'json'`, and nothing cron-shaped is persisted. Cron state arrives with the UI at M15. No share state exists in V1.0.
+> **Scope note.** V1.0 state covers regex and JSON. **M14 added no state** — the cron domain is pure and stateless. Cron state arrived with the UI at M15, and M16 added three fields for the schedule (§4.1.1). Nothing cron-shaped is persisted, and no share state exists.
 
 ## 1. A note on the brief's framing
 
@@ -123,6 +123,29 @@ interface WorkspaceState {
 ```
 
 The hot path. `input` changes on every keystroke, so **only the editor subscribes to it**; the analysis pane subscribes to `result` and `status`, which change at most once per debounce interval.
+
+#### 4.1.1 The schedule fields — M16
+
+```ts
+  cronSchedule: CronSchedulePreview | null;
+  cronScheduleStatus: 'idle' | 'analyzing' | 'ready' | 'error';
+  cronScheduleError: WorkspaceFailure | null;
+```
+
+**Three fields rather than one, and separate from `cronAnalysis`.** The times
+come from their own worker operation, so they get their own loading and failure
+states: a schedule that could not be computed must not blank the explanation,
+which is still worth reading.
+
+**They are cleared the moment a new expression is committed**, before the
+worker answers. Times held over from the previous expression would be the worst
+kind of wrong — plausible, and about something else.
+
+**Nothing derived is stored.** `computedAt` lives inside the preview, where the
+domain put it; there is no separate "last calculated" field that could disagree
+with the times beside it. Whether a time has gone stale is the user's to judge
+from that timestamp, and Recalculate is how they act on it. **No timer writes
+to this store.**
 
 #### Draft and committed input — M15
 

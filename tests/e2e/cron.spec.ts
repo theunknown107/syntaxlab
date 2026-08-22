@@ -1,8 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+import { pressAnalyze } from './analyze';
+
 /**
- * The cron workspace, end to end — M15
+ * The cron workspace, end to end — M15, M16
  *
  * Drives the real worker, the real parser and the real UI. What the unit
  * suites cannot show is that the whole path holds together: a refusal reaching
@@ -27,7 +29,11 @@ async function analyse(page: Page, expression: string): Promise<void> {
   await page.keyboard.press('ControlOrMeta+a');
   if (expression === '') await page.keyboard.press('Backspace');
   else await page.keyboard.insertText(expression);
-  await analyzeButton(page).click();
+
+  // The control refuses the press while there is nothing new to submit, and
+  // it does so with `aria-disabled` — invisible to Playwright's actionability
+  // checks. See `analyze.ts`.
+  await pressAnalyze(page, 'cron');
 }
 
 test.beforeEach(async ({ page }) => {
@@ -116,7 +122,7 @@ test('analyses nothing until asked, and says the editor has moved on', async ({ 
   await page.waitForTimeout(2_000);
   await expect(panel(page, 'Fields')).toContainText(/press Analyze/i);
 
-  await analyzeButton(page).click();
+  await pressAnalyze(page, 'cron');
   await expect(panel(page, 'Explanation')).toContainText('00:00', { timeout: 15_000 });
 
   // Editing again keeps the previous answer and marks it.
@@ -126,7 +132,7 @@ test('analyses nothing until asked, and says the editor has moved on', async ({ 
   await expect(page.getByText('Unanalyzed changes')).toBeVisible();
   await expect(panel(page, 'Explanation')).toContainText('00:00');
 
-  await analyzeButton(page).click();
+  await pressAnalyze(page, 'cron');
   await expect(page.getByText('Unanalyzed changes')).toBeHidden({ timeout: 15_000 });
 });
 
@@ -164,16 +170,115 @@ test('shows which clock the times are read in, and offers exactly two', async ({
 });
 
 /* ------------------------------------------------------------------ *
- * What M15 must not have built
+ * Next runs — M16
  * ------------------------------------------------------------------ */
 
-test('computes no run times, and offers no named timezone', async ({ page }) => {
+test('says when the expression runs next, and what comes after', async ({ page }) => {
   await analyse(page, '*/15 9-17 * * 1-5');
-  await expect(panel(page, 'Explanation')).toContainText('every 15 minutes', { timeout: 15_000 });
+  const runs = panel(page, 'Next runs');
+  await expect(runs).toContainText('Next run', { timeout: 15_000 });
 
-  // M16's work, and none of it may have leaked in early.
-  await expect(page.getByText(/next run/i)).toHaveCount(0);
-  await expect(page.getByRole('table', { name: /next|schedule/i })).toHaveCount(0);
+  // A real date, in the shape the panel formats: "Tue 10 March 2026, 12:15".
+  await expect(runs).toContainText(/\d{1,2} \w+ \d{4}, \d{2}:\d{2}/);
+
+  // And the runs after it, capped rather than endless.
+  const upcoming = page.getByRole('list', { name: /upcoming runs/i });
+  const count = await upcoming.getByRole('listitem').count();
+  expect(count).toBeGreaterThan(0);
+  expect(count).toBeLessThanOrEqual(9);
+});
+
+test('never shows a time without saying which clock it is read in', async ({ page }) => {
+  // Invariant C-I1, on the surface that makes it matter most.
+  await analyse(page, '0 3 * * *');
+  const runs = panel(page, 'Next runs');
+  await expect(runs).toContainText('Next run', { timeout: 15_000 });
+  await expect(runs).toContainText(/This browser|UTC/);
+
+  await page.getByRole('radio', { name: /^UTC$/ }).click();
+  await expect(runs).toContainText('UTC', { timeout: 15_000 });
+});
+
+test('recalculates on request, and says when it last did', async ({ page }) => {
+  await analyse(page, '*/15 * * * *');
+  const runs = panel(page, 'Next runs');
+  await expect(runs).toContainText('Calculated at', { timeout: 15_000 });
+
+  await runs.getByRole('button', { name: /recalculate/i }).click();
+  await expect(runs).toContainText('Next run', { timeout: 15_000 });
+});
+
+test('says @reboot has no clock time rather than calling it invalid', async ({ page }) => {
+  await analyse(page, '@reboot');
+  await expect(panel(page, 'Next runs')).toContainText(/no clock time/i, { timeout: 15_000 });
+});
+
+test('says plainly when a schedule never comes round', async ({ page }) => {
+  // 30 February parses. It never happens.
+  await analyse(page, '0 0 30 2 *');
+  await expect(panel(page, 'Next runs')).toContainText(/no run in the next 5 years/i, {
+    timeout: 15_000,
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Daylight saving, end to end
+ *
+ * The zone is pinned to one that changes its clocks and the page clock is
+ * pinned to the day before a transition, because otherwise these runs are only
+ * reachable twice a year. The worker needs neither: the instant to search from
+ * travels with the request, and the zone comes from the browser context.
+ * ------------------------------------------------------------------ */
+
+test.describe('when the clocks change', () => {
+  test.use({ timezoneId: 'Europe/London' });
+
+  test('reports a run the clocks skipped, without inventing a time for it', async ({ page }) => {
+    // 29 March 2026: 01:00 becomes 02:00, so 01:30 never happens.
+    await page.clock.setFixedTime(new Date('2026-03-28T12:00:00Z'));
+    await start(page);
+    await analyse(page, '30 1 * * *');
+
+    const runs = panel(page, 'Next runs');
+    await expect(runs).toContainText('Clock skipped', { timeout: 15_000 });
+    await expect(runs).toContainText(/Most schedulers skip the run/i);
+  });
+
+  test('reports a run that happens twice, with both offsets', async ({ page }) => {
+    // 25 October 2026: 02:00 becomes 01:00, so 01:30 happens twice.
+    await page.clock.setFixedTime(new Date('2026-10-24T12:00:00Z'));
+    await start(page);
+    await analyse(page, '30 1 * * *');
+
+    const runs = panel(page, 'Next runs');
+    await expect(runs).toContainText('Happens twice', { timeout: 15_000 });
+    await expect(runs).toContainText('UTC+01:00');
+  });
+
+  test('has no accessibility violations while reporting one', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-24T12:00:00Z'));
+    await start(page);
+    await analyse(page, '30 1 * * *');
+    await expect(panel(page, 'Next runs')).toContainText('Happens twice', { timeout: 15_000 });
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+
+    const serious = results.violations.filter(
+      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+    );
+    expect(serious).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * What M16 must still not have built
+ * ------------------------------------------------------------------ */
+
+test('offers no named timezone, and puts no times in the URL', async ({ page }) => {
+  await analyse(page, '*/15 9-17 * * 1-5');
+  await expect(panel(page, 'Next runs')).toContainText('Next run', { timeout: 15_000 });
 
   // No *selector* for a named zone. The resolved zone name is a different
   // thing and must be visible — invariant C-I1 is that a time never appears
@@ -183,6 +288,14 @@ test('computes no run times, and offers no named timezone', async ({ page }) => 
   // Exactly two clock options, and neither is a zone list.
   const clocks = page.getByRole('radio', { name: /This browser|^UTC$/ });
   await expect(clocks).toHaveCount(2);
+
+  // The expression and its run times stay out of the address bar: they are
+  // the user's content, and a URL is the one part of this app that travels.
+  const url = new URL(page.url());
+  expect(url.search).not.toContain('9-17');
+  for (const key of ['cron', 'expr', 'next', 'runs', 'schedule', 'after']) {
+    expect(url.searchParams.has(key), key).toBe(false);
+  }
 });
 
 /* ------------------------------------------------------------------ *
@@ -218,6 +331,8 @@ test('has no critical or serious accessibility violations', async ({ page }) => 
   // and the field table with a failing row are all new surfaces.
   await analyse(page, '0 0 1 * 1');
   await expect(panel(page, 'Explanation')).toContainText('either, not both', { timeout: 15_000 });
+  // Including M16's panel, which is the newest surface on the page.
+  await expect(panel(page, 'Next runs')).toContainText('Next run', { timeout: 15_000 });
 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

@@ -1,6 +1,7 @@
 import type { RegexAnalysis } from '@/domain/regex/ast';
 import type { JsonAnalysis } from '@/domain/json/ast';
 import type { CronAnalysis, CronTimezoneMode } from '@/domain/cron/ast';
+import type { CronSchedulePreview } from '@/domain/cron/schedule';
 import type { IndentStyle } from '@/domain/json/format';
 import type { DetectionResult } from '@/domain/shared/detect';
 import type { RegexExecResult } from '@/domain/regex/execute';
@@ -115,6 +116,18 @@ export interface WorkspaceState {
   readonly cronStatus: AnalysisStatus;
   readonly cronError: WorkspaceFailure | null;
   /**
+   * When the committed expression runs next — M16.
+   *
+   * Separate from `cronAnalysis` because the two age differently. What
+   * `0 9 * * 1` *means* is true for as long as it is on screen; when it next
+   * runs stops being true the moment it does. Keeping them apart lets the
+   * times be recomputed without re-explaining the expression, and lets the
+   * next-run panel show its own loading and failure states.
+   */
+  readonly cronSchedule: CronSchedulePreview | null;
+  readonly cronScheduleStatus: AnalysisStatus;
+  readonly cronScheduleError: WorkspaceFailure | null;
+  /**
    * Which clock the times are read in.
    *
    * Two values, and no more: named IANA zones are not implemented, and a
@@ -154,6 +167,9 @@ const initialState: WorkspaceState = {
   cronAnalysis: null,
   cronStatus: 'idle',
   cronError: null,
+  cronSchedule: null,
+  cronScheduleStatus: 'idle',
+  cronScheduleError: null,
   cronTimezoneMode: 'browserLocal',
 };
 

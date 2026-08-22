@@ -3,6 +3,7 @@ import { domainError, truncateForMessage } from '@/domain/shared/result';
 import { analyzeRegex } from '@/domain/regex/analyze';
 import { analyzeJson } from '@/domain/json/analyze';
 import { analyzeCron } from '@/domain/cron/analyze';
+import { previewSchedule } from '@/domain/cron/schedule';
 import {
   describeRequestRejection,
   isAnalysisRequest,
@@ -12,6 +13,7 @@ import {
   type AnalysisPingPayload,
   type AnalysisPingResult,
   type AnalysisCronPayload,
+  type AnalysisCronSchedulePayload,
   type AnalysisJsonPayload,
   type AnalysisRegexPayload,
   type AnalysisRequest,
@@ -106,6 +108,36 @@ function handleCron(id: number, payload: AnalysisCronPayload): WorkerResponse {
     : { id, ok: false, error: result.error };
 }
 
+/**
+ * Next-run calculation — M16.
+ *
+ * Runs here rather than on the main thread because it is the one piece of cron
+ * work with a search in it. Ordinary expressions settle in a few dozen steps,
+ * but a sparse one — `0 0 29 2 *`, or a day/month pair that never co-occur —
+ * walks years of calendar before it can honestly say "never", and the thread
+ * doing that walking should not be the one drawing the page.
+ *
+ * The expression is re-parsed here rather than shipped in as an analysis: the
+ * parser is the sole authority on cron syntax, and accepting a caller's parse
+ * tree would make the caller a second one. The schedule engine itself never
+ * sees the text (04_PARSER_ARCHITECTURE.md §6).
+ */
+function handleCronSchedule(id: number, payload: AnalysisCronSchedulePayload): WorkerResponse {
+  const mode = payload.timezoneMode === 'utc' ? 'utc' : 'browserLocal';
+  const analysis = analyzeCron(payload.source, { timezoneMode: mode });
+  if (!analysis.ok) return { id, ok: false, error: analysis.error };
+
+  return {
+    id,
+    ok: true,
+    result: previewSchedule(analysis.value, {
+      mode,
+      after: payload.after,
+      count: payload.count,
+    }),
+  };
+}
+
 function dispatch(request: AnalysisRequest): WorkerResponse {
   // Exhaustive by design: adding an operation without handling it is a lint
   // error. That rule is what caught this case being missing during M3.
@@ -124,6 +156,9 @@ function dispatch(request: AnalysisRequest): WorkerResponse {
 
     case 'analysis.cron':
       return handleCron(request.id, request.payload);
+
+    case 'analysis.cronSchedule':
+      return handleCronSchedule(request.id, request.payload);
   }
 }
 

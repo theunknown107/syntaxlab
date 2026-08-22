@@ -712,7 +712,7 @@ rather than a security one: three buttons shared the bare accessible name
 
 ---
 
-## 18. The cron security boundary — *built at M14*
+## 18. The cron security boundary — *built at M14, extended at M16*
 
 Cron adds an input surface but **not** an execution surface. This is the distinction that matters, and it is why cron lives on the long-lived analysis worker rather than the disposable one:
 
@@ -749,6 +749,22 @@ Four properties hold on that path:
 4. **Nothing is trusted across the worker boundary in either direction.** The request payload is validated and rebuilt field by field before the worker acts on it — including the timezone mode, which is the only caller-supplied value that reaches a `Date`. The result is validated exhaustively before the main thread indexes into it.
 
 **What a hostile cron expression can achieve:** an error message. That is the whole of it. The parser recovers per field, the limits refuse oversized input before reading it, and 1 200 fuzz cases over the full hostile character set produce no throw.
+
+### 18.1 The schedule operation — *M16*
+
+`analysis.cronSchedule` adds a **search** to that path, which is the first cron work whose cost depends on something other than the input length. It changes the analysis above in exactly one way, and the change is bounded:
+
+| Property | How it holds |
+|---|---|
+| Termination | Bounded twice — a 5-year calendar horizon, and a 100 000-step tripwire beneath it. Worst measured case: **326 steps**. No `while (true)` |
+| No new globals | `Date` and `Intl`, already read by the timezone resolution. **No date library, no timezone database, no network** |
+| Payload validated | `after` must be a finite number and `count` a positive integer — a NaN start instant would make every comparison in the search false |
+| Result validated | `isValidSchedulePreview`, exhaustively and by value, then **rebuilt field by field** — unlike the analysis tree, the preview is at most ten occurrences and every number in it is formatted as a time or used to compute one |
+| Null instants | Legal for a `skipped` reading and for nothing else. A forged null on a run that happens would render as a blank where a date belongs, and is refused |
+| Offsets | Checked against the real range, −12:00 to +14:00 |
+| Horizon | A result claiming a horizon this build does not use did not come from this build, and is refused |
+
+**Why the worker re-parses rather than accepting an analysis.** Sending a parse tree *into* the worker would mean trusting caller-supplied structure to drive a search. Sending text costs one extra parse — microseconds, measured — and keeps the parser the only thing in the system that reads cron syntax.
 
 ---
 

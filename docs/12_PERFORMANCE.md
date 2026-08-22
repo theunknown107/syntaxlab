@@ -179,7 +179,7 @@ Everything expensive is off the main thread:
 | Tokenising, parsing, explanation generation | Analysis worker |
 | Regex execution | Execution worker |
 | Cron analysis (parse, warn, explain) | Analysis worker |
-| Cron next-run computation *(M16)* | Analysis worker |
+| Cron next-run computation | Analysis worker — it is the one piece of cron work that *searches* (§14) |
 | Detection heuristics | Main (bounded to a 1 KB sample — cheaper than the postMessage round trip) |
 | JSON formatting | Analysis worker above 100 KB, main below |
 | Tree rendering | Main (it is DOM work) |
@@ -1304,3 +1304,48 @@ spying on `history.replaceState` and `history.pushState`
 Anchoring a macro's field spans to the macro cost nothing measurable, which
 is what a `map` over five fields should cost. The wide-list figure sits inside
 the 1.07–1.85 ms spread already recorded in §13.
+
+
+---
+
+## 14. The cron schedule search — measured at M16
+
+`npm run measure:cron`. 2 000 runs each after 200 warmup runs, asking for ten
+occurrences from a fixed instant, on the development machine.
+
+| Case | p50 | p95 | p99 | max | steps |
+|---|---|---|---|---|---|
+| every minute `* * * * *` | 0.005 ms | 0.009 ms | 0.025 ms | 0.162 ms | 10 |
+| typical `*/15 9-17 * * 1-5` | 0.004 ms | 0.010 ms | 0.012 ms | 0.326 ms | 12 |
+| daily `0 0 * * *` | 0.009 ms | 0.019 ms | 0.040 ms | 0.348 ms | 29 |
+| weekly `0 9 * * 1` | 0.019 ms | 0.060 ms | 0.108 ms | 0.590 ms | 100 |
+| monthly `0 0 1 * *` | 0.066 ms | 0.130 ms | 0.207 ms | 0.850 ms | 326 |
+| yearly `0 0 1 1 *` | 0.030 ms | 0.067 ms | 0.125 ms | 0.619 ms | 177 |
+| leap day `0 0 29 2 *` | 0.034 ms | 0.058 ms | 0.098 ms | 0.513 ms | 160 |
+| **never occurs** `0 0 30 2 *` | 0.032 ms | 0.053 ms | 0.092 ms | 0.493 ms | 158 |
+| sparse pair `0 0 31 2 *` | 0.034 ms | 0.057 ms | 0.097 ms | 0.478 ms | 158 |
+
+**The worst case is not the impossible one.** `0 0 30 2 *` walks the entire
+five-year horizon and answers in 158 steps, because a month whose days cannot
+match is skipped whole. Ten *monthly* runs cost twice that — 326 steps — since
+each one is found and then stepped past. That is the shape to expect from a
+field-advance search: cost tracks the number of answers and the sparsity of the
+calendar, not the size of the window.
+
+| | |
+|---|---|
+| Slowest p99 | **0.207 ms** — 77× inside a 16 ms frame |
+| Most steps | **326** of 100 000 allowed — **307× headroom** on the tripwire |
+| Minute-by-minute equivalent | ~2.6 M iterations for the same window |
+
+**Why the step count is reported at all.** The bound is a tripwire for a bug —
+an advance that stops advancing — rather than a budget the search spends. A
+bound nobody measures is a bound nobody knows the margin on, so the search
+returns its own step count, a property test asserts it stays under the
+tripwire across 300 generated schedules, and this table records the margin.
+
+**Where it runs.** On the analysis worker, with the rest of the cron work. Not
+because it is slow — it is measured above, and it is not — but because it is
+the one piece of cron work whose cost depends on the calendar rather than on
+the input, and the thread doing that walking should not be the one drawing the
+page.

@@ -7,7 +7,15 @@ import type { CronAnalysis } from '@/domain/cron/ast';
 import type { SpanLinkHandlers } from '@/components/ExplanationView';
 import { AnalyzeAction, AnalyzeStatus } from '@/components/primitives/AnalyzeAction';
 import { submissionOf } from '@/application/stores/workspaceStore';
+import { LIMITS } from '@/domain/shared/limits';
+import { previewSchedule, type CronSchedulePreview } from '@/domain/cron/schedule';
 import { CronFields } from '@/features/cron/CronFields';
+import { CronSchedule } from '@/features/cron/CronSchedule';
+import { refreshCronSchedule } from '@/application/cron/cronWorkspace';
+
+// The panel offers a Recalculate control; what is tested here is that it asks,
+// not what the worker answers.
+vi.mock('@/application/cron/cronWorkspace', () => ({ refreshCronSchedule: vi.fn() }));
 
 /**
  * Cron UI — M15
@@ -239,5 +247,134 @@ describe('the Analyze control', () => {
 
     rerender(<AnalyzeStatus submission={stale} busy subject="pattern" />);
     expect(container.querySelector('[aria-live="polite"]')).toHaveTextContent(/Analyzing pattern/i);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * The next-run panel — M16
+ * ------------------------------------------------------------------ */
+
+/** A real preview, from the real engine. No hand-written fixtures. */
+function preview(
+  source: string,
+  mode: 'browserLocal' | 'utc' = 'utc',
+  after = Date.parse('2026-03-10T12:00:00Z'),
+): CronSchedulePreview {
+  const analysis = analyzeCron(source, { timezoneMode: mode });
+  if (!analysis.ok) throw new Error(`expected ${source} to analyse`);
+  return previewSchedule(analysis.value, { mode, after, count: LIMITS.cron.maxOccurrences });
+}
+
+function renderSchedule(value: CronSchedulePreview | null, overrides = {}): void {
+  render(
+    <CronSchedule
+      preview={value}
+      status="ready"
+      failure={null}
+      hasAnalysis={value !== null}
+      {...overrides}
+    />,
+  );
+}
+
+describe('the next-run panel', () => {
+  it('leads with the next run, as a date a person can read', () => {
+    renderSchedule(preview('*/15 9-17 * * 1-5'));
+
+    // 2026-03-10 is a Tuesday; the next quarter hour inside 09:00–17:00 UTC.
+    expect(screen.getByText(/Next run/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tue 10 March 2026, 12:15/)).toBeInTheDocument();
+  });
+
+  it('lists the runs after it, capped rather than endless', () => {
+    renderSchedule(preview('*/15 * * * *'));
+
+    const upcoming = screen.getByRole('list', { name: /upcoming runs/i });
+    // The cap counts the next run too, so the list holds one fewer.
+    expect(within(upcoming).getAllByRole('listitem')).toHaveLength(LIMITS.cron.maxOccurrences - 1);
+  });
+
+  it('reads times in the mode that was asked for, not the browser zone', () => {
+    // The regression this panel must never have: a UTC preview handed to
+    // `toLocaleString` would be helpfully converted back into the reader's own
+    // zone, which is the opposite of what the UTC mode is for. The wall clock
+    // the domain matched is what gets rendered.
+    renderSchedule(preview('0 0 * * *', 'utc'));
+    expect(screen.getByText(/Wed 11 March 2026, 00:00/)).toBeInTheDocument();
+    expect(screen.getAllByText(/UTC/).length).toBeGreaterThan(0);
+  });
+
+  it('says @reboot has no clock time rather than calling it invalid', () => {
+    renderSchedule(preview('@reboot'));
+    expect(screen.getByText(/no clock time/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Next run/i)).not.toBeInTheDocument();
+  });
+
+  it('says plainly when a schedule never comes round', () => {
+    // 30 February is a date, syntactically. It is not a date, actually.
+    renderSchedule(preview('0 0 30 2 *'));
+    expect(screen.getByText(/no run in the next 5 years/i)).toBeInTheDocument();
+  });
+
+  it('marks a run the clocks skipped, and shows no time for it', () => {
+    // Europe/London, 29 March 2026: 01:30 does not happen.
+    const previousTz = process.env.TZ;
+    process.env.TZ = 'Europe/London';
+    try {
+      renderSchedule(preview('30 1 * * *', 'browserLocal', Date.parse('2026-03-28T12:00:00Z')));
+      expect(screen.getByText(/Clock skipped/i)).toBeInTheDocument();
+      // It describes what schedulers do rather than picking one.
+      expect(screen.getByText(/Most schedulers skip the run/i)).toBeInTheDocument();
+    } finally {
+      if (previousTz === undefined) delete process.env.TZ;
+      else process.env.TZ = previousTz;
+    }
+  });
+
+  it('marks a run that happens twice, and shows both offsets', () => {
+    // Europe/London, 25 October 2026: 01:30 happens twice, BST then GMT.
+    const previousTz = process.env.TZ;
+    process.env.TZ = 'Europe/London';
+    try {
+      renderSchedule(preview('30 1 * * *', 'browserLocal', Date.parse('2026-10-24T12:00:00Z')));
+      expect(screen.getByText(/Happens twice/i)).toBeInTheDocument();
+      expect(screen.getByText('UTC+01:00')).toBeInTheDocument();
+      expect(screen.getByText('UTC')).toBeInTheDocument();
+    } finally {
+      if (previousTz === undefined) delete process.env.TZ;
+      else process.env.TZ = previousTz;
+    }
+  });
+
+  it('says the times are calculated, not live', () => {
+    renderSchedule(preview('0 0 * * *'));
+    expect(screen.getByText(/Calculated at/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /recalculate/i })).toBeInTheDocument();
+  });
+
+  it('recalculates on request rather than on a timer', async () => {
+    const user = userEvent.setup();
+    renderSchedule(preview('0 0 * * *'));
+
+    await user.click(screen.getByRole('button', { name: /recalculate/i }));
+    expect(refreshCronSchedule).toHaveBeenCalledTimes(1);
+  });
+
+  it('invites an analysis before there is one, rather than showing an empty list', () => {
+    renderSchedule(null);
+    expect(screen.getByText(/Analyze an expression/i)).toBeInTheDocument();
+  });
+
+  it('says it is working while the times are being calculated', () => {
+    renderSchedule(preview('0 0 * * *'), { status: 'analyzing' });
+    expect(screen.getByRole('status')).toHaveTextContent(/calculating/i);
+  });
+
+  it('shows a failure as an answer rather than an empty panel', () => {
+    renderSchedule(preview('0 0 * * *'), {
+      status: 'error',
+      failure: { message: 'The analysis engine could not start in this browser.' },
+    });
+    expect(screen.getByRole('status')).toHaveTextContent(/could not start/i);
   });
 });
