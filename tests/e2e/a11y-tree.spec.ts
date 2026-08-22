@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { pressAnalyze } from './analyze';
+
 /**
  * M10 — the accessibility tree.
  *
@@ -85,6 +87,8 @@ test('every control in the JSON workspace has an accessible name', async ({ page
   await start(page);
   await page.getByRole('radio', { name: 'JSON' }).click();
   await page.getByRole('textbox', { name: 'JSON document' }).fill('{"a":{"b":[1,2]},"c":true}');
+  // M15 made analysis explicit: filling the editor analyses nothing.
+  await pressAnalyze(page, 'json');
   await expect(page.getByRole('tree', { name: 'JSON structure' })).toBeVisible({ timeout: 15_000 });
 
   expect(await unnamedControls(page)).toEqual([]);
@@ -159,6 +163,7 @@ test('status changes are announced politely, and errors are not silent', async (
 test('the explanation and the syntax tree are reachable as structures', async ({ page }) => {
   await start(page);
   await page.getByRole('textbox', { name: 'Regular expression' }).fill('^a(b|c)+$');
+  await pressAnalyze(page, 'pattern');
   await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({ timeout: 15_000 });
 
   // Regions are how a screen-reader user jumps between the panes.

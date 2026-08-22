@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { pressAnalyze } from './analyze';
+
 /**
  * M10 — accessibility and security hardening.
  *
@@ -149,6 +151,8 @@ test.describe('forced colors', () => {
   test('the analysis panes remain usable', async ({ page }) => {
     await startWithMedia(page, { forcedColors: 'active' });
     await patternField(page).fill('^a(b|c)+$');
+    // M15 made analysis explicit: filling the editor analyses nothing.
+    await pressAnalyze(page, 'pattern');
     await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
       timeout: 15_000,
     });
@@ -156,6 +160,7 @@ test.describe('forced colors', () => {
 
     await page.getByRole('radio', { name: 'JSON' }).click();
     await page.getByRole('textbox', { name: 'JSON document' }).fill('{"a":[1,2]}');
+    await pressAnalyze(page, 'json');
     await expect(page.getByRole('tree', { name: 'JSON structure' })).toBeVisible({
       timeout: 15_000,
     });
@@ -217,6 +222,7 @@ test.describe('hostile input', () => {
       constructor: '<script>alert(1)</script>',
     });
     await page.getByRole('textbox', { name: 'JSON document' }).fill(document_);
+    await pressAnalyze(page, 'json');
     await expect(page.getByRole('tree', { name: 'JSON structure' })).toBeVisible({
       timeout: 15_000,
     });
@@ -242,6 +248,8 @@ test.describe('hostile input', () => {
     await start(page);
 
     await patternField(page).fill('<img src=x onerror=alert(1)>');
+    // The entry only reaches history once it has been analysed.
+    await pressAnalyze(page, 'pattern');
     await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
       timeout: 15_000,
     });

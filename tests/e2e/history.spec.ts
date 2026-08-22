@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+import { pressAnalyze } from './analyze';
+
 /**
  * M7 — history end to end.
  *
@@ -31,8 +33,7 @@ async function analysePattern(page: Page, pattern: string): Promise<void> {
   await patternField(page).fill(pattern);
   // M15: typing records nothing, because it analyses nothing. History only
   // ever sees a completed analysis, which is the property under test here.
-  const button = page.getByRole('button', { name: 'Analyze pattern' });
-  if (await button.isEnabled()) await button.click();
+  await pressAnalyze(page, 'pattern');
   await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -124,7 +125,7 @@ test('pins an entry and filters to pinned only', async ({ page }) => {
   await closeDrawer(page);
 
   await patternField(page).fill('second+one');
-  await page.getByRole('button', { name: 'Analyze pattern' }).click();
+  await pressAnalyze(page, 'pattern');
   await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible();
   await openDrawer(page);
   await expect(drawer(page).getByText('/second+one/g')).toBeVisible({ timeout: CAPTURE_WAIT });
@@ -317,7 +318,7 @@ test('regex and JSON still work when storage is unavailable', async ({ page }) =
 
   await page.getByRole('radio', { name: 'JSON' }).click();
   await page.getByRole('textbox', { name: 'JSON document' }).fill('{"a":1}');
-  await page.getByRole('button', { name: 'Analyze JSON document' }).click();
+  await pressAnalyze(page, 'json');
   await expect(page.getByText(/^Valid ·/)).toBeVisible({ timeout: 10_000 });
 });
 

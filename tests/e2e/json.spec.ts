@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+import { pressAnalyze } from './analyze';
+
 /**
  * M6 — the JSON workspace end to end.
  *
@@ -42,8 +44,7 @@ async function type(page: Page, value: string): Promise<void> {
   if (value === '') await page.keyboard.press('Backspace');
   else await page.keyboard.insertText(value);
 
-  const button = page.getByRole('button', { name: 'Analyze JSON document' });
-  if (await button.isEnabled()) await button.click();
+  await pressAnalyze(page, 'json');
 }
 
 test.beforeEach(async ({ page }) => {
@@ -306,7 +307,7 @@ test('a large document waits for an explicit action — as every document now do
   await page.keyboard.insertText(big);
   await expect(tree(page)).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Analyze JSON document' }).click();
+  await pressAnalyze(page, 'json');
   await expect(page.getByText(/^Valid ·/)).toBeVisible({ timeout: 30_000 });
   await expect(tree(page)).toBeVisible();
 });

@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { pressAnalyze } from './analyze';
 
 /**
  * M9 — offline, against the real service worker.
@@ -111,6 +112,8 @@ test.describe('offline', () => {
     // And the analysis worker did too — this is the assertion that catches a
     // worker chunk missing from the precache, which works perfectly online.
     await patternField(page).fill('^(a|b)+c$');
+    // M15 made analysis explicit: filling the editor analyses nothing.
+    await pressAnalyze(page, 'pattern');
     await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
       timeout: 15_000,
     });
@@ -129,6 +132,7 @@ test.describe('offline', () => {
     await page.reload();
 
     await patternField(page).fill(String.raw`\d+`);
+    await pressAnalyze(page, 'pattern');
     await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
       timeout: 15_000,
     });
@@ -151,6 +155,7 @@ test.describe('offline', () => {
 
     await page.getByRole('radio', { name: 'JSON' }).click();
     await page.getByRole('textbox', { name: 'JSON document' }).fill('{"b":[1,2],"a":{"c":true}}');
+    await pressAnalyze(page, 'json');
     await expect(page.getByText(/^Valid ·/)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('tree', { name: 'JSON structure' })).toBeVisible();
 
@@ -171,6 +176,8 @@ test.describe('offline', () => {
     const gotIt = page.getByRole('button', { name: 'Got it' });
     if (await gotIt.isVisible()) await gotIt.click();
     await patternField(page).fill('online-pattern');
+    // History records completed analyses, so one has to be asked for.
+    await pressAnalyze(page, 'pattern');
     await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
       timeout: 15_000,
     });
@@ -188,6 +195,7 @@ test.describe('offline', () => {
     // And a new one can be written while offline.
     await page.keyboard.press('Escape');
     await patternField(page).fill('offline-pattern');
+    await pressAnalyze(page, 'pattern');
     await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({
       timeout: 15_000,
     });

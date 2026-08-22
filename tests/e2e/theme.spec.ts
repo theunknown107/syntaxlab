@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+import { pressAnalyze } from './analyze';
+
 /**
  * M8 — theme customisation end to end.
  *
@@ -530,7 +532,7 @@ test('remains usable in forced-colors mode', async ({ page }) => {
 test('theme changes do not touch history records', async ({ page }) => {
   // 19: theme is a global preference; a history entry is independent of it.
   await page.getByRole('textbox', { name: 'Regular expression' }).fill('ab+c');
-  await page.getByRole('button', { name: 'Analyze pattern' }).click();
+  await pressAnalyze(page, 'pattern');
   await expect(page.getByRole('region', { name: 'Explanation' })).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(4_000);
 
@@ -725,7 +727,7 @@ test('the editor decorations carry no green inside a non-green theme', async ({ 
   await page.keyboard.type('^(a|b)+' + String.raw`\d` + '[x-z]$');
   // M15: typing analyses nothing, and the token decorations come from the
   // analysis. They arrive when one is asked for.
-  await page.getByRole('button', { name: 'Analyze pattern' }).click();
+  await pressAnalyze(page, 'pattern');
 
   // Highlighting arrives from the analysis worker, so the decorations are not
   // in the DOM on the same tick as the keystrokes.
@@ -904,7 +906,7 @@ test.describe('a hostile link', () => {
     await start(page);
     await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
     await page.keyboard.insertText('secret-[a-z]+-pattern');
-    await page.getByRole('button', { name: 'Analyze pattern' }).click();
+    await pressAnalyze(page, 'pattern');
     await page.waitForTimeout(1000);
 
     const url = page.url();

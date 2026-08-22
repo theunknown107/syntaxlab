@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { pressAnalyze } from './analyze';
+
 /**
  * M12 — the release gates that are about the *deployment*, not the features.
  *
@@ -467,6 +469,8 @@ test.describe('storage at scale', () => {
     await page.getByRole('textbox', { name: 'Regular expression' }).click();
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.insertText('afterFullStore\\w+');
+    // M15 made analysis explicit: typing analyses nothing.
+    await pressAnalyze(page, 'pattern');
     await expect(page.getByRole('region', { name: 'Explanation' }).first()).toContainText(
       /word character/i,
       { timeout: 20_000 },

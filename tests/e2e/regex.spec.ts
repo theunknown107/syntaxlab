@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+import { pressAnalyze } from './analyze';
+
 /**
  * M4 — the regex workspace end to end.
  *
@@ -51,8 +53,7 @@ async function type(page: Page, target: 'pattern' | 'subject', value: string): P
 
 /** Presses Analyze when there is something to analyse. */
 async function analyze(page: Page): Promise<void> {
-  const button = page.getByRole('button', { name: 'Analyze pattern' });
-  if (await button.isEnabled()) await button.click();
+  await pressAnalyze(page, 'pattern');
 }
 
 test.beforeEach(async ({ page }) => {
@@ -143,7 +144,7 @@ test('a flag change waits to be analysed, then re-runs the match', async ({ page
   await expect(page.getByText('Unanalyzed changes')).toBeVisible();
   await expect(matches.getByText('No matches.')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Analyze pattern' }).click();
+  await pressAnalyze(page, 'pattern');
   await expect(matches.getByText('1 match')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText('Unanalyzed changes')).toBeHidden();
 });
@@ -417,7 +418,7 @@ test('renders a large match list progressively rather than all at once', async (
   await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
   await page.keyboard.type('a');
   // The tester runs the *committed* pattern, so it has to be analysed first.
-  await page.getByRole('button', { name: 'Analyze pattern' }).click();
+  await pressAnalyze(page, 'pattern');
 
   // ~4 000 matches. `insertText` dispatches one input event rather than 12 000
   // key events, which keeps this test to a second and needs no clipboard
@@ -448,7 +449,7 @@ test('resets the match list when the result changes', async ({ page }) => {
 
   await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
   await page.keyboard.type('a');
-  await page.getByRole('button', { name: 'Analyze pattern' }).click();
+  await pressAnalyze(page, 'pattern');
   await page.getByRole('textbox', { name: 'Test string' }).click();
   await page.keyboard.insertText('ab '.repeat(4_000));
 
@@ -460,6 +461,6 @@ test('resets the match list when the result changes', async ({ page }) => {
   // result would be both wrong and slow.
   await page.getByRole('textbox', { name: 'Regular expression pattern' }).click();
   await page.keyboard.type('b');
-  await page.getByRole('button', { name: 'Analyze pattern' }).click();
+  await pressAnalyze(page, 'pattern');
   await expect(page.locator('tbody tr')).toHaveCount(200);
 });
