@@ -792,6 +792,7 @@ in the next.
 | Disabled | While busy, when the editor is empty, and when the visible result already describes the editor |
 | Keyboard | `Ctrl/⌘ + Enter` anywhere in the workspace. **Plain Enter is left alone in every mode** — it is an editing key in JSON and regex, and giving cron a different rule for the sake of one keystroke would be three interactions to learn instead of one |
 | Announcement | A polite live region, separate from the button, so a screen reader is not read a label changing mid-press |
+| Unavailable | `aria-disabled`, **not** `disabled`. Pressing this button is what makes it unavailable — the analysis lands and there is nothing left to submit — and a real `disabled` attribute makes the browser blur the element at that moment, returning a keyboard user to the top of the document. The state is announced, the click is refused in the handler, and focus stays where the user put it |
 
 ### What Analyze does *not* do
 

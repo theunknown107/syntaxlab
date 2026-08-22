@@ -590,5 +590,5 @@ would have rendered JSON for cron mode and re-saved whatever JSON sat in the
 other editor on every cron analysis. Both are exhaustive switches now.
 
 **Measured, not assumed:** code-splitting the cron workspace made the bundle
-*larger* (173.88 KB against 172.19 KB inline), the second time that experiment
+*larger* (173.88 KB against 172.20 KB inline), the second time that experiment
 has come out that way in this project.

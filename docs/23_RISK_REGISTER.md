@@ -613,7 +613,7 @@ this removes.
 
 ### R-27 — the bundle is over its target 🟡 accepted, measured
 
-172.19 KB against a 170 KB target, inside the 200 KB hard limit. Code-splitting
+172.20 KB against a 170 KB target, inside the 200 KB hard limit. Code-splitting
 the cron workspace was tried and measured at **173.88 KB** — worse, for the
 same reason the theme drawer experiment was worse. The remaining lever is the
 editor at 60% of the bundle, which is architectural work rather than a

@@ -1264,7 +1264,7 @@ not finished writing.
 | | |
 |---|---|
 | After M14 | 167.44 KB |
-| **After M15** | **172.19 KB** — over the 170 KB target, inside the 200 KB hard limit |
+| **After M15** | **172.20 KB** — over the 170 KB target, inside the 200 KB hard limit |
 
 The 4.75 KB is the cron workspace, its field table and the shared Analyze
 control.
