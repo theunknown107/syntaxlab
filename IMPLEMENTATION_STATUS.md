@@ -2,7 +2,7 @@
 
 **Project:** SyntaxLab
 **Phase:** 2 — implementation
-**Current milestone:** M16 complete — the cron **schedule engine**: next runs, the 5-year bound, and DST anomalies. M17 (the V1.1 release) is next and has not started.
+**Current milestone:** M17 complete — **v1.1.0 released** and live at <https://syntaxlab-jet.vercel.app>.
 **Last updated:** 2026-08-22
 
 > Living document, updated at the end of every milestone. The architecture
@@ -16,7 +16,7 @@
 | Release | Scope | Status |
 |---|---|---|
 | **V1.0** | Regex · JSON · history · theme · PWA · a11y · security · tests · perf | ✅ Built and deployed |
-| V1.1 | Cron — standard 5-field only | 🔨 **Domain, UI and schedule engine complete (M14, M15, M16).** Awaiting the M17 release. |
+| V1.1 | Cron — standard 5-field only | ✅ **Released as v1.1.0** — domain, UI and schedule engine (M14–M16), shipped at M17 |
 | V1.2+ | Share URLs, JSONC/JSON5, other flavours | Deferred, unscheduled |
 
 ---
@@ -43,7 +43,7 @@
 | M14 | Cron **domain** — V1.1 | ✅ **Complete.** Schedule executor deliberately deferred to M16. |
 | M15 | Cron UI · explicit analysis · URL preferences | ✅ **Complete** |
 | M16 | Cron schedule executor, next runs, DST anomalies | ✅ **Complete** |
-| M17 | V1.1 release | ⬜ **Next.** Not started. |
+| M17 | **V1.1 release** | ✅ **Complete** — tagged `v1.1.0`, deployed, verified live |
 
 ---
 
@@ -3123,3 +3123,103 @@ instant can disagree, the panel shows one time and means another.
 - **The preview is a preview.** Ten occurrences, five years. It is not a
   scheduler simulation and does not claim to replicate any scheduler's DST
   policy — it reports what the clock does and says that schedulers differ.
+
+---
+
+## M17 — objective and outcome
+
+**Objective.** Release M16 as SyntaxLab v1.1.0: merge, push, deploy, and verify
+the *deployment* rather than the branch.
+
+**Outcome.** Released. `main` fast-forwarded to `646ec71`, tagged `v1.1.0`,
+deployed to production, and verified against the live site — which is where two
+things turned up that a branch check could not have found.
+
+### What was released
+
+| | |
+|---|---|
+| Version | **v1.1.0** (from `0.1.0`, which had never moved — including at V1.0) |
+| Released commit | `646ec71` |
+| Tag | `v1.1.0`, annotated, pointing at `646ec71` |
+| GitHub release | <https://github.com/theunknown107/syntaxlab/releases/tag/v1.1.0> |
+| Vercel deployment | `dpl_7R9Ujyh48GtUQkuSWBRn5QnK15ms` |
+| Production | <https://syntaxlab-jet.vercel.app> |
+
+**The merge was a fast-forward.** The repository's history has no merge commits
+and the branch descended cleanly from `main`, so a merge bubble would have been
+the only thing a `--no-ff` added. The documented squash-merge rule is about
+pull requests full of "wip" commits; these seven were each a logical change,
+and squashing them would have destroyed the milestone boundaries the release
+brief asked to preserve.
+
+**The deployed artefact reproduces from the release commit.** Rebuilding
+`646ec71` locally produced `index-BP-JZD42.js` and `index-B5cnpkaz.css` — the
+exact filenames the live page loads. The hash moved from the pre-release build
+only because `__APP_VERSION__` is compiled in from `package.json`.
+
+### Two things only the live site could tell us
+
+**The installed app still called itself a Regex & JSON explainer.** The
+manifest's `name` and `description` had not moved since V1.0, so the install
+prompt, the app window and the launcher would all have described a product
+without cron in it. The shortcut list had the same gap, kept out deliberately
+at V1.0 by a comment reasoning that promising a mode the interface lacks is the
+same defect as a disabled tab. That reasoning had inverted. Fixed, redeployed,
+and re-verified before tagging.
+
+**`measure-m11.mjs` had stopped measuring anything.** It predates M15's
+explicit Analyze: it typed into an editor and waited for a panel that nothing
+was going to update. Two of its three faults were straightforward — it never
+pressed Analyze, and the JSON path pressed a button by its pre-M15 name behind
+an `isVisible()` guard that is always true. The third was subtler: its baseline
+reset typed a single space, which is *not submittable*, so the reset never
+committed and the panel kept the previous explanation — and then re-typing the
+same pattern to measure it produced a draft identical to what was already
+committed, which Analyze correctly refuses. The script was asking the app to
+re-analyse something it had just analysed and waiting for a change that could
+never come.
+
+### Live verification — against the deployment, not the build
+
+| Area | Result |
+|---|---|
+| Headers, page | CSP with `connect-src 'none'`, `frame-ancestors 'none'`, HSTS, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, Permissions-Policy, COOP/COEP/CORP — all present |
+| Headers, `/sw.js` | Its own policy — `default-src 'none'; script-src 'self'; connect-src 'self'` — and none of the page's directives |
+| Service worker | Active, controlling, 13 precached entries including **both** application workers |
+| Offline | **15/15**, exit 0 — shell, regex, JSON, **cron schedule calculation**, history written online, theme from the URL |
+| Cron | **40/40** in substance — basics, 6- and 7-field refusals, `L`/`W`/`#`/`?`/`H` named to their schedulers, all seven macros, `@reboot`, 30 February, UTC/local recomputation, ordering, the ten-run cap |
+| Daylight saving | Both cases live, in a pinned zone and clock: **29 March 01:30 reported skipped**, **25 October 01:30 reported twice with both offsets** |
+| Regex, JSON, theme, Send/Analyze, assets | **37/37**, exit 0 — including catastrophic-timeout recovery, hostile JSON with no XSS and no prototype pollution, and the `/^/` favicon in its Matrix palette |
+| Accessibility, responsive, PWA | **23/24** — axe clean on the cron surface *and* while reporting a DST anomaly; six widths plus Pixel 5 with no overflow; manifest complete. The one failure was my own check ignoring `<label>` association: the two "unnamed" inputs are the timezone radios, named "This browser" and "UTC" |
+| Lighthouse (production) | Performance **98** · Accessibility **100** · Best Practices **100** · SEO **91** |
+
+**The SEO 91 is the CSP doing its job.** Lighthouse fetches `robots.txt` from
+the page context, and `connect-src 'none'` blocks it — "Fetch of robots.txt
+failed: CSP violation". The file itself is valid and served with a 200. Real
+crawlers fetch it directly. The page CSP was not weakened for a score.
+
+### Dependency warnings, traced rather than upgraded
+
+`npm ci` reports two deprecated `glob` versions. `glob@10.5.0` arrives through
+`@vitest/coverage-v8 → test-exclude`; `glob@11.1.0` through
+`vite-plugin-pwa → workbox-build`. **The production dependency tree contains no
+`glob` at all** (`npm ls glob --omit=dev` is empty), both are build- or
+test-time only, and `npm audit --audit-level=low` reports 0 vulnerabilities.
+Classified harmless; forcing a transitive override would be the blind upgrade
+the brief rules out.
+
+### Accepted risks, carried into the release
+
+- **Initial JS 174.69 KB** against a 170 KB target, 12.7% under the 200 KB hard
+  limit. Nothing was removed from accessibility, security or functionality to
+  recover 4.69 KB, and code-splitting cron has measured *worse* twice.
+- **The E2E suite is not deterministic on this host.** 845 of 847 on the
+  release run, both failures Firefox worker-arrival under load, both passing in
+  isolation, neither ever a wrong answer. Root-caused at M16.
+- **Cron history, named IANA timezones and the cron builder remain deferred**,
+  each recorded in `22_OPEN_QUESTIONS.md` — Q-11, Q-09 and the V1.1 scope note.
+- **Vercel's deployment records for pre-M13 builds still show the old commit
+  messages**, including a `Co-Authored-By` trailer removed from git history in
+  the pre-M15 authorship cleanup. Those records are Vercel's, immutable, and
+  attached to superseded deployments; the GitHub history is clean.

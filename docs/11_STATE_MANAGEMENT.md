@@ -404,36 +404,57 @@ point of the token architecture: a preset change writes eight custom
 properties and the whole interface follows through the cascade, with no React
 render involved.
 
+> **Superseded at M15.** The diagram below described the localStorage flow.
+> Theme preferences now live in the **URL** — `domain/theme/urlPreferences.ts`
+> and `application/theme/themeStore.ts`. What follows is what shipped in
+> v1.1.0.
+
 ```mermaid
 stateDiagram-v2
-    [*] --> Stored: readStored() at module load
-    Stored --> Applied: ThemeControls mount → applyTheme
+    [*] --> Read: readTheme(URLSearchParams) at module load
+    Read --> Applied: applyTheme — synchronous, before first paint
 
-    Applied --> Applied: selectPreset / updateGradient / updateTheme
+    Applied --> Applied: selectPreset / updateTheme / resetTheme
     note right of Applied
-        setTheme:
-        1. readTheme (revalidate)
+        A discrete choice writes at once:
+        1. readTheme — revalidate
         2. store.setState
         3. applyTheme — synchronous
-        4. debounce 250 ms → localStorage
+        4. flushTheme → history.replaceState
     end note
 
-    Applied --> Default: resetTheme
-    note left of Default
-        Applies and persists at once.
-        No reload.
+    Applied --> Applied: updateGradient
+    note left of Applied
+        The one debounced action.
+        A slider drag fires every frame;
+        250 ms, then replaceState.
     end note
-    Default --> Applied: any change
 
-    Applied --> Applied: storage event from another tab → reloadTheme
+    Applied --> Applied: popstate → re-read the address bar
     Applied --> [*]: pagehide / visibilitychange → flushTheme
 ```
 
-### Cross-tab
+**`replaceState`, never `pushState`.** Dragging the intensity slider changes the
+theme dozens of times, and each one pushing an entry would bury the page the
+user arrived from under a hundred near-identical URLs. Asserted by spy.
 
-Theme lives in localStorage, which broadcasts its own changes. `ThemeControls`
-listens for `storage` on the theme key and re-reads — no `BroadcastChannel`
-and no second message type. Covered end to end with two real tabs.
+**A discrete choice flushes immediately; only the gradient drag is debounced.**
+Picking a preset and reloading within 250 ms used to lose the choice, because
+the reload read a URL the debounce had not written yet.
+
+### Cross-tab, and why it is gone
+
+**There is none, deliberately.** Two tabs on two URLs are two documents with two
+themes, exactly as with any other page. Restoring the old coupling with a
+`BroadcastChannel` would be rebuilding what the move to the URL removed.
+
+`popstate` *is* listened for: Back is the one navigation that can change a
+theme underneath a running document.
+
+**Nothing writes a theme key to storage.** The old key is read once, migrated
+into the URL and deleted — and only that key, because history and settings live
+under their own. Verified against the live release: `localStorage` holds no
+theme key at all.
 
 ### Why the preset name is derived, not remembered
 
