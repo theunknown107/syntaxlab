@@ -238,6 +238,24 @@ describe('regressions', () => {
     expect(summary).toContain('between 09:00 and 17:59');
   });
 
+  it('a macro anchors its fields to the macro, not to its expansion', () => {
+    // The fields of `@weekly` are parsed from `0 0 * * 0`, which is longer
+    // than the text the user typed. Reporting those offsets would point at
+    // characters that do not exist — and did, until every schedulable macro
+    // started failing worker-result validation because of it.
+    const analysis = analyse('@weekly');
+    expect(analysis).not.toBeNull();
+    if (analysis === null) return;
+
+    for (const field of analysis.fields) {
+      expect(field.span.end, field.name).toBeLessThanOrEqual(analysis.source.length);
+      expect(field.span.start, field.name).toBeGreaterThanOrEqual(0);
+      for (const term of field.terms) {
+        expect(term.span.end, field.name).toBeLessThanOrEqual(analysis.source.length);
+      }
+    }
+  });
+
   it('a full-range list does not count as a restriction for the OR rule', () => {
     const analysis = analyse('0 0 1-31 * 1');
     expect(analysis?.warnings.map((w) => w.code)).not.toContain('DOM_DOW_OR_RULE');

@@ -111,6 +111,28 @@ export default defineConfig({
       testMatch: /json\.spec\.ts/,
       use: { ...devices['Pixel 5'], baseURL: 'http://localhost:4173' },
     },
+    /* Cron — M15. The full engine set: the workspace is new, and a cron
+       expression is the one input whose refusal path matters most. */
+    {
+      name: 'cron-chromium',
+      testMatch: /cron\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'cron-firefox',
+      testMatch: /cron\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'cron-webkit',
+      testMatch: /cron\.spec\.ts/,
+      use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:4173' },
+    },
+    {
+      name: 'cron-mobile',
+      testMatch: /cron\.spec\.ts/,
+      use: { ...devices['Pixel 5'], baseURL: 'http://localhost:4173' },
+    },
     {
       name: 'regex-chromium',
       testMatch: /regex\.spec\.ts/,

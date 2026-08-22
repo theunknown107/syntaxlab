@@ -585,9 +585,45 @@ export function parseCron(source: string): Result<ParsedExpression> {
 
   return ok({
     tokens: tokenize(source),
-    fields,
-    errors,
+    // A macro's fields were parsed out of the *expansion*, so their spans
+    // point into text the user never typed — see `anchorToSource`.
+    fields: macro === undefined ? fields : fields.map((field) => anchorToSource(field, wholeSpan)),
+    errors: macro === undefined ? errors : errors.map((error) => anchorError(error, wholeSpan)),
     ...(macro === undefined ? {} : { macro }),
     nonSchedulable: false,
   });
+}
+
+/**
+ * Points a macro's field at the macro itself.
+ *
+ * `@weekly` expands to `0 0 * * 0` and is parsed from that, so the day-of-week
+ * field lands at offset 8 — in a source string that is seven characters long.
+ * Nothing in `@weekly` *is* a minute field, so there is no honest offset to
+ * report, and the whole macro is the truthful answer: clicking "minute" should
+ * highlight `@weekly`, because that is the text that produced it.
+ *
+ * This is not cosmetic. Every span crossing the worker boundary is checked
+ * against `source.length`, so an out-of-range one is rejected as a malformed
+ * result — which is exactly what happened to every schedulable macro until
+ * this was fixed, and what the UI reported as "something went wrong in the
+ * analysis engine".
+ */
+function anchorToSource(field: CronField, span: SourceSpan): CronField {
+  return {
+    ...field,
+    span,
+    terms: field.terms.map((term) => anchorTerm(term, span)),
+    ...(field.error === undefined ? {} : { error: anchorError(field.error, span) }),
+  };
+}
+
+function anchorTerm(term: CronTerm, span: SourceSpan): CronTerm {
+  return term.kind === 'step'
+    ? { ...term, span, base: anchorTerm(term.base, span) }
+    : { ...term, span };
+}
+
+function anchorError(error: DomainError, span: SourceSpan): DomainError {
+  return error.span === undefined ? error : { ...error, span };
 }

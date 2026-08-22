@@ -229,13 +229,47 @@ test.describe('offline', () => {
       );
     expect(await token('--gradient-from')).toBe('#fbbf24');
 
-    // Changing it offline works: theme-bootstrap.js is precached and
-    // localStorage never touched the network.
+    // From M15 the theme is in the URL, so what survived the offline reload is
+    // the address itself. `?theme=amber` is not a route — no request is made
+    // for it, and the service worker's navigateFallback serves the cached
+    // shell for any query string.
+    expect(new URL(page.url()).searchParams.get('theme')).toBe('amber');
+
+    // Changing it offline works: theme-bootstrap.js is precached, the URL is
+    // read rather than fetched, and nothing here touched the network.
     await page.getByRole('button', { name: /^Appearance/ }).click();
     await page.getByRole('radio', { name: 'Mono' }).click();
     await page.keyboard.press('Escape');
     await page.reload();
     expect(await token('--gradient-from')).toBe('#a6a6a6');
+    expect(new URL(page.url()).searchParams.get('theme')).toBe('mono');
+
+    await context.close();
+  });
+
+  test('a shared link applies its theme offline, on a cold load', async ({
+    browser,
+    browserName,
+  }) => {
+    skipOfflineNavigation(browserName);
+
+    const context = await freshContext(browser);
+    const page = await context.newPage();
+    await cacheApp(page);
+
+    await context.setOffline(true);
+    // A URL this document has never been to, with no network. The shell comes
+    // from the precache and the theme comes from the address bar.
+    await page.goto('/?theme=crimsonNight&font=1.25');
+
+    const token = async (name: string) =>
+      page.evaluate(
+        (property) => getComputedStyle(document.documentElement).getPropertyValue(property).trim(),
+        name,
+      );
+    expect(await token('--gradient-from')).toBe('#DC143C');
+    expect(await token('--font-scale')).toBe('1.25');
+    await expect(page.getByRole('radio', { name: 'Regex' })).toBeVisible();
 
     await context.close();
   });
