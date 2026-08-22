@@ -226,6 +226,31 @@ async function openApp(browser) {
   return { context, page };
 }
 
+/**
+ * Presses Analyze, once it is actually available.
+ *
+ * From M15 nothing is analysed until this is pressed, so a measurement that
+ * only typed was timing a panel nobody had asked to update — which is how this
+ * script came to fail rather than report a number. The control uses
+ * `aria-disabled` rather than `disabled`, so that focus survives the press that
+ * makes it unavailable; Playwright's actionability checks cannot see that, and
+ * `isVisible()` is true the whole time, so waiting on the attribute is the only
+ * reliable signal.
+ */
+async function analyze(page, subject) {
+  const names = { pattern: 'Analyze pattern', json: 'Analyze JSON document' };
+  const button = page.getByRole('button', { name: names[subject] });
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if ((await button.getAttribute('aria-disabled')) !== 'true') {
+      await button.click();
+      return true;
+    }
+    await page.waitForTimeout(50);
+  }
+  return false;
+}
+
 async function setEditor(page, name, text) {
   const editor = page.getByRole('textbox', { name });
   await editor.click();
@@ -252,12 +277,21 @@ async function regex(page, results) {
       page,
       `analysis: ${name}`,
       async () => {
-        await setEditor(page, 'Regular expression pattern', ' ');
+        // A *different, analysable* baseline, not whitespace. Since M15 the
+        // reset has to be committed for the panel to change, and whitespace is
+        // not submittable — so a blank reset leaves the previous explanation
+        // on screen, the measured pattern then matches what is already
+        // committed, Analyze correctly refuses it, and nothing ever changes.
+        await setEditor(page, 'Regular expression pattern', 'x');
+        await analyze(page, 'pattern');
         await page.waitForTimeout(250);
         before = await regionText(page, 'Explanation');
       },
       async () => {
         await setEditor(page, 'Regular expression pattern', pattern);
+        // Part of what the user waits through, and since M15 the only thing
+        // that starts an analysis at all.
+        await analyze(page, 'pattern');
       },
       async () => {
         // A malformed pattern reports an error where the explanation was;
@@ -276,6 +310,8 @@ async function regexExecution(page, results) {
 
   const subject = 'user@example.com alice@test.org '.repeat(2_000);
   await setEditor(page, 'Regular expression pattern', String.raw`[\w.]+@[\w.]+`);
+  // The tester runs the *committed* pattern, so it has to be committed.
+  await analyze(page, 'pattern');
   await page.waitForTimeout(400);
 
   await repeat(
@@ -316,14 +352,15 @@ async function json(page, results) {
       label,
       async () => {
         await setEditor(page, 'JSON document', '{}');
+        // Committed for the same reason as the regex reset above.
+        await analyze(page, 'json');
         await page.waitForTimeout(300);
       },
       async () => {
         await setEditor(page, 'JSON document', document_);
-        // Past the manual threshold the UI asks rather than analysing on a
-        // debounce, so the button press is part of the measured work.
-        const analyze = page.getByRole('button', { name: 'Analyze JSON' });
-        if (await analyze.isVisible().catch(() => false)) await analyze.click();
+        // Since M15 the press is not "past a threshold" — it is the only way
+        // anything is analysed, so it is part of the measured work every time.
+        await analyze(page, 'json');
       },
       async () => {
         await tree.getByRole('treeitem').first().waitFor({ timeout: 30_000 });
@@ -334,8 +371,7 @@ async function json(page, results) {
 
   // Tree interactions, on the largest document that is still analysed.
   await setEditor(page, 'JSON document', jsonOfSize(500_000));
-  const analyze = page.getByRole('button', { name: 'Analyze JSON' });
-  if (await analyze.isVisible().catch(() => false)) await analyze.click();
+  await analyze(page, 'json');
   await tree.getByRole('treeitem').first().waitFor({ timeout: 30_000 });
 
   console.log('\nJSON tree  (500 KB document)');
