@@ -43,9 +43,10 @@ export default defineConfig({
       manifestFilename: 'manifest.webmanifest',
       includeAssets: [],
       manifest: {
-        name: 'SyntaxLab — Regex & JSON Explainer',
+        name: 'SyntaxLab — Regex, JSON & Cron Explainer',
         short_name: 'SyntaxLab',
-        description: 'Understand regular expressions and JSON. Runs entirely in your browser.',
+        description:
+          'Understand regular expressions, JSON and cron schedules. Runs entirely in your browser.',
         start_url: '/',
         scope: '/',
         display: 'standalone',
@@ -66,11 +67,15 @@ export default defineConfig({
             purpose: 'maskable',
           },
         ],
-        // No cron shortcut: the mode does not exist in V1.0, and promising one
-        // in metadata is the same defect as a disabled tab in the interface.
+        // Cron joined the list at v1.1.0, when the mode became real. The rule
+        // that kept it out until then still stands: promising a mode in
+        // metadata that the interface does not have is the same defect as a
+        // disabled tab. `?mode=` is read by `applyModeFromUrl` and then
+        // removed from the address bar.
         shortcuts: [
           { name: 'New Regex', url: '/?mode=regex' },
           { name: 'New JSON', url: '/?mode=json' },
+          { name: 'New Cron', url: '/?mode=cron' },
         ],
       },
       workbox: {
